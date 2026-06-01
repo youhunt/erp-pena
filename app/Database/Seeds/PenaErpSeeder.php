@@ -129,158 +129,125 @@ class PenaErpSeeder extends Seeder
         ], $now);
 
         $this->menuGroup('POS', 'bx-store-alt', 30, [
-            ['Master', [
-                ['POS Master', '#', 'pos.view'],
-            ]],
-            ['Transactions', [
-                ['POS System', '#', 'pos.view'],
-            ]],
+            ['POS Master', $this->placeholderRoute('POS Master'), 'pos.view'],
+            ['POS System', $this->placeholderRoute('POS System'), 'pos.view'],
         ], $now);
 
         $this->menuGroup('Sales', 'bx-cart', 40, [
-            ['Master', [
-                ['Customer Master', 'setup/customers', 'sales.customer.view'],
-                ['Customer Terms', '#', 'sales.customer.view'],
-                ['Customer Promo', '#', 'sales.customer.view'],
-                ['Customer Address', '#', 'sales.customer.view'],
-            ]],
-            ['Transactions', [
-                ['Sales Order', '#', 'sales.order.view'],
-                ['Allocation Order', '#', 'sales.order.view'],
-                ['Delivery Order', '#', 'sales.order.view'],
-            ]],
-            ['Sales Period Close', '#', 'sales.order.view'],
+            ['Customer Master', 'setup/customers', 'sales.customer.view'],
+            ['Customer Terms', $this->placeholderRoute('Customer Terms'), 'sales.customer.view'],
+            ['Customer Promo', $this->placeholderRoute('Customer Promo'), 'sales.customer.view'],
+            ['Customer Address', $this->placeholderRoute('Customer Address'), 'sales.customer.view'],
+            ['Sales Order', $this->placeholderRoute('Sales Order'), 'sales.order.view'],
+            ['Allocation Order', $this->placeholderRoute('Allocation Order'), 'sales.order.view'],
+            ['Delivery Order', $this->placeholderRoute('Delivery Order'), 'sales.order.view'],
+            ['Sales Period Close', $this->placeholderRoute('Sales Period Close'), 'sales.order.view'],
         ], $now);
 
         $this->menuGroup('Purchase', 'bx-shopping-bag', 50, [
-            ['Master', [
-                ['Supplier Master', 'setup/suppliers', 'purchase.supplier.view'],
-                ['Supplier Terms', '#', 'purchase.supplier.view'],
-                ['Supplier Promo', '#', 'purchase.supplier.view'],
-                ['Supplier Address', '#', 'purchase.supplier.view'],
-            ]],
-            ['Transactions', [
-                ['Purchase Order', '#', 'purchase.po.view'],
-                ['Purchase Intransit', '#', 'purchase.po.view'],
-                ['Inventory Purchase Receipt', '#', 'purchase.po.view'],
-                ['Cost Purchase Receipt', '#', 'purchase.po.view'],
-            ]],
-            ['Purchase Period Close', '#', 'purchase.po.view'],
+            ['Supplier Master', 'setup/suppliers', 'purchase.supplier.view'],
+            ['Supplier Terms', $this->placeholderRoute('Supplier Terms'), 'purchase.supplier.view'],
+            ['Supplier Promo', $this->placeholderRoute('Supplier Promo'), 'purchase.supplier.view'],
+            ['Supplier Address', $this->placeholderRoute('Supplier Address'), 'purchase.supplier.view'],
+            ['Purchase Order', $this->placeholderRoute('Purchase Order'), 'purchase.po.view'],
+            ['Purchase Intransit', $this->placeholderRoute('Purchase Intransit'), 'purchase.po.view'],
+            ['Inventory Purchase Receipt', $this->placeholderRoute('Inventory Purchase Receipt'), 'purchase.po.view'],
+            ['Cost Purchase Receipt', $this->placeholderRoute('Cost Purchase Receipt'), 'purchase.po.view'],
+            ['Purchase Period Close', $this->placeholderRoute('Purchase Period Close'), 'purchase.po.view'],
         ], $now);
 
         $this->menuGroup('Inventory', 'bx-package', 60, [
-            ['Master', [
-                ['Item Master', 'setup/items', 'inventory.item.view'],
-                ['Item UoM Conversion', '#', 'inventory.item.view'],
-                ['Batch Master', '#', 'inventory.item.view'],
-            ]],
-            ['Transactions', [
-                ['Inventory In Out', '#', 'inventory.stock.view'],
-                ['Inventory Transfer', '#', 'inventory.stock.view'],
-                ['Inventory Stock Opname', '#', 'inventory.stock.view'],
-            ]],
-            ['Inventory Period Close', '#', 'inventory.stock.view'],
+            ['Item Master', 'setup/items', 'inventory.item.view'],
+            ['Item UoM Conversion', $this->placeholderRoute('Item UoM Conversion'), 'inventory.item.view'],
+            ['Batch Master', $this->placeholderRoute('Batch Master'), 'inventory.item.view'],
+            ['Inventory In Out', $this->placeholderRoute('Inventory In Out'), 'inventory.stock.view'],
+            ['Inventory Transfer', $this->placeholderRoute('Inventory Transfer'), 'inventory.stock.view'],
+            ['Inventory Stock Opname', $this->placeholderRoute('Inventory Stock Opname'), 'inventory.stock.view'],
+            ['Inventory Period Close', $this->placeholderRoute('Inventory Period Close'), 'inventory.stock.view'],
         ], $now);
 
         $this->menuGroup('Planning', 'bx-calendar', 70, [
-            ['Forecast', '#', 'planning.view'],
-            ['Planned Released', '#', 'planning.view'],
-            ['MPS', '#', 'planning.view'],
-            ['MRP', '#', 'planning.view'],
+            ['Forecast', $this->placeholderRoute('Forecast'), 'planning.view'],
+            ['Planned Released', $this->placeholderRoute('Planned Released'), 'planning.view'],
+            ['MPS', $this->placeholderRoute('MPS'), 'planning.view'],
+            ['MRP', $this->placeholderRoute('MRP'), 'planning.view'],
         ], $now);
 
         $this->menuGroup('Production', 'bx-factory', 80, [
-            ['Master', [
-                ['BOM', '#', 'production.view'],
-                ['Work Center', '#', 'production.view'],
-                ['Routing', '#', 'production.view'],
-            ]],
-            ['Transactions', [
-                ['Work Order', '#', 'production.view'],
-                ['Allocate Work Order', '#', 'production.view'],
-                ['Work Order In', '#', 'production.view'],
-                ['Work Order Out', '#', 'production.view'],
-                ['Work Order In Out', '#', 'production.view'],
-                ['Work Order Labor', '#', 'production.view'],
-            ]],
-            ['Production Period Close', '#', 'production.view'],
+            ['BOM', $this->placeholderRoute('BOM'), 'production.view'],
+            ['Work Center', $this->placeholderRoute('Work Center'), 'production.view'],
+            ['Routing', $this->placeholderRoute('Routing'), 'production.view'],
+            ['Work Order', $this->placeholderRoute('Work Order'), 'production.view'],
+            ['Allocate Work Order', $this->placeholderRoute('Allocate Work Order'), 'production.view'],
+            ['Work Order In', $this->placeholderRoute('Work Order In'), 'production.view'],
+            ['Work Order Out', $this->placeholderRoute('Work Order Out'), 'production.view'],
+            ['Work Order In Out', $this->placeholderRoute('Work Order In Out'), 'production.view'],
+            ['Work Order Labor', $this->placeholderRoute('Work Order Labor'), 'production.view'],
+            ['Production Period Close', $this->placeholderRoute('Production Period Close'), 'production.view'],
         ], $now);
 
         $this->menuGroup('Accounts Payable', 'bx-receipt', 90, [
-            ['Master', '#', 'finance.ap.view'],
-            ['Transactions', [
-                ['Manual A/P Invoice', '#', 'finance.ap.view'],
-                ['Purchase Invoice', '#', 'finance.ap.view'],
-                ['Inventory Purchase Invoice', '#', 'finance.ap.view'],
-                ['Advanced A/P Invoice', '#', 'finance.ap.view'],
-                ['Payment Invoice', '#', 'finance.ap.view'],
-            ]],
-            ['A/P Period Close', '#', 'finance.ap.view'],
+            ['Accounts Payable', $this->placeholderRoute('Accounts Payable'), 'finance.ap.view'],
+            ['Manual A/P Invoice', $this->placeholderRoute('Manual A/P Invoice'), 'finance.ap.view'],
+            ['Purchase Invoice', $this->placeholderRoute('Purchase Invoice'), 'finance.ap.view'],
+            ['Inventory Purchase Invoice', $this->placeholderRoute('Inventory Purchase Invoice'), 'finance.ap.view'],
+            ['Advanced A/P Invoice', $this->placeholderRoute('Advanced A/P Invoice'), 'finance.ap.view'],
+            ['Payment Invoice', $this->placeholderRoute('Payment Invoice'), 'finance.ap.view'],
+            ['A/P Period Close', $this->placeholderRoute('A/P Period Close'), 'finance.ap.view'],
         ], $now);
 
         $this->menuGroup('Accounts Receivable', 'bx-credit-card', 100, [
-            ['Master', '#', 'finance.ar.view'],
-            ['Transactions', [
-                ['Manual A/R Invoice', '#', 'finance.ar.view'],
-                ['Proforma Invoice', '#', 'finance.ar.view'],
-                ['Sales Invoice', '#', 'finance.ar.view'],
-                ['Inventory Sales Invoice', '#', 'finance.ar.view'],
-                ['Advanced A/R Receipt', '#', 'finance.ar.view'],
-                ['Payment Receipt', '#', 'finance.ar.view'],
-            ]],
-            ['A/R Period Close', '#', 'finance.ar.view'],
+            ['Accounts Receivable', $this->placeholderRoute('Accounts Receivable'), 'finance.ar.view'],
+            ['Manual A/R Invoice', $this->placeholderRoute('Manual A/R Invoice'), 'finance.ar.view'],
+            ['Proforma Invoice', $this->placeholderRoute('Proforma Invoice'), 'finance.ar.view'],
+            ['Sales Invoice', $this->placeholderRoute('Sales Invoice'), 'finance.ar.view'],
+            ['Inventory Sales Invoice', $this->placeholderRoute('Inventory Sales Invoice'), 'finance.ar.view'],
+            ['Advanced A/R Receipt', $this->placeholderRoute('Advanced A/R Receipt'), 'finance.ar.view'],
+            ['Payment Receipt', $this->placeholderRoute('Payment Receipt'), 'finance.ar.view'],
+            ['A/R Period Close', $this->placeholderRoute('A/R Period Close'), 'finance.ar.view'],
         ], $now);
 
         $this->menuGroup('Costing', 'bx-calculator', 110, [
-            ['Master', [
-                ['Cost Type', '#', 'costing.view'],
-                ['Item Cost', '#', 'costing.view'],
-            ]],
-            ['Transactions', [
-                ['Calculate Cost', '#', 'costing.view'],
-            ]],
+            ['Cost Type', $this->placeholderRoute('Cost Type'), 'costing.view'],
+            ['Item Cost', $this->placeholderRoute('Item Cost'), 'costing.view'],
+            ['Calculate Cost', $this->placeholderRoute('Calculate Cost'), 'costing.view'],
         ], $now);
 
         $this->menuGroup('Cash Bank', 'bx-wallet', 120, [
-            ['Master', [
-                ['Cash Bank ID', '#', 'cashbank.view'],
-                ['Currency', '#', 'cashbank.view'],
-                ['Employee ID', '#', 'cashbank.view'],
-                ['Rate Master', '#', 'cashbank.view'],
-            ]],
-            ['Transactions', [
-                ['Cash Entry', '#', 'cashbank.view'],
-                ['Bank Entry', '#', 'cashbank.view'],
-                ['Bank Reconcile', '#', 'cashbank.view'],
-            ]],
+            ['Cash Bank ID', $this->placeholderRoute('Cash Bank ID'), 'cashbank.view'],
+            ['Currency', $this->placeholderRoute('Currency'), 'cashbank.view'],
+            ['Employee ID', $this->placeholderRoute('Employee ID'), 'cashbank.view'],
+            ['Rate Master', $this->placeholderRoute('Rate Master'), 'cashbank.view'],
+            ['Cash Entry', $this->placeholderRoute('Cash Entry'), 'cashbank.view'],
+            ['Bank Entry', $this->placeholderRoute('Bank Entry'), 'cashbank.view'],
+            ['Bank Reconcile', $this->placeholderRoute('Bank Reconcile'), 'cashbank.view'],
         ], $now);
 
         $this->menuGroup('GL', 'bx-book', 130, [
-            ['Master', [
-                ['GL Book', '#', 'finance.gl.view'],
-                ['GL Column', '#', 'finance.gl.view'],
-                ['Account No.', '#', 'finance.gl.view'],
-                ['Chart of Account', '#', 'finance.gl.view'],
-                ['Recurring', '#', 'finance.gl.view'],
-            ]],
-            ['Transactions', [
-                ['GL Entry', '#', 'finance.gl.view'],
-                ['Recurring Posting', '#', 'finance.gl.view'],
-            ]],
-            ['GL Period Close', '#', 'finance.gl.view'],
+            ['GL Book', $this->placeholderRoute('GL Book'), 'finance.gl.view'],
+            ['GL Column', $this->placeholderRoute('GL Column'), 'finance.gl.view'],
+            ['Account No.', $this->placeholderRoute('Account No.'), 'finance.gl.view'],
+            ['Chart of Account', $this->placeholderRoute('Chart of Account'), 'finance.gl.view'],
+            ['Recurring', $this->placeholderRoute('Recurring'), 'finance.gl.view'],
+            ['GL Entry', $this->placeholderRoute('GL Entry'), 'finance.gl.view'],
+            ['Recurring Posting', $this->placeholderRoute('Recurring Posting'), 'finance.gl.view'],
+            ['GL Period Close', $this->placeholderRoute('GL Period Close'), 'finance.gl.view'],
         ], $now);
 
         $this->menuGroup('FA', 'bx-building-house', 140, [
-            ['Master', [
-                ['Asset ID', '#', 'fixedasset.view'],
-            ]],
-            ['Transactions', [
-                ['Asset Depreciation', '#', 'fixedasset.view'],
-            ]],
-            ['Asset Period Close', '#', 'fixedasset.view'],
+            ['Asset ID', $this->placeholderRoute('Asset ID'), 'fixedasset.view'],
+            ['Asset Depreciation', $this->placeholderRoute('Asset Depreciation'), 'fixedasset.view'],
+            ['Asset Period Close', $this->placeholderRoute('Asset Period Close'), 'fixedasset.view'],
         ], $now);
 
         $this->menuItem(null, 'AI Documents', 'ai-documents', 'bx-scan', 'ai.document.review', 150, $now);
+    }
+
+    private function placeholderRoute(string $label): string
+    {
+        $slug = strtolower((string) preg_replace('/[^a-zA-Z0-9]+/', '-', $label));
+
+        return 'modules/' . trim($slug, '-');
     }
 
     /**

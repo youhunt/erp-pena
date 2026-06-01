@@ -10,6 +10,7 @@ service('auth')->routes($routes);
 $routes->group('', ['filter' => 'session'], static function (RouteCollection $routes): void {
     $routes->get('dashboard', 'DashboardController::index');
     $routes->post('tenant/switch', 'TenantController::switch');
+    $routes->get('modules/(:segment)', 'ModulePlaceholderController::show/$1');
 
     $routes->group('setup', static function (RouteCollection $routes): void {
         foreach ([
