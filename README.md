@@ -46,6 +46,9 @@ database.default.username = root
 database.default.password =
 database.default.DBDriver = MySQLi
 database.default.port = 3306
+
+wilayah.baseUrl = 'https://api-wilayah.belajardisiniaja.com'
+wilayah.apiToken = 'YOUR_WILAYAH_API_TOKEN'
 ```
 
 Install dependencies:

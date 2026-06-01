@@ -31,6 +31,19 @@
 4. Keep credentials in `.env`.
 5. Add provider-specific error handling and logs.
 
+## Wilayah API
+
+Province and city master data can be synchronized from `https://api-wilayah.belajardisiniaja.com`.
+
+Configure `.env`:
+
+```ini
+wilayah.baseUrl = 'https://api-wilayah.belajardisiniaja.com'
+wilayah.apiToken = 'YOUR_WILAYAH_API_TOKEN'
+```
+
+Use the `Sync API` button on Province and City master pages. Province sync calls `/provinsi/`; City sync calls `/kabupaten/getByProvinsi/{province_code}` for each stored province.
+
 ## Adding an AI Extraction Provider
 
 1. Implement `App\Services\Ai\AiExtractionProviderInterface`.

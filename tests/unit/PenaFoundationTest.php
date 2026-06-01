@@ -30,5 +30,8 @@ final class PenaFoundationTest extends CIUnitTestCase
         $this->assertTrue(class_exists(\App\Models\SupplierModel::class));
         $this->assertTrue(class_exists(\App\Models\ItemModel::class));
         $this->assertTrue(class_exists(\App\Models\WarehouseModel::class));
+        $this->assertTrue(class_exists(\App\Models\TransactionCodeModel::class));
+        $this->assertTrue(class_exists(\App\Models\AddressModel::class));
+        $this->assertTrue(class_exists(\App\Services\WilayahApiService::class));
     }
 }

@@ -12,7 +12,26 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->post('tenant/switch', 'TenantController::switch');
 
     $routes->group('setup', static function (RouteCollection $routes): void {
-        foreach (['companies', 'sites', 'departments', 'warehouses', 'uoms', 'customers', 'suppliers', 'items'] as $resource) {
+        foreach ([
+            'transaction-codes',
+            'companies',
+            'sites',
+            'departments',
+            'warehouses',
+            'locations',
+            'countries',
+            'provinces',
+            'cities',
+            'postal-codes',
+            'uoms',
+            'uom-conversions',
+            'vat',
+            'item-vat',
+            'address-master',
+            'customers',
+            'suppliers',
+            'items',
+        ] as $resource) {
             $routes->get($resource, 'Setup\MasterDataController::index/' . $resource);
             $routes->get($resource . '/new', 'Setup\MasterDataController::create/' . $resource);
             $routes->post($resource, 'Setup\MasterDataController::store/' . $resource);
@@ -20,6 +39,9 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
             $routes->post($resource . '/(:num)', 'Setup\MasterDataController::update/' . $resource . '/$1');
             $routes->post($resource . '/(:num)/delete', 'Setup\MasterDataController::delete/' . $resource . '/$1');
         }
+
+        $routes->post('provinces/sync', 'Setup\WilayahSyncController::provinces');
+        $routes->post('cities/sync', 'Setup\WilayahSyncController::cities');
     });
 
     $routes->group('ai-documents', static function (RouteCollection $routes): void {

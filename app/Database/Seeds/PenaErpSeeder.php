@@ -111,21 +111,21 @@ class PenaErpSeeder extends Seeder
         $this->menuItem(null, 'Dashboard', 'dashboard', 'bx-home-circle', 'dashboard.view', 10, $now);
 
         $this->menuGroup('Setup', 'bx-cog', 20, [
-            ['Transaction Code', '#', 'setup.master.view'],
+            ['Transaction Code', 'setup/transaction-codes', 'setup.master.view'],
             ['Company', 'setup/companies', 'setup.master.view'],
             ['Site', 'setup/sites', 'setup.master.view'],
             ['Department', 'setup/departments', 'setup.master.view'],
             ['Warehouse', 'setup/warehouses', 'setup.master.view'],
-            ['Location', '#', 'setup.master.view'],
-            ['Country', '#', 'setup.master.view'],
-            ['Province', '#', 'setup.master.view'],
-            ['City', '#', 'setup.master.view'],
-            ['Postal Code', '#', 'setup.master.view'],
+            ['Location', 'setup/locations', 'setup.master.view'],
+            ['Country', 'setup/countries', 'setup.master.view'],
+            ['Province', 'setup/provinces', 'setup.master.view'],
+            ['City', 'setup/cities', 'setup.master.view'],
+            ['Postal Code', 'setup/postal-codes', 'setup.master.view'],
             ['Unit of Measure', 'setup/uoms', 'setup.master.view'],
-            ['UoM Conversion', '#', 'setup.master.view'],
-            ['VAT', '#', 'setup.master.view'],
-            ['Item VAT', '#', 'setup.master.view'],
-            ['Address Master', '#', 'setup.master.view'],
+            ['UoM Conversion', 'setup/uom-conversions', 'setup.master.view'],
+            ['VAT', 'setup/vat', 'setup.master.view'],
+            ['Item VAT', 'setup/item-vat', 'setup.master.view'],
+            ['Address Master', 'setup/address-master', 'setup.master.view'],
         ], $now);
 
         $this->menuGroup('POS', 'bx-store-alt', 30, [

@@ -52,6 +52,9 @@ These gaps are covered by added foundation tables.
 - `uom_conversions`: conversion between UoMs
 - `transaction_codes`: transaction code master
 - `prefix_codes`: numbering prefix master
+- `postal_codes`: postal code, district, and village reference
+- `item_vat_rates`: item-to-VAT mapping
+- `addresses`: address master for company, site, customer, supplier, bill-to, ship-to, and mail-to use cases
 
 ### Access
 
