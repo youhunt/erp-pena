@@ -12,11 +12,12 @@ This repository was empty at audit time, so the first implementation creates the
 - Multi-company and multi-site database foundation
 - Migration and seeder baseline from the Excel data dictionary
 - Dynamic sidebar model and service
+- Skote assets extracted from `resources.zip` into `public/assets/skote`
 - Initial dashboard, setup, and AI document upload pages
 - Vendor-neutral OCR/AI service contracts
 - Documentation under `docs/`
 
-The Skote zip was not present in the repository or common workspace folders during audit. The current layout uses Skote-compatible partial names and structure so the licensed Skote assets can be copied later into `public/assets/skote`.
+Skote assets are stored in `resources.zip` and extracted into `public/assets/skote` for the current layout.
 
 ## Requirements
 

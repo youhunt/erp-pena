@@ -13,7 +13,7 @@ Findings:
 - No CodeIgniter source files existed before scaffold
 - No migrations existed before scaffold
 - CodeIgniter Shield was not installed before scaffold
-- Skote zip was not found in the repository
+- Skote zip was not present in the initial local checkout, but remote `main` contained `resources.zip`
 - Excel baseline was found at `C:\Users\YOHAN\Downloads\pena_erp_data_dictionary_filled.xlsx`
 - Additional per-module Excel files were found at `C:\Users\YOHAN\Downloads\pena-erp`
 
@@ -32,6 +32,7 @@ Included:
 - Approval workflow baseline
 - Audit trail baseline
 - AI/OCR document upload and extraction schema
+- Skote assets extracted into `public/assets/skote`
 - Dashboard, setup, and AI document pages
 
 ## Baseline Modules From Excel

@@ -41,9 +41,11 @@ Rules:
 - `TenantContext` manages active company and site in session
 - Future repository queries must filter by allowed company and site
 
-## Skote Integration Strategy
+## Skote Integration
 
-The repository did not contain a Skote zip during audit. The app includes the required CodeIgniter view structure:
+Remote `main` contained `resources.zip` with Skote assets. They are extracted into `public/assets/skote`.
+
+The app includes the required CodeIgniter view structure:
 
 - `app/Views/layouts/main.php`
 - `app/Views/layouts/auth.php`
@@ -52,4 +54,4 @@ The repository did not contain a Skote zip during audit. The app includes the re
 - `app/Views/partials/topbar.php`
 - `app/Views/partials/footer.php`
 
-When the licensed Skote package is available, copy compiled assets into `public/assets/skote` and update `partials/header.php` to reference Skote CSS/JS files.
+`partials/header.php` and `partials/footer.php` reference Skote CSS and JavaScript assets. PENA-specific overrides live in `public/assets/pena/app.css`.
