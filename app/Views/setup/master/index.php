@@ -1,6 +1,31 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php
+$listFields = $config['list_fields'] ?? array_keys($config['fields'] ?? []);
+$listFields = array_values(array_filter($listFields, static fn (string $field): bool => $field !== 'is_active'));
+$listFields = array_slice($listFields, 0, 6);
+
+$fieldLabel = static function (string $field, array $config): string {
+    if (isset($config['fields'][$field]['label'])) {
+        return (string) $config['fields'][$field]['label'];
+    }
+
+    return ucwords(str_replace('_', ' ', $field));
+};
+
+$formatValue = static function (mixed $value): string {
+    if ($value === null || $value === '') {
+        return '-';
+    }
+
+    if (is_numeric($value) && str_contains((string) $value, '.')) {
+        return rtrim(rtrim(number_format((float) $value, 8, '.', ''), '0'), '.');
+    }
+
+    return (string) $value;
+};
+?>
 <div class="card">
     <div class="card-body">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
@@ -40,9 +65,9 @@
             <table class="table table-nowrap table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th>Code</th>
-                        <th>Name</th>
-                        <th>Description</th>
+                        <?php foreach ($listFields as $field): ?>
+                            <th><?= esc($fieldLabel($field, $config)) ?></th>
+                        <?php endforeach ?>
                         <th>Status</th>
                         <th class="text-end">Action</th>
                     </tr>
@@ -50,9 +75,11 @@
                 <tbody>
                 <?php foreach ($rows as $row): ?>
                     <tr>
-                        <td class="fw-semibold"><?= esc((string) ($row[$display['code']] ?? $row['code'] ?? $row['id'] ?? '-')) ?></td>
-                        <td><?= esc((string) ($row[$display['name']] ?? $row['name'] ?? '-')) ?></td>
-                        <td><?= esc((string) ($row[$display['description']] ?? $row['description'] ?? $row['address'] ?? $row['email'] ?? '-')) ?></td>
+                        <?php foreach ($listFields as $index => $field): ?>
+                            <td class="<?= $index === 0 ? 'fw-semibold' : '' ?>">
+                                <?= esc($formatValue($row[$field] ?? null)) ?>
+                            </td>
+                        <?php endforeach ?>
                         <td>
                             <span class="badge bg-<?= (int) ($row['is_active'] ?? 1) === 1 ? 'success' : 'secondary' ?>">
                                 <?= (int) ($row['is_active'] ?? 1) === 1 ? 'Active' : 'Inactive' ?>
@@ -78,7 +105,7 @@
 
                 <?php if ($rows === []): ?>
                     <tr>
-                        <td colspan="5" class="text-center text-muted py-4">No records yet. Use New or Import CSV to add master data.</td>
+                        <td colspan="<?= count($listFields) + 2 ?>" class="text-center text-muted py-4">No records yet. Use New or Import CSV to add master data.</td>
                     </tr>
                 <?php endif ?>
                 </tbody>
