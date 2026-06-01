@@ -15,6 +15,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->group('setup', static function (RouteCollection $routes): void {
         foreach ([
             'transaction-codes',
+            'prefix-codes',
             'companies',
             'sites',
             'departments',
@@ -24,9 +25,11 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
             'provinces',
             'cities',
             'postal-codes',
+            'currencies',
             'uoms',
             'uom-conversions',
             'vat',
+            'wht',
             'item-vat',
             'address-master',
             'customers',
