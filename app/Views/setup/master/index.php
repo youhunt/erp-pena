@@ -3,23 +3,36 @@
 <?= $this->section('content') ?>
 <div class="card">
     <div class="card-body">
-        <div class="d-flex align-items-center justify-content-between mb-4">
-            <h4 class="card-title mb-0"><?= esc($config['title']) ?></h4>
-            <div class="d-flex gap-2">
-            <?php if ($canManage && ! empty($config['sync_action'])): ?>
-                <form action="<?= site_url($config['sync_action']) ?>" method="post">
-                    <?= csrf_field() ?>
-                    <button class="btn btn-outline-info waves-effect waves-light" type="submit">
-                        <i class="bx bx-refresh me-1"></i> Sync API
-                    </button>
-                </form>
-            <?php endif ?>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
+            <div>
+                <h4 class="card-title mb-1"><?= esc($config['title']) ?></h4>
+                <p class="text-muted mb-0">Manage, import, and export master data.</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <?php if ($canManage && ! empty($config['sync_action'])): ?>
+                    <form action="<?= site_url($config['sync_action']) ?>" method="post">
+                        <?= csrf_field() ?>
+                        <button class="btn btn-outline-info waves-effect waves-light" type="submit">
+                            <i class="bx bx-refresh me-1"></i> Sync API
+                        </button>
+                    </form>
+                <?php endif ?>
 
-            <?php if ($canManage): ?>
-                <a class="btn btn-primary waves-effect waves-light" href="<?= site_url("setup/{$resource}/new") ?>">
-                    <i class="bx bx-plus me-1"></i> New
+                <a class="btn btn-outline-secondary waves-effect waves-light" href="<?= site_url("setup/{$resource}/export") ?>">
+                    <i class="bx bx-download me-1"></i> Export CSV
                 </a>
-            <?php endif ?>
+
+                <?php if ($canManage): ?>
+                    <a class="btn btn-outline-secondary waves-effect waves-light" href="<?= site_url("setup/{$resource}/template") ?>">
+                        <i class="bx bx-file me-1"></i> Template
+                    </a>
+                    <a class="btn btn-outline-success waves-effect waves-light" href="<?= site_url("setup/{$resource}/import") ?>">
+                        <i class="bx bx-upload me-1"></i> Import CSV
+                    </a>
+                    <a class="btn btn-primary waves-effect waves-light" href="<?= site_url("setup/{$resource}/new") ?>">
+                        <i class="bx bx-plus me-1"></i> New
+                    </a>
+                <?php endif ?>
             </div>
         </div>
 
@@ -65,7 +78,7 @@
 
                 <?php if ($rows === []): ?>
                     <tr>
-                        <td colspan="5" class="text-center text-muted py-4">No records yet.</td>
+                        <td colspan="5" class="text-center text-muted py-4">No records yet. Use New or Import CSV to add master data.</td>
                     </tr>
                 <?php endif ?>
                 </tbody>
