@@ -105,10 +105,14 @@ class PenaErpSeeder extends Seeder
     {
         foreach ([
             ['Dashboard', 'dashboard', 'bx-home-circle', 'dashboard.view', 10],
-            ['Setup', 'setup/companies', 'bx-cog', 'setup.master.view', 20],
-            ['Sales', '#', 'bx-cart', 'sales.order.view', 30],
-            ['Purchase', '#', 'bx-shopping-bag', 'purchase.po.view', 40],
-            ['Inventory', '#', 'bx-package', 'inventory.stock.view', 50],
+            ['Companies', 'setup/companies', 'bx-buildings', 'setup.master.view', 20],
+            ['Sites', 'setup/sites', 'bx-map-pin', 'setup.master.view', 21],
+            ['Departments', 'setup/departments', 'bx-sitemap', 'setup.master.view', 22],
+            ['Warehouses', 'setup/warehouses', 'bx-package', 'setup.master.view', 23],
+            ['UoM', 'setup/uoms', 'bx-ruler', 'setup.master.view', 24],
+            ['Customers', 'setup/customers', 'bx-user-circle', 'sales.customer.view', 30],
+            ['Suppliers', 'setup/suppliers', 'bx-store', 'purchase.supplier.view', 40],
+            ['Items', 'setup/items', 'bx-cube', 'inventory.item.view', 50],
             ['Finance', '#', 'bx-wallet', 'finance.gl.view', 60],
             ['AI Documents', 'ai-documents', 'bx-scan', 'ai.document.review', 70],
         ] as [$label, $route, $icon, $permission, $sort]) {

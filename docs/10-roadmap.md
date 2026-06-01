@@ -13,10 +13,12 @@
 
 ## Stage 2
 
-- Full Skote asset integration after licensed zip is available
+- Full Skote asset integration
 - CRUD for setup masters
 - User, role, permission, company access, and site access pages
 - Active company/site switcher
+
+Status: Skote assets, master CRUD foundation, and active company/site switcher are implemented. User access management pages are still pending.
 
 ## Stage 3
 

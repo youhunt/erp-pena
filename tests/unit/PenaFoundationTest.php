@@ -23,4 +23,12 @@ final class PenaFoundationTest extends CIUnitTestCase
 
         $this->assertFileExists($path);
     }
+
+    public function testCoreMasterModelsExist(): void
+    {
+        $this->assertTrue(class_exists(\App\Models\CustomerModel::class));
+        $this->assertTrue(class_exists(\App\Models\SupplierModel::class));
+        $this->assertTrue(class_exists(\App\Models\ItemModel::class));
+        $this->assertTrue(class_exists(\App\Models\WarehouseModel::class));
+    }
 }

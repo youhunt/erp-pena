@@ -35,6 +35,49 @@ class TenantContext
         $this->session->set('active_site_id', $siteId);
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function accessibleCompanies(int $userId): array
+    {
+        $rows = db_connect()->table('user_company_access access')
+            ->select('companies.*')
+            ->join('companies', 'companies.id = access.company_id')
+            ->where('access.user_id', $userId)
+            ->where('companies.deleted_at', null)
+            ->orderBy('access.is_default', 'DESC')
+            ->orderBy('companies.code', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        return $rows ?: $this->companies->where('is_active', 1)->orderBy('code', 'ASC')->findAll();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function accessibleSites(int $userId, ?int $companyId = null): array
+    {
+        $companyId ??= $this->activeCompanyId();
+
+        if ($companyId === null) {
+            return [];
+        }
+
+        $rows = db_connect()->table('user_site_access access')
+            ->select('sites.*')
+            ->join('sites', 'sites.id = access.site_id')
+            ->where('access.user_id', $userId)
+            ->where('access.company_id', $companyId)
+            ->where('sites.deleted_at', null)
+            ->orderBy('access.is_default', 'DESC')
+            ->orderBy('sites.code', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        return $rows ?: $this->sites->where('company_id', $companyId)->where('is_active', 1)->orderBy('code', 'ASC')->findAll();
+    }
+
     public function bootstrapDefaultsForUser(int $userId): void
     {
         if ($this->activeCompanyId() !== null) {

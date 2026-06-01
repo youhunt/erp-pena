@@ -1,3 +1,14 @@
+<?php
+use App\Services\TenantContext;
+
+$tenantContext = new TenantContext(session());
+$currentUser = auth()->user();
+$companies = $currentUser === null ? [] : $tenantContext->accessibleCompanies((int) $currentUser->id);
+$sites = $currentUser === null ? [] : $tenantContext->accessibleSites((int) $currentUser->id);
+$activeCompanyId = $tenantContext->activeCompanyId();
+$activeSiteId = $tenantContext->activeSiteId();
+?>
+
 <header id="page-topbar">
     <div class="navbar-header">
         <div class="d-flex">
@@ -27,6 +38,27 @@
         </div>
 
         <div class="d-flex">
+            <?php if ($companies !== []): ?>
+                <form class="d-none d-lg-flex align-items-center gap-2 me-3" action="<?= site_url('tenant/switch') ?>" method="post">
+                    <?= csrf_field() ?>
+                    <select class="form-select form-select-sm" name="company_id" onchange="this.form.submit()" aria-label="Active company">
+                        <?php foreach ($companies as $company): ?>
+                            <option value="<?= esc((string) $company['id']) ?>" <?= (int) $company['id'] === (int) $activeCompanyId ? 'selected' : '' ?>>
+                                <?= esc($company['code']) ?>
+                            </option>
+                        <?php endforeach ?>
+                    </select>
+                    <select class="form-select form-select-sm" name="site_id" onchange="this.form.submit()" aria-label="Active site">
+                        <option value="">All Sites</option>
+                        <?php foreach ($sites as $site): ?>
+                            <option value="<?= esc((string) $site['id']) ?>" <?= (int) $site['id'] === (int) $activeSiteId ? 'selected' : '' ?>>
+                                <?= esc($site['code']) ?>
+                            </option>
+                        <?php endforeach ?>
+                    </select>
+                </form>
+            <?php endif ?>
+
             <div class="dropdown d-inline-block">
                 <button type="button" class="btn header-item waves-effect" id="page-header-user-dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                     <span class="d-none d-xl-inline-block ms-1"><?= esc(auth()->user()?->username ?? 'User') ?></span>

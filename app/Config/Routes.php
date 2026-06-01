@@ -9,10 +9,17 @@ service('auth')->routes($routes);
 
 $routes->group('', ['filter' => 'session'], static function (RouteCollection $routes): void {
     $routes->get('dashboard', 'DashboardController::index');
+    $routes->post('tenant/switch', 'TenantController::switch');
 
     $routes->group('setup', static function (RouteCollection $routes): void {
-        $routes->get('companies', 'Setup\CompanyController::index');
-        $routes->get('sites', 'Setup\SiteController::index');
+        foreach (['companies', 'sites', 'departments', 'warehouses', 'uoms', 'customers', 'suppliers', 'items'] as $resource) {
+            $routes->get($resource, 'Setup\MasterDataController::index/' . $resource);
+            $routes->get($resource . '/new', 'Setup\MasterDataController::create/' . $resource);
+            $routes->post($resource, 'Setup\MasterDataController::store/' . $resource);
+            $routes->get($resource . '/(:num)/edit', 'Setup\MasterDataController::edit/' . $resource . '/$1');
+            $routes->post($resource . '/(:num)', 'Setup\MasterDataController::update/' . $resource . '/$1');
+            $routes->post($resource . '/(:num)/delete', 'Setup\MasterDataController::delete/' . $resource . '/$1');
+        }
     });
 
     $routes->group('ai-documents', static function (RouteCollection $routes): void {

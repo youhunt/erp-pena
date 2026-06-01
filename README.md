@@ -14,6 +14,8 @@ This repository was empty at audit time, so the first implementation creates the
 - Dynamic sidebar model and service
 - Skote assets extracted from `resources.zip` into `public/assets/skote`
 - Initial dashboard, setup, and AI document upload pages
+- CRUD foundation for company, site, department, warehouse, UoM, customer, supplier, and item
+- Active company/site switcher in the Skote topbar
 - Vendor-neutral OCR/AI service contracts
 - Documentation under `docs/`
 
