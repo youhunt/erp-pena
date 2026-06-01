@@ -1,128 +1,17 @@
-:root {
-    --pena-sidebar: #243447;
-    --pena-sidebar-active: #2f80ed;
-    --pena-bg: #f4f6f8;
-    --pena-border: #d8dee6;
-    --pena-text: #1f2937;
+.navbar-brand-box .logo-lg strong,
+.navbar-brand-box .logo-sm img {
+    vertical-align: middle;
 }
 
-body {
-    background: var(--pena-bg);
-    color: var(--pena-text);
-    font-family: Inter, "Segoe UI", Arial, sans-serif;
-    margin: 0;
+.mini-stats-wid .mini-stat-icon i {
+    line-height: 1;
 }
 
-.app-shell {
-    display: grid;
-    grid-template-columns: 260px minmax(0, 1fr);
-    min-height: 100vh;
+.table td,
+.table th {
+    vertical-align: middle;
 }
 
-.side-nav {
-    background: var(--pena-sidebar);
-    color: #fff;
-    padding: 18px 16px;
-}
-
-.brand {
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: .02em;
-    margin-bottom: 24px;
-}
-
-.menu-link {
-    align-items: center;
-    border-radius: 6px;
-    color: #dce6f2;
-    display: flex;
-    gap: 10px;
-    padding: 10px 12px;
-    text-decoration: none;
-}
-
-.menu-link:hover,
-.menu-link.is-active {
-    background: var(--pena-sidebar-active);
-    color: #fff;
-}
-
-.main-area {
-    min-width: 0;
-}
-
-.topbar {
-    align-items: center;
-    background: #fff;
-    border-bottom: 1px solid var(--pena-border);
-    display: flex;
-    justify-content: space-between;
-    min-height: 64px;
-    padding: 0 24px;
-}
-
-.content {
-    padding: 24px;
-}
-
-.metric-grid {
-    display: grid;
-    gap: 16px;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.panel {
-    background: #fff;
-    border: 1px solid var(--pena-border);
-    border-radius: 8px;
-    padding: 18px;
-}
-
-.table {
-    border-collapse: collapse;
-    width: 100%;
-}
-
-.table th,
-.table td {
-    border-bottom: 1px solid var(--pena-border);
-    padding: 10px;
-    text-align: left;
-}
-
-.button {
-    background: #2f80ed;
-    border: 0;
-    border-radius: 6px;
-    color: #fff;
-    display: inline-block;
-    padding: 9px 14px;
-    text-decoration: none;
-}
-
-.alert {
-    border-radius: 6px;
-    margin-bottom: 16px;
-    padding: 12px 14px;
-}
-
-.alert-success {
-    background: #e9f8ef;
-    color: #14532d;
-}
-
-.alert-error {
-    background: #fdecec;
-    color: #7f1d1d;
-}
-
-@media (max-width: 860px) {
-    .app-shell {
-        grid-template-columns: 1fr;
-    }
-
-    .side-nav {
-        position: static;
-    }
+.page-content {
+    min-height: calc(100vh - 130px);
 }

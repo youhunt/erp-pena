@@ -1,6 +1,20 @@
-<footer class="content">
-    <small>PENA ERP foundation build.</small>
+<footer class="footer">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-sm-6">
+                <?= date('Y') ?> © PENA ERP.
+            </div>
+            <div class="col-sm-6">
+                <div class="text-sm-end d-none d-sm-block">
+                    Enterprise ERP Foundation
+                </div>
+            </div>
+        </div>
+    </div>
 </footer>
 <script src="<?= base_url('assets/skote/libs/jquery/jquery.min.js') ?>"></script>
 <script src="<?= base_url('assets/skote/libs/bootstrap/js/bootstrap.bundle.min.js') ?>"></script>
+<script src="<?= base_url('assets/skote/libs/metismenu/metisMenu.min.js') ?>"></script>
+<script src="<?= base_url('assets/skote/libs/simplebar/simplebar.min.js') ?>"></script>
+<script src="<?= base_url('assets/skote/libs/node-waves/waves.min.js') ?>"></script>
 <script src="<?= base_url('assets/skote/js/app.js') ?>"></script>

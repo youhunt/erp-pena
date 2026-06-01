@@ -9,4 +9,4 @@
     <link rel="stylesheet" href="<?= base_url('assets/skote/css/app.min.css') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/pena/app.css') ?>">
 </head>
-<body>
+<body data-sidebar="dark">

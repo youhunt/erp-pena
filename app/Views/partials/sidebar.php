@@ -5,16 +5,25 @@ $items = (new MenuService())->visibleMenuItems();
 $current = trim(uri_string(), '/');
 ?>
 
-<aside class="side-nav">
-    <div class="brand">PENA ERP</div>
+<div class="vertical-menu">
+    <div data-simplebar class="h-100">
+        <div id="sidebar-menu">
+            <ul class="metismenu list-unstyled" id="side-menu">
+                <li class="menu-title">Menu</li>
 
-    <nav>
-        <?php foreach ($items as $item): ?>
-            <?php $route = trim((string) ($item['route'] ?? '#'), '/'); ?>
-            <a class="menu-link <?= $current === $route ? 'is-active' : '' ?>" href="<?= $route === '#' ? '#' : site_url($route) ?>">
-                <span><?= esc($item['icon'] ?: 'bx-circle') ?></span>
-                <span><?= esc($item['label']) ?></span>
-            </a>
-        <?php endforeach ?>
-    </nav>
-</aside>
+                <?php foreach ($items as $item): ?>
+                    <?php
+                    $route = trim((string) ($item['route'] ?? '#'), '/');
+                    $isActive = $route !== '#' && ($current === $route || str_starts_with($current, $route . '/'));
+                    ?>
+                    <li class="<?= $isActive ? 'mm-active' : '' ?>">
+                        <a class="waves-effect <?= $isActive ? 'active' : '' ?>" href="<?= $route === '#' ? 'javascript:void(0);' : site_url($route) ?>">
+                            <i class="bx <?= esc($item['icon'] ?: 'bx-circle') ?>"></i>
+                            <span><?= esc($item['label']) ?></span>
+                        </a>
+                    </li>
+                <?php endforeach ?>
+            </ul>
+        </div>
+    </div>
+</div>
