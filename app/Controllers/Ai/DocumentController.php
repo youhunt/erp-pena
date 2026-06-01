@@ -12,9 +12,20 @@ class DocumentController extends BaseController
 {
     public function index(): string
     {
+        $tenant = new TenantContext(session());
+        $documents = new DocumentUploadModel();
+
+        if ($tenant->activeCompanyId() !== null) {
+            $documents->where('company_id', $tenant->activeCompanyId());
+        }
+
+        if ($tenant->activeSiteId() !== null) {
+            $documents->where('site_id', $tenant->activeSiteId());
+        }
+
         return view('ai/documents/index', [
             'title' => 'AI Documents',
-            'documents' => (new DocumentUploadModel())->orderBy('created_at', 'DESC')->findAll(50),
+            'documents' => $documents->orderBy('created_at', 'DESC')->findAll(50),
         ]);
     }
 
