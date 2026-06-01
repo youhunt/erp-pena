@@ -15,3 +15,59 @@
 .page-content {
     min-height: calc(100vh - 130px);
 }
+
+/* PENA ERP sidebar polish */
+#sidebar-menu .menu-title {
+    letter-spacing: .08em;
+    font-size: 11px;
+    opacity: .72;
+}
+
+#sidebar-menu ul li a {
+    line-height: 1.25;
+}
+
+#sidebar-menu ul li ul.sub-menu li a {
+    padding-top: .45rem;
+    padding-bottom: .45rem;
+    font-size: 13px;
+}
+
+#sidebar-menu ul li ul.sub-menu li ul.sub-menu li a {
+    padding-left: 4.25rem;
+    font-size: 12.5px;
+    opacity: .9;
+}
+
+#sidebar-menu .pena-menu-section > a {
+    font-size: 11px !important;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: #7f8aa3 !important;
+    cursor: default;
+    pointer-events: none;
+    padding-top: .85rem !important;
+    padding-bottom: .25rem !important;
+}
+
+#sidebar-menu .pena-menu-section > a::before,
+#sidebar-menu .pena-menu-section > a::after,
+#sidebar-menu .pena-menu-section > a i {
+    display: none !important;
+}
+
+#sidebar-menu .pena-menu-section ul.sub-menu {
+    display: block !important;
+    height: auto !important;
+    padding-left: 0;
+}
+
+#sidebar-menu .pena-menu-section ul.sub-menu li a {
+    padding-left: 3.35rem;
+}
+
+body[data-sidebar="dark"] #sidebar-menu ul li a.active,
+body[data-sidebar="dark"] #sidebar-menu ul li.mm-active > a {
+    color: #ffffff !important;
+}
