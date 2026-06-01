@@ -28,4 +28,34 @@ class MenuService
             return function_exists('auth') && auth()->user()?->can($item['permission']);
         }));
     }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function visibleMenuTree(): array
+    {
+        $items = $this->visibleMenuItems();
+        $childrenByParent = [];
+
+        foreach ($items as $item) {
+            $parentId = $item['parent_id'] ?? 0;
+            $childrenByParent[(int) $parentId][] = $item;
+        }
+
+        $build = static function (int $parentId) use (&$build, &$childrenByParent): array {
+            $branch = [];
+
+            foreach ($childrenByParent[$parentId] ?? [] as $item) {
+                $item['children'] = $build((int) $item['id']);
+
+                if ($item['children'] !== [] || ! empty($item['route'])) {
+                    $branch[] = $item;
+                }
+            }
+
+            return $branch;
+        };
+
+        return $build(0);
+    }
 }

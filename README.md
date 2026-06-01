@@ -61,6 +61,8 @@ php spark migrate --all
 php spark db:seed PenaErpSeeder
 ```
 
+Run the seeder again after menu or baseline master updates; it refreshes `menu_items` without deleting transactional data.
+
 Start the app:
 
 ```bash
