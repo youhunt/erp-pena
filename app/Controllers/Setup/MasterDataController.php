@@ -7,12 +7,14 @@ use App\Models\AddressModel;
 use App\Models\CityModel;
 use App\Models\CompanyModel;
 use App\Models\CountryModel;
+use App\Models\CurrencyModel;
 use App\Models\CustomerModel;
 use App\Models\DepartmentModel;
 use App\Models\ItemModel;
 use App\Models\ItemVatRateModel;
 use App\Models\LocationModel;
 use App\Models\PostalCodeModel;
+use App\Models\PrefixCodeModel;
 use App\Models\ProvinceModel;
 use App\Models\SiteModel;
 use App\Models\SupplierModel;
@@ -21,7 +23,9 @@ use App\Models\UomConversionModel;
 use App\Models\UomModel;
 use App\Models\VatRateModel;
 use App\Models\WarehouseModel;
+use App\Models\WithholdingTaxRateModel;
 use App\Services\TenantContext;
+use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\Model;
 
 class MasterDataController extends BaseController
@@ -34,25 +38,15 @@ class MasterDataController extends BaseController
     public function __construct()
     {
         $this->resources = [
-        'transaction-codes' => [
-            'title' => 'Transaction Codes',
-            'model' => TransactionCodeModel::class,
-            'table' => 'transaction_codes',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => true,
-            'site' => false,
-            'fields' => $this->setupCodeFields(),
-        ],
-        'companies' => [
-            'title' => 'Companies',
-            'model' => CompanyModel::class,
-            'table' => 'companies',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => false,
-            'site' => false,
-            'fields' => [
+            'transaction-codes' => $this->setupResource('Transaction Codes', TransactionCodeModel::class, 'transaction_codes', true, false),
+            'prefix-codes'      => $this->setupResource('Prefix Codes', PrefixCodeModel::class, 'prefix_codes', true, false),
+            'currencies'        => $this->globalResource('Currencies', CurrencyModel::class, 'currencies', [
+                'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
+                'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
+                'rounding' => ['label' => 'Rounding', 'type' => 'number', 'default' => 0],
+                'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
+            ]),
+            'companies' => $this->globalResource('Companies', CompanyModel::class, 'companies', [
                 'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
                 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
                 'legal_name' => ['label' => 'Legal Name', 'type' => 'text'],
@@ -60,114 +54,40 @@ class MasterDataController extends BaseController
                 'base_currency' => ['label' => 'Base Currency', 'type' => 'text', 'default' => 'IDR'],
                 'address' => ['label' => 'Address', 'type' => 'textarea'],
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-            ],
-        ],
-        'sites' => [
-            'title' => 'Sites / Branches',
-            'model' => SiteModel::class,
-            'table' => 'sites',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => true,
-            'site' => false,
-            'fields' => [
+            ]),
+            'sites' => $this->tenantResource('Sites / Branches', SiteModel::class, 'sites', false, [
                 'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
                 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
                 'address' => ['label' => 'Address', 'type' => 'textarea'],
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-            ],
-        ],
-        'departments' => [
-            'title' => 'Departments',
-            'model' => DepartmentModel::class,
-            'table' => 'departments',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => true,
-            'site' => true,
-            'fields' => $this->simpleFields(),
-        ],
-        'warehouses' => [
-            'title' => 'Warehouses',
-            'model' => WarehouseModel::class,
-            'table' => 'warehouses',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => true,
-            'site' => true,
-            'fields' => $this->simpleFields(),
-        ],
-        'locations' => [
-            'title' => 'Locations',
-            'model' => LocationModel::class,
-            'table' => 'locations',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => true,
-            'site' => true,
-            'fields' => [
+            ]),
+            'departments' => $this->tenantResource('Departments', DepartmentModel::class, 'departments', true, $this->simpleFields()),
+            'warehouses'  => $this->tenantResource('Warehouses', WarehouseModel::class, 'warehouses', true, $this->simpleFields()),
+            'locations'   => $this->tenantResource('Locations', LocationModel::class, 'locations', true, [
                 'warehouse_id' => ['label' => 'Warehouse', 'type' => 'select', 'required' => true, 'options_source' => 'warehouses'],
                 'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
                 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
                 'description' => ['label' => 'Description', 'type' => 'textarea'],
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-            ],
-        ],
-        'countries' => [
-            'title' => 'Countries',
-            'model' => CountryModel::class,
-            'table' => 'countries',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => false,
-            'site' => false,
-            'fields' => [
+            ]),
+            'countries' => $this->globalResource('Countries', CountryModel::class, 'countries', [
                 'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
                 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-            ],
-        ],
-        'provinces' => [
-            'title' => 'Provinces',
-            'model' => ProvinceModel::class,
-            'table' => 'provinces',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => false,
-            'site' => false,
-            'sync_action' => 'setup/provinces/sync',
-            'fields' => [
+            ]),
+            'provinces' => $this->globalResource('Provinces', ProvinceModel::class, 'provinces', [
                 'parent_id' => ['label' => 'Country', 'type' => 'select', 'options_source' => 'countries'],
                 'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
                 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-            ],
-        ],
-        'cities' => [
-            'title' => 'Cities',
-            'model' => CityModel::class,
-            'table' => 'cities',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => false,
-            'site' => false,
-            'sync_action' => 'setup/cities/sync',
-            'fields' => [
+            ]) + ['sync_action' => 'setup/provinces/sync'],
+            'cities' => $this->globalResource('Cities', CityModel::class, 'cities', [
                 'parent_id' => ['label' => 'Province', 'type' => 'select', 'options_source' => 'provinces', 'required' => true],
                 'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
                 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-            ],
-        ],
-        'postal-codes' => [
-            'title' => 'Postal Codes',
-            'model' => PostalCodeModel::class,
-            'table' => 'postal_codes',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => false,
-            'site' => false,
-            'fields' => [
+            ]) + ['sync_action' => 'setup/cities/sync'],
+            'postal-codes' => $this->globalResource('Postal Codes', PostalCodeModel::class, 'postal_codes', [
                 'country_id' => ['label' => 'Country', 'type' => 'select', 'options_source' => 'countries'],
                 'province_id' => ['label' => 'Province', 'type' => 'select', 'options_source' => 'provinces'],
                 'city_id' => ['label' => 'City', 'type' => 'select', 'options_source' => 'cities'],
@@ -176,82 +96,28 @@ class MasterDataController extends BaseController
                 'district' => ['label' => 'District', 'type' => 'text'],
                 'village' => ['label' => 'Village', 'type' => 'text'],
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-            ],
-        ],
-        'uoms' => [
-            'title' => 'Units of Measure',
-            'model' => UomModel::class,
-            'table' => 'uoms',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => true,
-            'site' => false,
-            'fields' => [
+            ]),
+            'uoms' => $this->tenantResource('Units of Measure', UomModel::class, 'uoms', false, [
                 'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
                 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
                 'description' => ['label' => 'Description', 'type' => 'textarea'],
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-            ],
-        ],
-        'uom-conversions' => [
-            'title' => 'UoM Conversions',
-            'model' => UomConversionModel::class,
-            'table' => 'uom_conversions',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => true,
-            'site' => false,
-            'fields' => [
+            ]),
+            'uom-conversions' => $this->tenantResource('UoM Conversions', UomConversionModel::class, 'uom_conversions', false, [
                 'from_uom_id' => ['label' => 'From UoM', 'type' => 'select', 'options_source' => 'uoms', 'required' => true],
                 'to_uom_id' => ['label' => 'To UoM', 'type' => 'select', 'options_source' => 'uoms', 'required' => true],
                 'multiplier' => ['label' => 'Multiplier', 'type' => 'number', 'default' => 1],
                 'divider' => ['label' => 'Divider', 'type' => 'number', 'default' => 1],
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-            ],
-            'display' => ['code' => 'from_uom_id', 'name' => 'to_uom_id', 'description' => 'multiplier'],
-            'order_by' => 'id',
-        ],
-        'vat' => [
-            'title' => 'VAT',
-            'model' => VatRateModel::class,
-            'table' => 'vat_rates',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => true,
-            'site' => false,
-            'fields' => [
-                'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
-                'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
-                'rate' => ['label' => 'Rate (%)', 'type' => 'number', 'default' => 0],
-                'description' => ['label' => 'Description', 'type' => 'textarea'],
-                'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-            ],
-        ],
-        'item-vat' => [
-            'title' => 'Item VAT',
-            'model' => ItemVatRateModel::class,
-            'table' => 'item_vat_rates',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => true,
-            'site' => false,
-            'fields' => [
+            ]) + ['display' => ['code' => 'from_uom_id', 'name' => 'to_uom_id', 'description' => 'multiplier'], 'order_by' => 'id'],
+            'vat' => $this->setupResource('VAT', VatRateModel::class, 'vat_rates', true, false, true),
+            'wht' => $this->setupResource('WHT / PPH', WithholdingTaxRateModel::class, 'wht_rates', true, false, true),
+            'item-vat' => $this->tenantResource('Item VAT', ItemVatRateModel::class, 'item_vat_rates', false, [
                 'item_id' => ['label' => 'Item', 'type' => 'select', 'options_source' => 'items', 'required' => true],
                 'vat_rate_id' => ['label' => 'VAT', 'type' => 'select', 'options_source' => 'vat_rates', 'required' => true],
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-            ],
-            'display' => ['code' => 'item_id', 'name' => 'vat_rate_id'],
-            'order_by' => 'id',
-        ],
-        'address-master' => [
-            'title' => 'Address Master',
-            'model' => AddressModel::class,
-            'table' => 'addresses',
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => true,
-            'site' => true,
-            'fields' => [
+            ]) + ['display' => ['code' => 'item_id', 'name' => 'vat_rate_id'], 'order_by' => 'id'],
+            'address-master' => $this->tenantResource('Address Master', AddressModel::class, 'addresses', true, [
                 'address_type' => ['label' => 'Address Type', 'type' => 'select', 'options' => ['general' => 'General', 'bill_to' => 'Bill To', 'ship_to' => 'Ship To', 'mail_to' => 'Mail To'], 'default' => 'general'],
                 'owner_type' => ['label' => 'Owner Type', 'type' => 'select', 'options' => ['' => 'None', 'customer' => 'Customer', 'supplier' => 'Supplier', 'company' => 'Company', 'site' => 'Site']],
                 'owner_code' => ['label' => 'Owner Code', 'type' => 'text'],
@@ -266,47 +132,22 @@ class MasterDataController extends BaseController
                 'phone' => ['label' => 'Phone', 'type' => 'text'],
                 'email' => ['label' => 'Email', 'type' => 'email'],
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-            ],
-        ],
-        'customers' => [
-            'title' => 'Customers',
-            'model' => CustomerModel::class,
-            'table' => 'customers',
-            'view_permission' => 'sales.customer.view',
-            'manage_permission' => 'sales.customer.manage',
-            'tenant' => true,
-            'site' => true,
-            'fields' => $this->partnerFields(),
-        ],
-        'suppliers' => [
-            'title' => 'Suppliers',
-            'model' => SupplierModel::class,
-            'table' => 'suppliers',
-            'view_permission' => 'purchase.supplier.view',
-            'manage_permission' => 'purchase.supplier.manage',
-            'tenant' => true,
-            'site' => true,
-            'fields' => $this->partnerFields(),
-        ],
-        'items' => [
-            'title' => 'Items',
-            'model' => ItemModel::class,
-            'table' => 'items',
-            'view_permission' => 'inventory.item.view',
-            'manage_permission' => 'inventory.item.manage',
-            'tenant' => true,
-            'site' => true,
-            'fields' => [
+            ]),
+            'customers' => $this->tenantResource('Customers', CustomerModel::class, 'customers', true, $this->partnerFields(), 'sales.customer.view', 'sales.customer.manage'),
+            'suppliers' => $this->tenantResource('Suppliers', SupplierModel::class, 'suppliers', true, $this->partnerFields(), 'purchase.supplier.view', 'purchase.supplier.manage'),
+            'items' => $this->tenantResource('Items', ItemModel::class, 'items', true, [
                 'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
                 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
                 'item_type' => ['label' => 'Item Type', 'type' => 'select', 'options' => ['stock' => 'Stock', 'service' => 'Service', 'asset' => 'Asset'], 'default' => 'stock'],
                 'brand' => ['label' => 'Brand', 'type' => 'text'],
+                'stock_uom_id' => ['label' => 'Stock UoM', 'type' => 'select', 'options_source' => 'uoms'],
+                'sales_uom_id' => ['label' => 'Sales UoM', 'type' => 'select', 'options_source' => 'uoms'],
+                'purchase_uom_id' => ['label' => 'Purchase UoM', 'type' => 'select', 'options_source' => 'uoms'],
                 'standard_cost' => ['label' => 'Standard Cost', 'type' => 'number', 'default' => 0],
                 'sales_price' => ['label' => 'Sales Price', 'type' => 'number', 'default' => 0],
                 'shelf_life_days' => ['label' => 'Shelf Life Days', 'type' => 'number'],
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-            ],
-        ],
+            ], 'inventory.item.view', 'inventory.item.manage'),
         ];
     }
 
@@ -340,7 +181,6 @@ class MasterDataController extends BaseController
     public function store(string $resource)
     {
         $config = $this->hydrateOptions($this->config($resource, 'manage'));
-        $data = $this->payload($config, true);
 
         if (! $this->hasRequiredTenant($config)) {
             return redirect()->back()->withInput()->with('error', 'Active company is required for this master data.');
@@ -350,9 +190,9 @@ class MasterDataController extends BaseController
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
 
-        $this->model($config)->insert($data);
+        $this->model($config)->insert($this->payload($config, true));
 
-        return redirect()->to("setup/{$resource}")->with('message', $config['title'] . ' created.');
+        return redirect()->to(site_url("setup/{$resource}"))->with('message', $config['title'] . ' created.');
     }
 
     public function edit(string $resource, int $id): string
@@ -361,7 +201,7 @@ class MasterDataController extends BaseController
         $row = $this->scope($this->model($config), $config)->find($id);
 
         if ($row === null) {
-            throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound();
+            throw PageNotFoundException::forPageNotFound();
         }
 
         return view('setup/master/form', [
@@ -374,7 +214,7 @@ class MasterDataController extends BaseController
 
     public function update(string $resource, int $id)
     {
-        $config = $this->config($resource, 'manage');
+        $config = $this->hydrateOptions($this->config($resource, 'manage'));
 
         if (! $this->hasRequiredTenant($config)) {
             return redirect()->back()->withInput()->with('error', 'Active company is required for this master data.');
@@ -386,12 +226,12 @@ class MasterDataController extends BaseController
 
         $model = $this->scope($this->model($config), $config);
         if ($model->find($id) === null) {
-            throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound();
+            throw PageNotFoundException::forPageNotFound();
         }
 
         $model->update($id, $this->payload($config, false));
 
-        return redirect()->to("setup/{$resource}")->with('message', $config['title'] . ' updated.');
+        return redirect()->to(site_url("setup/{$resource}"))->with('message', $config['title'] . ' updated.');
     }
 
     public function delete(string $resource, int $id)
@@ -400,24 +240,80 @@ class MasterDataController extends BaseController
         $model = $this->scope($this->model($config), $config);
 
         if ($model->find($id) === null) {
-            throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound();
+            throw PageNotFoundException::forPageNotFound();
         }
 
         $model->delete($id);
 
-        return redirect()->to("setup/{$resource}")->with('message', $config['title'] . ' deleted.');
+        return redirect()->to(site_url("setup/{$resource}"))->with('message', $config['title'] . ' deleted.');
+    }
+
+    private function setupResource(string $title, string $model, string $table, bool $tenant, bool $site, bool $withRate = false): array
+    {
+        $fields = [
+            'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
+            'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
+        ];
+
+        if ($withRate) {
+            $fields['rate'] = ['label' => 'Rate (%)', 'type' => 'number', 'default' => 0];
+        }
+
+        $fields += [
+            'description' => ['label' => 'Description', 'type' => 'textarea'],
+            'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
+        ];
+
+        return [
+            'title' => $title,
+            'model' => $model,
+            'table' => $table,
+            'view_permission' => 'setup.master.view',
+            'manage_permission' => 'setup.master.manage',
+            'tenant' => $tenant,
+            'site' => $site,
+            'fields' => $fields,
+        ];
+    }
+
+    private function globalResource(string $title, string $model, string $table, array $fields): array
+    {
+        return [
+            'title' => $title,
+            'model' => $model,
+            'table' => $table,
+            'view_permission' => 'setup.master.view',
+            'manage_permission' => 'setup.master.manage',
+            'tenant' => false,
+            'site' => false,
+            'fields' => $fields,
+        ];
+    }
+
+    private function tenantResource(string $title, string $model, string $table, bool $site, array $fields, string $viewPermission = 'setup.master.view', string $managePermission = 'setup.master.manage'): array
+    {
+        return [
+            'title' => $title,
+            'model' => $model,
+            'table' => $table,
+            'view_permission' => $viewPermission,
+            'manage_permission' => $managePermission,
+            'tenant' => true,
+            'site' => $site,
+            'fields' => $fields,
+        ];
     }
 
     private function config(string $resource, string $mode): array
     {
         if (! isset($this->resources[$resource])) {
-            throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound();
+            throw PageNotFoundException::forPageNotFound();
         }
 
         $config = $this->resources[$resource];
         $permission = $mode === 'view' ? $config['view_permission'] : $config['manage_permission'];
         if (! auth()->user()?->can($permission)) {
-            throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound();
+            throw PageNotFoundException::forPageNotFound();
         }
 
         return $config;
@@ -447,16 +343,16 @@ class MasterDataController extends BaseController
     {
         $payload = [];
         foreach ($config['fields'] as $name => $field) {
-            if ($field['type'] === 'checkbox') {
+            if (($field['type'] ?? 'text') === 'checkbox') {
                 $payload[$name] = $this->request->getPost($name) ? 1 : 0;
                 continue;
             }
 
             $value = $this->request->getPost($name);
-            if ($field['type'] === 'number' && $value === '') {
+            if (($field['type'] ?? 'text') === 'number' && $value === '') {
                 $value = $field['default'] ?? null;
             }
-            if ($field['type'] === 'select' && isset($field['options_source']) && $value === '') {
+            if (($field['type'] ?? 'text') === 'select' && isset($field['options_source']) && $value === '') {
                 $value = null;
             }
 
@@ -484,7 +380,10 @@ class MasterDataController extends BaseController
     {
         $rules = [];
         foreach ($config['fields'] as $name => $field) {
-            $rules[$name] = ! empty($field['required']) ? 'required|max_length:255' : 'permit_empty|max_length:500';
+            $type = $field['type'] ?? 'text';
+            $rule = ! empty($field['required']) ? 'required' : 'permit_empty';
+            $rule .= in_array($type, ['number', 'select', 'checkbox'], true) ? '' : '|max_length:500';
+            $rules[$name] = $rule;
         }
 
         return $rules;
@@ -493,11 +392,16 @@ class MasterDataController extends BaseController
     private function hydrateOptions(array $config): array
     {
         foreach ($config['fields'] as $name => $field) {
-            if (($field['type'] ?? '') !== 'select' || empty($field['options_source'])) {
+            if (($field['type'] ?? '') !== 'select') {
                 continue;
             }
 
-            $config['fields'][$name]['options'] = ['' => 'Select ' . $field['label']] + $this->optionsFor($field['options_source']);
+            if (! empty($field['options_source'])) {
+                $config['fields'][$name]['options'] = ['' => 'Select ' . $field['label']] + $this->optionsFor($field['options_source']);
+                continue;
+            }
+
+            $config['fields'][$name]['options'] ??= ['' => 'Select ' . $field['label']];
         }
 
         return $config;
@@ -552,16 +456,6 @@ class MasterDataController extends BaseController
     }
 
     private function simpleFields(): array
-    {
-        return [
-            'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
-            'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
-            'description' => ['label' => 'Description', 'type' => 'textarea'],
-            'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-        ];
-    }
-
-    private function setupCodeFields(): array
     {
         return [
             'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
