@@ -45,12 +45,19 @@ class TenantContext
             ->join('companies', 'companies.id = access.company_id')
             ->where('access.user_id', $userId)
             ->where('companies.deleted_at', null)
+            ->where('companies.is_active', 1)
             ->orderBy('access.is_default', 'DESC')
             ->orderBy('companies.code', 'ASC')
             ->get()
             ->getResultArray();
 
-        return $rows ?: $this->companies->where('is_active', 1)->orderBy('code', 'ASC')->findAll();
+        if ($rows !== []) {
+            return $rows;
+        }
+
+        return $this->isSuperadmin($userId)
+            ? $this->companies->where('is_active', 1)->orderBy('code', 'ASC')->findAll()
+            : [];
     }
 
     /**
@@ -70,42 +77,89 @@ class TenantContext
             ->where('access.user_id', $userId)
             ->where('access.company_id', $companyId)
             ->where('sites.deleted_at', null)
+            ->where('sites.is_active', 1)
             ->orderBy('access.is_default', 'DESC')
             ->orderBy('sites.code', 'ASC')
             ->get()
             ->getResultArray();
 
-        return $rows ?: $this->sites->where('company_id', $companyId)->where('is_active', 1)->orderBy('code', 'ASC')->findAll();
+        if ($rows !== []) {
+            return $rows;
+        }
+
+        return $this->isSuperadmin($userId)
+            ? $this->sites->where('company_id', $companyId)->where('is_active', 1)->orderBy('code', 'ASC')->findAll()
+            : [];
+    }
+
+    public function userCanAccessCompany(int $userId, int $companyId): bool
+    {
+        if ($companyId < 1) {
+            return false;
+        }
+
+        if ($this->isSuperadmin($userId)) {
+            return $this->companies->where('id', $companyId)->where('is_active', 1)->first() !== null;
+        }
+
+        return db_connect()->table('user_company_access')
+            ->where('user_id', $userId)
+            ->where('company_id', $companyId)
+            ->countAllResults() > 0;
+    }
+
+    public function userCanAccessSite(int $userId, int $companyId, ?int $siteId): bool
+    {
+        if ($siteId === null) {
+            return true;
+        }
+
+        $site = $this->sites
+            ->where('id', $siteId)
+            ->where('company_id', $companyId)
+            ->where('is_active', 1)
+            ->first();
+
+        if ($site === null) {
+            return false;
+        }
+
+        if ($this->isSuperadmin($userId)) {
+            return true;
+        }
+
+        return db_connect()->table('user_site_access')
+            ->where('user_id', $userId)
+            ->where('company_id', $companyId)
+            ->where('site_id', $siteId)
+            ->countAllResults() > 0;
     }
 
     public function bootstrapDefaultsForUser(int $userId): void
     {
-        if ($this->activeCompanyId() !== null) {
+        if ($this->activeCompanyId() !== null && $this->userCanAccessCompany($userId, (int) $this->activeCompanyId())) {
             return;
         }
 
-        $db = db_connect();
-        $access = $db->table('user_company_access')
-            ->where('user_id', $userId)
-            ->orderBy('is_default', 'DESC')
-            ->get()
-            ->getRowArray();
-
-        if ($access === null) {
-            $company = $this->companies->where('is_active', 1)->first();
-            $site = $company === null ? null : $this->sites->where('company_id', $company['id'])->where('is_active', 1)->first();
-            $this->switch((int) ($company['id'] ?? 0), isset($site['id']) ? (int) $site['id'] : null);
+        $companies = $this->accessibleCompanies($userId);
+        if ($companies === []) {
+            $this->switch(0, null);
 
             return;
         }
 
-        $site = $db->table('user_site_access')
-            ->where('user_id', $userId)
-            ->where('company_id', $access['company_id'])
-            ->orderBy('is_default', 'DESC')
-            ->get()
-            ->getRowArray();
+        $companyId = (int) $companies[0]['id'];
+        $sites = $this->accessibleSites($userId, $companyId);
+        $siteId = isset($sites[0]['id']) ? (int) $sites[0]['id'] : null;
 
-        $this->switch((int) $access['company_id'], isset($site['site_id']) ? (int) $site['site_id'] : null);
+        $this->switch($companyId, $siteId);
+    }
+
+    private function isSuperadmin(int $userId): bool
+    {
+        return db_connect()->table('auth_groups_users')
+            ->where('user_id', $userId)
+            ->where('group', 'superadmin')
+            ->countAllResults() > 0;
     }
 }
