@@ -5,6 +5,7 @@ namespace App\Controllers\Ai;
 use App\Controllers\BaseController;
 use App\Models\DocumentUploadModel;
 use App\Services\Ai\DocumentProcessingService;
+use App\Services\Ai\DocumentProcessorService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use RuntimeException;
@@ -35,6 +36,24 @@ class DocumentController extends BaseController
             'title' => 'Document Detail',
             'document' => $document,
         ]);
+    }
+
+    public function process(int $id)
+    {
+        $tenant = new TenantContext(session());
+        $document = $this->scopedDocuments($tenant)->find($id);
+
+        if ($document === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        try {
+            (new DocumentProcessorService())->process($id, auth()->id());
+        } catch (RuntimeException $exception) {
+            return redirect()->to('/ai-documents/' . $id)->with('error', $exception->getMessage());
+        }
+
+        return redirect()->to('/ai-documents/' . $id)->with('message', 'Document OCR/AI processing completed.');
     }
 
     public function upload(): string
