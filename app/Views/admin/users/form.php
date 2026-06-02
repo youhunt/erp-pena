@@ -45,6 +45,9 @@
                             </div>
                         <?php endforeach ?>
                     </div>
+                    <div class="alert alert-light border mt-3 mb-0 small text-muted">
+                        Role permissions follow <code>app/Config/AuthGroups.php</code>. Detailed permission preview will be added in the next UI pass.
+                    </div>
                 </div>
             </div>
         </div>
@@ -57,7 +60,7 @@
                     <h4 class="card-title mb-3">Company Access</h4>
                     <div class="mb-3">
                         <label class="form-label">Default Company</label>
-                        <select name="default_company_id" class="form-select">
+                        <select name="default_company_id" class="form-select" id="defaultCompanySelect">
                             <option value="0">Select default company</option>
                             <?php foreach ($companies as $company): ?>
                                 <option value="<?= (int) $company['id'] ?>" <?= (int) $defaultCompanyId === (int) $company['id'] ? 'selected' : '' ?>>
@@ -70,13 +73,14 @@
                     <div class="border rounded p-3" style="max-height: 260px; overflow:auto;">
                         <?php foreach ($companies as $company): ?>
                             <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" name="company_ids[]" value="<?= (int) $company['id'] ?>" id="company_<?= (int) $company['id'] ?>" <?= in_array((int) $company['id'], $selectedCompanyIds, true) ? 'checked' : '' ?>>
+                                <input class="form-check-input company-checkbox" type="checkbox" name="company_ids[]" value="<?= (int) $company['id'] ?>" id="company_<?= (int) $company['id'] ?>" <?= in_array((int) $company['id'], $selectedCompanyIds, true) ? 'checked' : '' ?>>
                                 <label class="form-check-label" for="company_<?= (int) $company['id'] ?>">
                                     <?= esc($company['code'] . ' - ' . $company['name']) ?>
                                 </label>
                             </div>
                         <?php endforeach ?>
                     </div>
+                    <div class="form-text mt-2">Default company is automatically included in company access.</div>
                 </div>
             </div>
         </div>
@@ -87,10 +91,10 @@
                     <h4 class="card-title mb-3">Site / Branch Access</h4>
                     <div class="mb-3">
                         <label class="form-label">Default Site</label>
-                        <select name="default_site_id" class="form-select">
+                        <select name="default_site_id" class="form-select" id="defaultSiteSelect">
                             <option value="0">Select default site</option>
                             <?php foreach ($sites as $site): ?>
-                                <option value="<?= (int) $site['id'] ?>" <?= (int) $defaultSiteId === (int) $site['id'] ? 'selected' : '' ?>>
+                                <option value="<?= (int) $site['id'] ?>" data-company-id="<?= (int) $site['company_id'] ?>" <?= (int) $defaultSiteId === (int) $site['id'] ? 'selected' : '' ?>>
                                     <?= esc($site['code'] . ' - ' . $site['name']) ?>
                                 </option>
                             <?php endforeach ?>
@@ -99,14 +103,15 @@
 
                     <div class="border rounded p-3" style="max-height: 260px; overflow:auto;">
                         <?php foreach ($sites as $site): ?>
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" name="site_ids[]" value="<?= (int) $site['id'] ?>" id="site_<?= (int) $site['id'] ?>" <?= in_array((int) $site['id'], $selectedSiteIds, true) ? 'checked' : '' ?>>
+                            <div class="form-check mb-2 site-option" data-company-id="<?= (int) $site['company_id'] ?>">
+                                <input class="form-check-input site-checkbox" type="checkbox" name="site_ids[]" value="<?= (int) $site['id'] ?>" id="site_<?= (int) $site['id'] ?>" <?= in_array((int) $site['id'], $selectedSiteIds, true) ? 'checked' : '' ?>>
                                 <label class="form-check-label" for="site_<?= (int) $site['id'] ?>">
                                     <?= esc($site['code'] . ' - ' . $site['name']) ?>
                                 </label>
                             </div>
                         <?php endforeach ?>
                     </div>
+                    <div class="form-text mt-2">Sites are filtered by selected default company.</div>
                 </div>
             </div>
         </div>
@@ -119,4 +124,54 @@
         <a href="<?= site_url('admin/users') ?>" class="btn btn-light">Cancel</a>
     </div>
 </form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const defaultCompany = document.getElementById('defaultCompanySelect');
+    const defaultSite = document.getElementById('defaultSiteSelect');
+    const companyChecks = Array.from(document.querySelectorAll('.company-checkbox'));
+    const siteOptions = Array.from(document.querySelectorAll('.site-option'));
+
+    function syncDefaultCompanyAccess() {
+        const companyId = defaultCompany.value;
+        if (!companyId || companyId === '0') return;
+
+        companyChecks.forEach(function (input) {
+            if (input.value === companyId) {
+                input.checked = true;
+            }
+        });
+    }
+
+    function filterSites() {
+        const companyId = defaultCompany.value;
+
+        Array.from(defaultSite.options).forEach(function (option) {
+            if (!option.value || option.value === '0') return;
+            const show = !companyId || companyId === '0' || option.dataset.companyId === companyId;
+            option.hidden = !show;
+            if (!show && option.selected) {
+                defaultSite.value = '0';
+            }
+        });
+
+        siteOptions.forEach(function (wrapper) {
+            const show = !companyId || companyId === '0' || wrapper.dataset.companyId === companyId;
+            wrapper.classList.toggle('d-none', !show);
+            const input = wrapper.querySelector('input');
+            if (!show && input) {
+                input.checked = false;
+            }
+        });
+    }
+
+    defaultCompany.addEventListener('change', function () {
+        syncDefaultCompanyAccess();
+        filterSites();
+    });
+
+    syncDefaultCompanyAccess();
+    filterSites();
+});
+</script>
 <?= $this->endSection() ?>
