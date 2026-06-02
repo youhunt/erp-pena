@@ -24,6 +24,13 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('roles', 'Admin\RoleController::index');
     });
 
+    $routes->group('sales', static function (RouteCollection $routes): void {
+        $routes->get('orders', 'Sales\SalesOrderController::index');
+        $routes->get('orders/new', 'Sales\SalesOrderController::create');
+        $routes->post('orders', 'Sales\SalesOrderController::store');
+        $routes->get('orders/(:num)', 'Sales\SalesOrderController::show/$1');
+    });
+
     $routes->group('purchase', static function (RouteCollection $routes): void {
         $routes->get('orders', 'Purchase\PurchaseOrderController::index');
         $routes->get('orders/new', 'Purchase\PurchaseOrderController::create');
