@@ -14,7 +14,52 @@ $fieldLabel = static function (string $field, array $config): string {
     return ucwords(str_replace('_', ' ', $field));
 };
 
-$formatValue = static function (mixed $value): string {
+$relationTables = [
+    'warehouse_id' => 'warehouses',
+    'from_uom_id' => 'uoms',
+    'to_uom_id' => 'uoms',
+    'stock_uom_id' => 'uoms',
+    'sales_uom_id' => 'uoms',
+    'purchase_uom_id' => 'uoms',
+    'item_id' => 'items',
+    'vat_rate_id' => 'vat_rates',
+    'country_id' => 'countries',
+    'province_id' => 'provinces',
+    'city_id' => 'cities',
+    'postal_code_id' => 'postal_codes',
+];
+
+$relationCache = [];
+$relationLabel = static function (string $field, mixed $value) use (&$relationCache, $relationTables): ?string {
+    if ($value === null || $value === '' || ! isset($relationTables[$field])) {
+        return null;
+    }
+
+    $table = $relationTables[$field];
+    $id = (int) $value;
+    $cacheKey = $table . ':' . $id;
+
+    if (array_key_exists($cacheKey, $relationCache)) {
+        return $relationCache[$cacheKey];
+    }
+
+    $row = db_connect()->table($table)->where('id', $id)->get()->getRowArray();
+    if ($row === null) {
+        return $relationCache[$cacheKey] = (string) $value;
+    }
+
+    $code = trim((string) ($row['code'] ?? $row['id'] ?? $value));
+    $name = trim((string) ($row['name'] ?? ''));
+
+    return $relationCache[$cacheKey] = $name !== '' ? $code . ' - ' . $name : $code;
+};
+
+$formatValue = static function (string $field, mixed $value) use ($relationLabel): string {
+    $relation = $relationLabel($field, $value);
+    if ($relation !== null) {
+        return $relation;
+    }
+
     if ($value === null || $value === '') {
         return '-';
     }
@@ -77,7 +122,7 @@ $formatValue = static function (mixed $value): string {
                     <tr>
                         <?php foreach ($listFields as $index => $field): ?>
                             <td class="<?= $index === 0 ? 'fw-semibold' : '' ?>">
-                                <?= esc($formatValue($row[$field] ?? null)) ?>
+                                <?= esc($formatValue($field, $row[$field] ?? null)) ?>
                             </td>
                         <?php endforeach ?>
                         <td>
