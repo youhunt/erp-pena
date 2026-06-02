@@ -5,20 +5,29 @@ namespace App\Services\Ai;
 use App\Models\DocumentUploadModel;
 use App\Services\Ai\Extraction\AiExtractionInterface;
 use App\Services\Ai\Extraction\NullAiExtraction;
+use App\Services\Ai\Extraction\RuleBasedDocumentExtraction;
+use App\Services\Ai\Ocr\LocalCommandOcrEngine;
 use App\Services\Ai\Ocr\NullOcrEngine;
 use App\Services\Ai\Ocr\OcrEngineInterface;
 use App\Services\AuditLogService;
+use Config\AiOcr;
 use Config\Database;
 use RuntimeException;
 use Throwable;
 
 final class DocumentProcessorService
 {
+    private OcrEngineInterface $ocrEngine;
+    private AiExtractionInterface $aiExtraction;
+
     public function __construct(
-        private readonly OcrEngineInterface $ocrEngine = new NullOcrEngine(),
-        private readonly AiExtractionInterface $aiExtraction = new NullAiExtraction(),
+        ?OcrEngineInterface $ocrEngine = null,
+        ?AiExtractionInterface $aiExtraction = null,
         private readonly DocumentUploadModel $documents = new DocumentUploadModel(),
     ) {
+        $config = config(AiOcr::class);
+        $this->ocrEngine = $ocrEngine ?? $this->resolveOcrEngine($config);
+        $this->aiExtraction = $aiExtraction ?? $this->resolveExtractionEngine($config);
     }
 
     public function process(int $documentId, ?int $userId = null): void
@@ -110,6 +119,22 @@ final class DocumentProcessorService
             $this->markFailed($document, $exception->getMessage(), $userId);
             throw new RuntimeException($exception->getMessage());
         }
+    }
+
+    private function resolveOcrEngine(AiOcr $config): OcrEngineInterface
+    {
+        return match ($config->ocrEngine) {
+            'local_command' => new LocalCommandOcrEngine($config),
+            default => new NullOcrEngine(),
+        };
+    }
+
+    private function resolveExtractionEngine(AiOcr $config): AiExtractionInterface
+    {
+        return match ($config->extractionEngine) {
+            'rule_based' => new RuleBasedDocumentExtraction(),
+            default => new NullAiExtraction(),
+        };
     }
 
     private function markFailed(array $document, string $message, ?int $userId): void
