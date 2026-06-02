@@ -6,6 +6,7 @@ use App\Controllers\BaseController;
 use App\Models\DocumentUploadModel;
 use App\Services\Ai\DocumentProcessingService;
 use App\Services\Ai\DocumentProcessorService;
+use App\Services\Ai\DocumentReviewService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use Config\Database;
@@ -46,6 +47,61 @@ class DocumentController extends BaseController
         ]);
     }
 
+    public function review(int $id): string
+    {
+        $tenant = new TenantContext(session());
+        $document = $this->scopedDocuments($tenant)->find($id);
+
+        if ($document === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        $extraction = $this->latestRow('document_extractions', $id);
+        if ($extraction === null) {
+            return redirect()->to('/ai-documents/' . $id)->with('error', 'Process OCR/AI before reviewing this document.');
+        }
+
+        return view('ai/documents/review', [
+            'title' => 'Review AI Extraction',
+            'document' => $document,
+            'extraction' => $extraction,
+            'fieldsJson' => $this->prettyJson($extraction['extracted_fields'] ?? null),
+            'lineItemsJson' => $this->prettyJson($extraction['line_items'] ?? null),
+        ]);
+    }
+
+    public function saveReview(int $id)
+    {
+        $tenant = new TenantContext(session());
+        $document = $this->scopedDocuments($tenant)->find($id);
+
+        if ($document === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        $extraction = $this->latestRow('document_extractions', $id);
+        if ($extraction === null) {
+            return redirect()->to('/ai-documents/' . $id)->with('error', 'Extraction result was not found.');
+        }
+
+        $fields = json_decode((string) $this->request->getPost('extracted_fields'), true);
+        $lineItems = json_decode((string) $this->request->getPost('line_items'), true);
+
+        if (! is_array($fields) || ! is_array($lineItems)) {
+            return redirect()->back()->withInput()->with('error', 'Fields and line items must be valid JSON.');
+        }
+
+        $status = (string) ($this->request->getPost('review_status') ?: 'pending_review');
+
+        try {
+            (new DocumentReviewService())->updateReview((int) $extraction['id'], $fields, $lineItems, $status, auth()->id());
+        } catch (RuntimeException $exception) {
+            return redirect()->back()->withInput()->with('error', $exception->getMessage());
+        }
+
+        return redirect()->to('/ai-documents/' . $id)->with('message', 'Document review saved.');
+    }
+
     public function process(int $id)
     {
         $tenant = new TenantContext(session());
@@ -84,12 +140,7 @@ class DocumentController extends BaseController
         }
 
         try {
-            $id = (new DocumentProcessingService())->registerUpload(
-                $file,
-                $companyId,
-                $tenant->activeSiteId(),
-                auth()->id(),
-            );
+            $id = (new DocumentProcessingService())->registerUpload($file, $companyId, $tenant->activeSiteId(), auth()->id());
         } catch (RuntimeException $exception) {
             return redirect()->back()->with('error', $exception->getMessage());
         }
@@ -119,5 +170,19 @@ class DocumentController extends BaseController
             ->orderBy('id', 'DESC')
             ->get(1)
             ->getRowArray();
+    }
+
+    private function prettyJson(?string $json): string
+    {
+        if ($json === null || trim($json) === '') {
+            return "[]";
+        }
+
+        $decoded = json_decode($json, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return $json;
+        }
+
+        return json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: "[]";
     }
 }
