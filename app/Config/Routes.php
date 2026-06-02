@@ -12,6 +12,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->post('tenant/switch', 'TenantController::switch');
     $routes->get('modules/(:segment)', 'ModulePlaceholderController::show/$1');
     $routes->get('audit-logs', 'AuditLogController::index');
+    $routes->get('audit-logs/(:num)', 'AuditLogController::show/$1');
 
     $routes->group('admin', static function (RouteCollection $routes): void {
         $routes->get('users', 'Admin\UserController::index');
