@@ -16,15 +16,6 @@ use CodeIgniter\Filters\SecureHeaders;
 
 class Filters extends BaseFilters
 {
-    /**
-     * Configures aliases for Filter classes to
-     * make reading things nicer and simpler.
-     *
-     * @var array<string, class-string|list<class-string>>
-     *
-     * [filter_name => classname]
-     * or [filter_name => [classname1, classname2, ...]]
-     */
     public array $aliases = [
         'csrf'          => CSRF::class,
         'toolbar'       => DebugToolbar::class,
@@ -38,11 +29,6 @@ class Filters extends BaseFilters
         'tenant'        => TenantBootstrapFilter::class,
     ];
 
-    /**
-     * List of special required filters.
-     *
-     * @var array{before: list<string>, after: list<string>}
-     */
     public array $required = [
         'before' => [
             'forcehttps',
@@ -55,15 +41,6 @@ class Filters extends BaseFilters
         ],
     ];
 
-    /**
-     * List of filter aliases that are always
-     * applied before and after every request.
-     *
-     * @var array{
-     *     before: array<string, array{except: list<string>|string}>|list<string>,
-     *     after: array<string, array{except: list<string>|string}>|list<string>
-     * }
-     */
     public array $globals = [
         'before' => [
             // 'honeypot',
@@ -76,20 +53,8 @@ class Filters extends BaseFilters
         ],
     ];
 
-    /**
-     * List of filter aliases that works on a
-     * particular HTTP method (GET, POST, etc.).
-     *
-     * @var array<string, list<string>>
-     */
     public array $methods = [];
 
-    /**
-     * List of filter aliases that should run on any
-     * before or after URI patterns.
-     *
-     * @var array<string, array<string, list<string>>>
-     */
     public array $filters = [
         'tenant' => [
             'before' => [
@@ -97,7 +62,9 @@ class Filters extends BaseFilters
                 'tenant/*',
                 'setup/*',
                 'admin/*',
+                'purchase/*',
                 'audit-logs',
+                'audit-logs/*',
                 'ai-documents/*',
             ],
         ],
