@@ -69,5 +69,6 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('upload', 'Ai\DocumentController::upload');
         $routes->post('upload', 'Ai\DocumentController::store');
         $routes->get('(:num)', 'Ai\DocumentController::show/$1');
+        $routes->post('(:num)/process', 'Ai\DocumentController::process/$1');
     });
 });
