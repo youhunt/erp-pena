@@ -11,6 +11,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->get('dashboard', 'DashboardController::index');
     $routes->post('tenant/switch', 'TenantController::switch');
     $routes->get('modules/(:segment)', 'ModulePlaceholderController::show/$1');
+    $routes->get('audit-logs', 'AuditLogController::index');
 
     $routes->group('setup', static function (RouteCollection $routes): void {
         foreach ([
