@@ -39,8 +39,6 @@ $renderItems = static function (array $nodes, int $level = 0) use (&$renderItems
             <a href="<?= $isSection ? 'javascript:void(0);' : $href ?>" class="<?= esc($linkClass) ?>">
                 <?php if ($level === 0): ?>
                     <i class="bx <?= esc($item['icon'] ?: 'bx-circle') ?>"></i>
-                <?php elseif (! $hasChildren): ?>
-                    <i class="bx bx-radio-circle font-size-10 me-1"></i>
                 <?php endif ?>
                 <span><?= esc($item['label']) ?></span>
             </a>
