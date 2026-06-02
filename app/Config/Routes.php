@@ -39,29 +39,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     });
 
     $routes->group('setup', static function (RouteCollection $routes): void {
-        foreach ([
-            'transaction-codes',
-            'prefix-codes',
-            'companies',
-            'sites',
-            'departments',
-            'warehouses',
-            'locations',
-            'countries',
-            'provinces',
-            'cities',
-            'postal-codes',
-            'currencies',
-            'uoms',
-            'uom-conversions',
-            'vat',
-            'wht',
-            'item-vat',
-            'address-master',
-            'customers',
-            'suppliers',
-            'items',
-        ] as $resource) {
+        foreach (['transaction-codes','prefix-codes','companies','sites','departments','warehouses','locations','countries','provinces','cities','postal-codes','currencies','uoms','uom-conversions','vat','wht','item-vat','address-master','customers','suppliers','items'] as $resource) {
             $routes->get($resource, 'Setup\MasterDataController::index/' . $resource);
             $routes->get($resource . '/new', 'Setup\MasterDataController::create/' . $resource);
             $routes->post($resource, 'Setup\MasterDataController::store/' . $resource);
@@ -73,12 +51,13 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
             $routes->post($resource . '/import', 'Setup\MasterDataTransferController::import/' . $resource);
             $routes->get($resource . '/template', 'Setup\MasterDataTransferController::template/' . $resource);
         }
-
         $routes->post('provinces/sync', 'Setup\WilayahSyncController::provinces');
         $routes->post('cities/sync', 'Setup\WilayahSyncController::cities');
     });
 
     $routes->get('ai-ocr/diagnostics', 'Ai\OcrDiagnosticsController::index');
+    $routes->get('ai-ocr/samples/purchase-order', 'Ai\SampleDocumentController::purchaseOrder');
+    $routes->get('ai-ocr/samples/sales-order', 'Ai\SampleDocumentController::salesOrder');
 
     $routes->group('ai-documents', static function (RouteCollection $routes): void {
         $routes->get('/', 'Ai\DocumentController::index');
