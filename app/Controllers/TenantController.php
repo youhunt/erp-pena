@@ -2,6 +2,7 @@
 
 namespace App\Controllers;
 
+use App\Services\AuditLogService;
 use App\Services\TenantContext;
 
 class TenantController extends BaseController
@@ -17,20 +18,30 @@ class TenantController extends BaseController
             return redirect()->back()->with('error', implode(' ', $this->validator->getErrors()));
         }
 
+        $userId = (int) auth()->id();
         $companyId = (int) $this->request->getPost('company_id');
         $siteId = $this->request->getPost('site_id') ? (int) $this->request->getPost('site_id') : null;
+        $tenant = new TenantContext(session());
 
-        if ($siteId !== null) {
-            $site = db_connect()->table('sites')
-                ->where('id', $siteId)
-                ->where('company_id', $companyId)
-                ->get()
-                ->getRowArray();
-
-            $siteId = $site === null ? null : $siteId;
+        if (! $tenant->userCanAccessCompany($userId, $companyId)) {
+            return redirect()->back()->with('error', 'You do not have access to the selected company.');
         }
 
-        (new TenantContext(session()))->switch($companyId, $siteId);
+        if (! $tenant->userCanAccessSite($userId, $companyId, $siteId)) {
+            return redirect()->back()->with('error', 'You do not have access to the selected site.');
+        }
+
+        $tenant->switch($companyId, $siteId);
+
+        (new AuditLogService())->log('tenant', 'tenant.switch', [
+            'company_id' => $companyId,
+            'site_id' => $siteId,
+            'description' => 'User switched active company/site.',
+            'new_values' => [
+                'company_id' => $companyId,
+                'site_id' => $siteId,
+            ],
+        ]);
 
         return redirect()->back()->with('message', 'Active company/site has been changed.');
     }
