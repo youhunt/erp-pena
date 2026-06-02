@@ -106,8 +106,37 @@ $formatValue = static function (string $field, mixed $value) use ($relationLabel
             </div>
         </div>
 
+        <div class="row g-2 align-items-end mb-3">
+            <div class="col-lg-5 col-md-6">
+                <label class="form-label" for="masterSearch">Search</label>
+                <input type="text" class="form-control" id="masterSearch" placeholder="Search code, name, description...">
+            </div>
+            <div class="col-lg-3 col-md-3">
+                <label class="form-label" for="masterStatusFilter">Status</label>
+                <select class="form-select" id="masterStatusFilter">
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+            <div class="col-lg-2 col-md-3">
+                <label class="form-label" for="masterPerPage">Rows</label>
+                <select class="form-select" id="masterPerPage">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <div class="col-lg-2 text-lg-end">
+                <button class="btn btn-light w-100" type="button" id="masterResetFilter">
+                    <i class="bx bx-reset me-1"></i> Reset
+                </button>
+            </div>
+        </div>
+
         <div class="table-responsive">
-            <table class="table table-nowrap table-hover align-middle mb-0">
+            <table class="table table-nowrap table-hover align-middle mb-0" id="masterDataTable">
                 <thead class="table-light">
                     <tr>
                         <?php foreach ($listFields as $field): ?>
@@ -119,15 +148,16 @@ $formatValue = static function (string $field, mixed $value) use ($relationLabel
                 </thead>
                 <tbody>
                 <?php foreach ($rows as $row): ?>
-                    <tr>
+                    <?php $rowStatus = (int) ($row['is_active'] ?? 1) === 1 ? 'active' : 'inactive'; ?>
+                    <tr data-status="<?= esc($rowStatus) ?>">
                         <?php foreach ($listFields as $index => $field): ?>
                             <td class="<?= $index === 0 ? 'fw-semibold' : '' ?>">
                                 <?= esc($formatValue($field, $row[$field] ?? null)) ?>
                             </td>
                         <?php endforeach ?>
                         <td>
-                            <span class="badge bg-<?= (int) ($row['is_active'] ?? 1) === 1 ? 'success' : 'secondary' ?>">
-                                <?= (int) ($row['is_active'] ?? 1) === 1 ? 'Active' : 'Inactive' ?>
+                            <span class="badge bg-<?= $rowStatus === 'active' ? 'success' : 'secondary' ?>">
+                                <?= $rowStatus === 'active' ? 'Active' : 'Inactive' ?>
                             </span>
                         </td>
                         <td class="text-end">
@@ -148,6 +178,10 @@ $formatValue = static function (string $field, mixed $value) use ($relationLabel
                     </tr>
                 <?php endforeach ?>
 
+                <tr id="masterEmptyRow" class="d-none">
+                    <td colspan="<?= count($listFields) + 2 ?>" class="text-center text-muted py-4">No matching records found.</td>
+                </tr>
+
                 <?php if ($rows === []): ?>
                     <tr>
                         <td colspan="<?= count($listFields) + 2 ?>" class="text-center text-muted py-4">No records yet. Use New or Import CSV to add master data.</td>
@@ -156,6 +190,109 @@ $formatValue = static function (string $field, mixed $value) use ($relationLabel
                 </tbody>
             </table>
         </div>
+
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
+            <div class="text-muted small" id="masterPaginationInfo"></div>
+            <div class="btn-group" role="group" aria-label="Pagination">
+                <button class="btn btn-outline-secondary btn-sm" type="button" id="masterPrevPage">Previous</button>
+                <button class="btn btn-outline-secondary btn-sm disabled" type="button" id="masterPageInfo">Page 1</button>
+                <button class="btn btn-outline-secondary btn-sm" type="button" id="masterNextPage">Next</button>
+            </div>
+        </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const table = document.getElementById('masterDataTable');
+    if (!table) return;
+
+    const rows = Array.from(table.querySelectorAll('tbody tr[data-status]'));
+    const emptyRow = document.getElementById('masterEmptyRow');
+    const search = document.getElementById('masterSearch');
+    const status = document.getElementById('masterStatusFilter');
+    const perPage = document.getElementById('masterPerPage');
+    const reset = document.getElementById('masterResetFilter');
+    const prev = document.getElementById('masterPrevPage');
+    const next = document.getElementById('masterNextPage');
+    const pageInfo = document.getElementById('masterPageInfo');
+    const paginationInfo = document.getElementById('masterPaginationInfo');
+    let page = 1;
+
+    function matchedRows() {
+        const keyword = (search.value || '').toLowerCase().trim();
+        const statusValue = status.value;
+
+        return rows.filter(function (row) {
+            const textMatch = keyword === '' || row.innerText.toLowerCase().includes(keyword);
+            const statusMatch = statusValue === 'all' || row.dataset.status === statusValue;
+            return textMatch && statusMatch;
+        });
+    }
+
+    function render() {
+        const matches = matchedRows();
+        const limit = parseInt(perPage.value, 10) || 25;
+        const totalPages = Math.max(1, Math.ceil(matches.length / limit));
+        page = Math.min(page, totalPages);
+        const start = (page - 1) * limit;
+        const end = start + limit;
+
+        rows.forEach(function (row) {
+            row.classList.add('d-none');
+        });
+
+        matches.slice(start, end).forEach(function (row) {
+            row.classList.remove('d-none');
+        });
+
+        if (emptyRow) {
+            emptyRow.classList.toggle('d-none', matches.length > 0);
+        }
+
+        prev.disabled = page <= 1;
+        next.disabled = page >= totalPages;
+        pageInfo.textContent = 'Page ' + page + ' / ' + totalPages;
+
+        if (matches.length === 0) {
+            paginationInfo.textContent = 'Showing 0 of ' + rows.length + ' records';
+        } else {
+            paginationInfo.textContent = 'Showing ' + (start + 1) + '-' + Math.min(end, matches.length) + ' of ' + matches.length + ' records';
+        }
+    }
+
+    [search, status, perPage].forEach(function (input) {
+        input.addEventListener('input', function () {
+            page = 1;
+            render();
+        });
+        input.addEventListener('change', function () {
+            page = 1;
+            render();
+        });
+    });
+
+    reset.addEventListener('click', function () {
+        search.value = '';
+        status.value = 'all';
+        perPage.value = '25';
+        page = 1;
+        render();
+    });
+
+    prev.addEventListener('click', function () {
+        if (page > 1) {
+            page--;
+            render();
+        }
+    });
+
+    next.addEventListener('click', function () {
+        page++;
+        render();
+    });
+
+    render();
+});
+</script>
 <?= $this->endSection() ?>
