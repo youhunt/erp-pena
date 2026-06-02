@@ -78,6 +78,8 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('cities/sync', 'Setup\WilayahSyncController::cities');
     });
 
+    $routes->get('ai-ocr/diagnostics', 'Ai\OcrDiagnosticsController::index');
+
     $routes->group('ai-documents', static function (RouteCollection $routes): void {
         $routes->get('/', 'Ai\DocumentController::index');
         $routes->get('upload', 'Ai\DocumentController::upload');
