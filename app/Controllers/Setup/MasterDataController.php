@@ -24,23 +24,22 @@ use App\Models\UomModel;
 use App\Models\VatRateModel;
 use App\Models\WarehouseModel;
 use App\Models\WithholdingTaxRateModel;
+use App\Services\AuditLogService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\Model;
 
 class MasterDataController extends BaseController
 {
-    /**
-     * @var array<string, array<string, mixed>>
-     */
+    /** @var array<string, array<string, mixed>> */
     private array $resources;
 
     public function __construct()
     {
         $this->resources = [
             'transaction-codes' => $this->setupResource('Transaction Codes', TransactionCodeModel::class, 'transaction_codes', true, false),
-            'prefix-codes'      => $this->setupResource('Prefix Codes', PrefixCodeModel::class, 'prefix_codes', true, false),
-            'currencies'        => $this->globalResource('Currencies', CurrencyModel::class, 'currencies', [
+            'prefix-codes' => $this->setupResource('Prefix Codes', PrefixCodeModel::class, 'prefix_codes', true, false),
+            'currencies' => $this->globalResource('Currencies', CurrencyModel::class, 'currencies', [
                 'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
                 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
                 'rounding' => ['label' => 'Rounding', 'type' => 'number', 'default' => 0],
@@ -62,8 +61,8 @@ class MasterDataController extends BaseController
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
             ]),
             'departments' => $this->tenantResource('Departments', DepartmentModel::class, 'departments', true, $this->simpleFields()),
-            'warehouses'  => $this->tenantResource('Warehouses', WarehouseModel::class, 'warehouses', true, $this->simpleFields()),
-            'locations'   => $this->tenantResource('Locations', LocationModel::class, 'locations', true, [
+            'warehouses' => $this->tenantResource('Warehouses', WarehouseModel::class, 'warehouses', true, $this->simpleFields()),
+            'locations' => $this->tenantResource('Locations', LocationModel::class, 'locations', true, [
                 'warehouse_id' => ['label' => 'Warehouse', 'type' => 'select', 'required' => true, 'options_source' => 'warehouses'],
                 'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
                 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
@@ -154,43 +153,36 @@ class MasterDataController extends BaseController
     public function index(string $resource): string
     {
         $config = $this->config($resource, 'view');
-        $model = $this->model($config);
-
         return view('setup/master/index', [
             'title' => $config['title'],
             'resource' => $resource,
             'config' => $config,
-            'canManage' => auth()->user()?->can($config['manage_permission']) ?? false,
+            'canManage' => $this->can($config['manage_permission']),
             'display' => $config['display'] ?? ['code' => 'code', 'name' => 'name', 'description' => 'description'],
-            'rows' => $this->scope($model, $config)->orderBy($config['order_by'] ?? 'code', 'ASC')->findAll(),
+            'rows' => $this->scope($this->model($config), $config)->orderBy($config['order_by'] ?? 'code', 'ASC')->findAll(),
         ]);
     }
 
     public function create(string $resource): string
     {
         $config = $this->hydrateOptions($this->config($resource, 'manage'));
-
-        return view('setup/master/form', [
-            'title' => 'Create ' . $config['title'],
-            'resource' => $resource,
-            'config' => $config,
-            'row' => [],
-        ]);
+        return view('setup/master/form', ['title' => 'Create ' . $config['title'], 'resource' => $resource, 'config' => $config, 'row' => []]);
     }
 
     public function store(string $resource)
     {
         $config = $this->hydrateOptions($this->config($resource, 'manage'));
-
         if (! $this->hasRequiredTenant($config)) {
             return redirect()->back()->withInput()->with('error', 'Active company is required for this master data.');
         }
-
         if (! $this->validate($this->rules($config))) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
 
-        $this->model($config)->insert($this->payload($config, true));
+        $payload = $this->payload($config, true);
+        $model = $this->model($config);
+        $id = $model->insert($payload, true);
+        $this->audit('master.create', $config, (int) $id, null, $payload);
 
         return redirect()->to(site_url("setup/{$resource}"))->with('message', $config['title'] . ' created.');
     }
@@ -199,37 +191,31 @@ class MasterDataController extends BaseController
     {
         $config = $this->hydrateOptions($this->config($resource, 'manage'));
         $row = $this->scope($this->model($config), $config)->find($id);
-
         if ($row === null) {
             throw PageNotFoundException::forPageNotFound();
         }
-
-        return view('setup/master/form', [
-            'title' => 'Edit ' . $config['title'],
-            'resource' => $resource,
-            'config' => $config,
-            'row' => $row,
-        ]);
+        return view('setup/master/form', ['title' => 'Edit ' . $config['title'], 'resource' => $resource, 'config' => $config, 'row' => $row]);
     }
 
     public function update(string $resource, int $id)
     {
         $config = $this->hydrateOptions($this->config($resource, 'manage'));
-
         if (! $this->hasRequiredTenant($config)) {
             return redirect()->back()->withInput()->with('error', 'Active company is required for this master data.');
         }
-
         if (! $this->validate($this->rules($config))) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
 
         $model = $this->scope($this->model($config), $config);
-        if ($model->find($id) === null) {
+        $old = $model->find($id);
+        if ($old === null) {
             throw PageNotFoundException::forPageNotFound();
         }
 
-        $model->update($id, $this->payload($config, false));
+        $payload = $this->payload($config, false);
+        $model->update($id, $payload);
+        $this->audit('master.update', $config, $id, $old, $payload);
 
         return redirect()->to(site_url("setup/{$resource}"))->with('message', $config['title'] . ' updated.');
     }
@@ -238,70 +224,35 @@ class MasterDataController extends BaseController
     {
         $config = $this->config($resource, 'manage');
         $model = $this->scope($this->model($config), $config);
-
-        if ($model->find($id) === null) {
+        $old = $model->find($id);
+        if ($old === null) {
             throw PageNotFoundException::forPageNotFound();
         }
 
         $model->delete($id);
+        $this->audit('master.delete', $config, $id, $old, null);
 
         return redirect()->to(site_url("setup/{$resource}"))->with('message', $config['title'] . ' deleted.');
     }
 
     private function setupResource(string $title, string $model, string $table, bool $tenant, bool $site, bool $withRate = false): array
     {
-        $fields = [
-            'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
-            'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
-        ];
-
+        $fields = ['code' => ['label' => 'Code', 'type' => 'text', 'required' => true], 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true]];
         if ($withRate) {
             $fields['rate'] = ['label' => 'Rate (%)', 'type' => 'number', 'default' => 0];
         }
-
-        $fields += [
-            'description' => ['label' => 'Description', 'type' => 'textarea'],
-            'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-        ];
-
-        return [
-            'title' => $title,
-            'model' => $model,
-            'table' => $table,
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => $tenant,
-            'site' => $site,
-            'fields' => $fields,
-        ];
+        $fields += ['description' => ['label' => 'Description', 'type' => 'textarea'], 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1]];
+        return ['title' => $title, 'model' => $model, 'table' => $table, 'view_permission' => 'setup.master.view', 'manage_permission' => 'setup.master.manage', 'tenant' => $tenant, 'site' => $site, 'fields' => $fields];
     }
 
     private function globalResource(string $title, string $model, string $table, array $fields): array
     {
-        return [
-            'title' => $title,
-            'model' => $model,
-            'table' => $table,
-            'view_permission' => 'setup.master.view',
-            'manage_permission' => 'setup.master.manage',
-            'tenant' => false,
-            'site' => false,
-            'fields' => $fields,
-        ];
+        return ['title' => $title, 'model' => $model, 'table' => $table, 'view_permission' => 'setup.master.view', 'manage_permission' => 'setup.master.manage', 'tenant' => false, 'site' => false, 'fields' => $fields];
     }
 
     private function tenantResource(string $title, string $model, string $table, bool $site, array $fields, string $viewPermission = 'setup.master.view', string $managePermission = 'setup.master.manage'): array
     {
-        return [
-            'title' => $title,
-            'model' => $model,
-            'table' => $table,
-            'view_permission' => $viewPermission,
-            'manage_permission' => $managePermission,
-            'tenant' => true,
-            'site' => $site,
-            'fields' => $fields,
-        ];
+        return ['title' => $title, 'model' => $model, 'table' => $table, 'view_permission' => $viewPermission, 'manage_permission' => $managePermission, 'tenant' => true, 'site' => $site, 'fields' => $fields];
     }
 
     private function config(string $resource, string $mode): array
@@ -309,14 +260,18 @@ class MasterDataController extends BaseController
         if (! isset($this->resources[$resource])) {
             throw PageNotFoundException::forPageNotFound();
         }
-
         $config = $this->resources[$resource];
         $permission = $mode === 'view' ? $config['view_permission'] : $config['manage_permission'];
-        if (! auth()->user()?->can($permission)) {
+        if (! $this->can($permission)) {
             throw PageNotFoundException::forPageNotFound();
         }
-
         return $config;
+    }
+
+    private function can(string $permission): bool
+    {
+        $user = auth()->user();
+        return $user !== null && ($user->can($permission) || $user->inGroup('superadmin'));
     }
 
     private function model(array $config): Model
@@ -327,15 +282,12 @@ class MasterDataController extends BaseController
     private function scope(Model $model, array $config): Model
     {
         $tenant = new TenantContext(session());
-
         if ($config['tenant'] && $tenant->activeCompanyId() !== null) {
             $model->where($config['table'] . '.company_id', $tenant->activeCompanyId());
         }
-
         if ($config['site'] && $tenant->activeSiteId() !== null) {
             $model->where($config['table'] . '.site_id', $tenant->activeSiteId());
         }
-
         return $model;
     }
 
@@ -347,7 +299,6 @@ class MasterDataController extends BaseController
                 $payload[$name] = $this->request->getPost($name) ? 1 : 0;
                 continue;
             }
-
             $value = $this->request->getPost($name);
             if (($field['type'] ?? 'text') === 'number' && $value === '') {
                 $value = $field['default'] ?? null;
@@ -355,25 +306,35 @@ class MasterDataController extends BaseController
             if (($field['type'] ?? 'text') === 'select' && isset($field['options_source']) && $value === '') {
                 $value = null;
             }
-
             $payload[$name] = $value;
         }
-
         $tenant = new TenantContext(session());
         if ($config['tenant']) {
             $payload['company_id'] = $tenant->activeCompanyId();
         }
-
         if ($config['site']) {
             $payload['site_id'] = $tenant->activeSiteId();
         }
-
         $payload['updated_by'] = auth()->id();
         if ($isCreate) {
             $payload['created_by'] = auth()->id();
         }
-
         return $payload;
+    }
+
+    private function audit(string $action, array $config, int $id, ?array $oldValues, ?array $newValues): void
+    {
+        $record = $newValues ?? $oldValues ?? [];
+        (new AuditLogService())->log('setup.master', $action, [
+            'company_id' => $record['company_id'] ?? null,
+            'site_id' => $record['site_id'] ?? null,
+            'table_name' => $config['table'],
+            'record_id' => $id,
+            'record_code' => $record['code'] ?? $record['name'] ?? null,
+            'description' => $config['title'] . ' ' . str_replace('master.', '', $action),
+            'old_values' => $oldValues,
+            'new_values' => $newValues,
+        ]);
     }
 
     private function rules(array $config): array
@@ -385,7 +346,6 @@ class MasterDataController extends BaseController
             $rule .= in_array($type, ['number', 'select', 'checkbox'], true) ? '' : '|max_length:500';
             $rules[$name] = $rule;
         }
-
         return $rules;
     }
 
@@ -395,21 +355,16 @@ class MasterDataController extends BaseController
             if (($field['type'] ?? '') !== 'select') {
                 continue;
             }
-
             if (! empty($field['options_source'])) {
                 $config['fields'][$name]['options'] = ['' => 'Select ' . $field['label']] + $this->optionsFor($field['options_source']);
                 continue;
             }
-
             $config['fields'][$name]['options'] ??= ['' => 'Select ' . $field['label']];
         }
-
         return $config;
     }
 
-    /**
-     * @return array<string, string>
-     */
+    /** @return array<string, string> */
     private function optionsFor(string $source): array
     {
         $map = [
@@ -422,31 +377,24 @@ class MasterDataController extends BaseController
             'items' => [ItemModel::class, true, true],
             'vat_rates' => [VatRateModel::class, true, false],
         ];
-
         if (! isset($map[$source])) {
             return [];
         }
-
         [$class, $tenantScoped, $siteScoped] = $map[$source];
         $model = new $class();
         $tenant = new TenantContext(session());
-
         if ($tenantScoped && $tenant->activeCompanyId() !== null) {
             $model->where('company_id', $tenant->activeCompanyId());
         }
-
         if ($siteScoped && $tenant->activeSiteId() !== null) {
             $model->where('site_id', $tenant->activeSiteId());
         }
-
         $rows = $model->orderBy('code', 'ASC')->findAll();
         $options = [];
-
         foreach ($rows as $row) {
             $label = trim(($row['code'] ?? $row['id']) . ' - ' . ($row['name'] ?? ''));
             $options[(string) $row['id']] = $label;
         }
-
         return $options;
     }
 
@@ -457,12 +405,7 @@ class MasterDataController extends BaseController
 
     private function simpleFields(): array
     {
-        return [
-            'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
-            'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
-            'description' => ['label' => 'Description', 'type' => 'textarea'],
-            'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-        ];
+        return ['code' => ['label' => 'Code', 'type' => 'text', 'required' => true], 'name' => ['label' => 'Name', 'type' => 'text', 'required' => true], 'description' => ['label' => 'Description', 'type' => 'textarea'], 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1]];
     }
 
     private function partnerFields(): array
