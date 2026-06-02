@@ -42,6 +42,10 @@ class SetupMasterMenuSeeder extends Seeder
             ['Transaction Code', 'setup/transaction-codes'],
             ['Prefix Code', 'setup/prefix-codes'],
         ], $now);
+
+        $this->menuGroup($setupId, 'System', 50, [
+            ['Audit Logs', 'audit-logs'],
+        ], $now, 'audit.logs.view');
     }
 
     /**
@@ -68,6 +72,7 @@ class SetupMasterMenuSeeder extends Seeder
             'WHT / PPH',
             'Item VAT',
             'Address Master',
+            'Audit Logs',
         ];
 
         $this->db->table('menu_items')
@@ -82,13 +87,13 @@ class SetupMasterMenuSeeder extends Seeder
     /**
      * @param array<int, array{0:string,1:string}> $children
      */
-    private function menuGroup(int $parentId, string $label, int $sort, array $children, string $now): void
+    private function menuGroup(int $parentId, string $label, int $sort, array $children, string $now, string $permission = 'setup.master.view'): void
     {
         $groupId = $this->menuItem($parentId, $label, '#', null, null, $sort, $now);
         $childSort = 10;
 
         foreach ($children as [$childLabel, $route]) {
-            $this->menuItem($groupId, $childLabel, $route, null, 'setup.master.view', $childSort, $now);
+            $this->menuItem($groupId, $childLabel, $route, null, $permission, $childSort, $now);
             $childSort += 10;
         }
     }
