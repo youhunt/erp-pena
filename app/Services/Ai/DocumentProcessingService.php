@@ -3,6 +3,7 @@
 namespace App\Services\Ai;
 
 use App\Models\DocumentUploadModel;
+use App\Services\AuditLogService;
 use CodeIgniter\HTTP\Files\UploadedFile;
 use RuntimeException;
 
@@ -41,6 +42,8 @@ class DocumentProcessingService
             ->where('sha256_hash', $hash)
             ->first();
 
+        $status = $duplicate === null ? 'uploaded' : 'duplicate';
+
         $this->documents->insert([
             'company_id' => $companyId,
             'site_id' => $siteId,
@@ -50,10 +53,33 @@ class DocumentProcessingService
             'mime_type' => $file->getMimeType(),
             'file_size' => $file->getSize(),
             'sha256_hash' => $hash,
-            'status' => $duplicate === null ? 'uploaded' : 'duplicate',
+            'status' => $status,
             'duplicate_of_id' => $duplicate['id'] ?? null,
         ]);
 
-        return (int) $this->documents->getInsertID();
+        $id = (int) $this->documents->getInsertID();
+
+        (new AuditLogService())->log('ai.document', $status === 'duplicate' ? 'document.duplicate' : 'document.upload', [
+            'company_id' => $companyId,
+            'site_id' => $siteId,
+            'user_id' => $userId,
+            'table_name' => 'document_uploads',
+            'record_id' => $id,
+            'record_code' => $file->getClientName(),
+            'description' => $status === 'duplicate'
+                ? 'Duplicate ERP document uploaded.'
+                : 'ERP document uploaded and queued for OCR.',
+            'new_values' => [
+                'id' => $id,
+                'original_name' => $file->getClientName(),
+                'mime_type' => $file->getMimeType(),
+                'file_size' => $file->getSize(),
+                'sha256_hash' => $hash,
+                'status' => $status,
+                'duplicate_of_id' => $duplicate['id'] ?? null,
+            ],
+        ]);
+
+        return $id;
     }
 }
