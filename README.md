@@ -4,7 +4,7 @@ PENA ERP is an enterprise ERP foundation built with CodeIgniter 4, CodeIgniter S
 
 ## Current Stage
 
-This repository was empty at audit time, so the first implementation creates the ERP foundation only:
+This repository was empty at initial audit time, so the first implementation created the ERP foundation:
 
 - CodeIgniter 4 appstarter `v4.7.3`
 - CodeIgniter Shield `v1.3.0`
@@ -18,6 +18,8 @@ This repository was empty at audit time, so the first implementation creates the
 - Active company/site switcher in the Skote topbar
 - Vendor-neutral OCR/AI service contracts
 - Documentation under `docs/`
+
+The current continuation branch adds formal repository audit documentation, route permission mapping, and a reusable tenant scope helper so development can continue safely without regenerating the project.
 
 Skote assets are stored in `resources.zip` and extracted into `public/assets/skote` for the current layout.
 
@@ -81,6 +83,7 @@ Change the password immediately after first login.
 
 ## Documentation
 
+- [Repository Audit](docs/00-repository-audit.md)
 - [Overview](docs/01-overview.md)
 - [Installation](docs/02-installation.md)
 - [Architecture](docs/03-architecture.md)
@@ -91,3 +94,5 @@ Change the password immediately after first login.
 - [Development Guide](docs/08-development-guide.md)
 - [Testing Checklist](docs/09-testing-checklist.md)
 - [Roadmap](docs/10-roadmap.md)
+- [Continuation Plan](docs/11-continuation-plan.md)
+- [Route Permission Map](docs/12-route-permission-map.md)
