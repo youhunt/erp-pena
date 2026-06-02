@@ -51,11 +51,43 @@
         <div class="col-xl-8">
             <div class="card">
                 <div class="card-body">
-                    <h4 class="card-title mb-4">ERP Activity</h4>
-                    <div class="text-center py-5">
-                        <i class="bx bx-time-five display-4 text-muted"></i>
-                        <p class="text-muted mt-3 mb-0">No activity yet. Activity will be populated from audit trails and transaction workflow.</p>
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h4 class="card-title mb-0">Recent ERP Activity</h4>
+                        <a href="<?= site_url('audit-logs') ?>" class="btn btn-sm btn-outline-primary">View All</a>
                     </div>
+
+                    <?php if (! empty($recentActivities)): ?>
+                        <div class="table-responsive">
+                            <table class="table table-nowrap align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Action</th>
+                                        <th>Record</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                <?php foreach ($recentActivities as $activity): ?>
+                                    <tr>
+                                        <td class="text-muted small"><?= esc($activity['created_at'] ?? '-') ?></td>
+                                        <td><span class="badge bg-info"><?= esc($activity['action'] ?? '-') ?></span></td>
+                                        <td>
+                                            <div class="fw-semibold"><?= esc($activity['record_code'] ?? $activity['record_id'] ?? '-') ?></div>
+                                            <small class="text-muted"><?= esc($activity['table_name'] ?? $activity['module'] ?? '-') ?></small>
+                                        </td>
+                                        <td><?= esc($activity['description'] ?? '-') ?></td>
+                                    </tr>
+                                <?php endforeach ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    <?php else: ?>
+                        <div class="text-center py-5">
+                            <i class="bx bx-time-five display-4 text-muted"></i>
+                            <p class="text-muted mt-3 mb-0">No activity yet. Activity will be populated from audit trails and transaction workflow.</p>
+                        </div>
+                    <?php endif ?>
                 </div>
             </div>
         </div>
