@@ -8,6 +8,7 @@ use App\Services\Ai\DocumentProcessingService;
 use App\Services\Ai\DocumentProcessorService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
+use Config\Database;
 use RuntimeException;
 
 class DocumentController extends BaseController
@@ -35,6 +36,13 @@ class DocumentController extends BaseController
         return view('ai/documents/show', [
             'title' => 'Document Detail',
             'document' => $document,
+            'ocrResult' => $this->latestRow('document_ocr_results', $id),
+            'extraction' => $this->latestRow('document_extractions', $id),
+            'processingLogs' => Database::connect()->table('document_processing_logs')
+                ->where('document_upload_id', $id)
+                ->orderBy('id', 'ASC')
+                ->get()
+                ->getResultArray(),
         ]);
     }
 
@@ -102,5 +110,14 @@ class DocumentController extends BaseController
         }
 
         return $documents;
+    }
+
+    private function latestRow(string $table, int $documentId): ?array
+    {
+        return Database::connect()->table($table)
+            ->where('document_upload_id', $documentId)
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRowArray();
     }
 }
