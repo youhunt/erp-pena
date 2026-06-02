@@ -70,5 +70,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('upload', 'Ai\DocumentController::store');
         $routes->get('(:num)', 'Ai\DocumentController::show/$1');
         $routes->post('(:num)/process', 'Ai\DocumentController::process/$1');
+        $routes->get('(:num)/review', 'Ai\DocumentController::review/$1');
+        $routes->post('(:num)/review', 'Ai\DocumentController::saveReview/$1');
     });
 });
