@@ -20,7 +20,8 @@ class WilayahSyncController extends BaseController
 
     private function sync(string $resource, callable $callback)
     {
-        if (! auth()->user()?->can('setup.master.manage')) {
+        $user = auth()->user();
+        if (! $user || (! $user->can('setup.master.manage') && ! $user->inGroup('superadmin'))) {
             throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound();
         }
 
