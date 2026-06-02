@@ -10,6 +10,7 @@ $badge = match ($status) {
     default => 'info',
 };
 $canProcess = in_array($status, ['uploaded', 'ocr_completed', 'failed'], true) && (($document['duplicate_of_id'] ?? null) === null);
+$canReview = ! empty($extraction) && (($document['duplicate_of_id'] ?? null) === null);
 $fields = ! empty($extraction['extracted_fields']) ? json_decode($extraction['extracted_fields'], true) : null;
 $lineItems = ! empty($extraction['line_items']) ? json_decode($extraction['line_items'], true) : null;
 ?>
@@ -50,6 +51,12 @@ $lineItems = ! empty($extraction['line_items']) ? json_decode($extraction['line_
                                 <i class="bx bx-cog me-1"></i> Process OCR/AI
                             </button>
                         </form>
+                    <?php endif ?>
+
+                    <?php if ($canReview): ?>
+                        <a href="<?= site_url('ai-documents/' . $document['id'] . '/review') ?>" class="btn btn-success">
+                            <i class="bx bx-check-shield me-1"></i> Review Extraction
+                        </a>
                     <?php endif ?>
 
                     <?php if (($document['duplicate_of_id'] ?? null) !== null): ?>
@@ -94,7 +101,7 @@ $lineItems = ! empty($extraction['line_items']) ? json_decode($extraction['line_
                 <?php if ($status === 'duplicate'): ?>
                     <div class="alert alert-warning mb-0">This document is a duplicate. Open the original document for processing/review.</div>
                 <?php elseif ($status === 'extraction_completed'): ?>
-                    <div class="alert alert-success mb-0">OCR and AI extraction completed. Human review screen will be added in the next phase.</div>
+                    <div class="alert alert-success mb-0">OCR and AI extraction completed. Please review the result before conversion.</div>
                 <?php elseif ($status === 'failed'): ?>
                     <div class="alert alert-danger mb-0">Processing failed. You can retry using the Process OCR/AI button.</div>
                 <?php else: ?>
