@@ -27,14 +27,33 @@ class MasterDataTransferController extends BaseController
         'postal-codes' => ['title' => 'Postal Codes', 'table' => 'postal_codes', 'tenant' => false, 'site' => false, 'fields' => ['country_id', 'province_id', 'city_id', 'code', 'name', 'district', 'village', 'is_active']],
         'currencies' => ['title' => 'Currencies', 'table' => 'currencies', 'tenant' => false, 'site' => false, 'fields' => ['code', 'name', 'rounding', 'is_active']],
         'uoms' => ['title' => 'UoM', 'table' => 'uoms', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'description', 'is_active']],
-        'uom-conversions' => ['title' => 'UoM Conversions', 'table' => 'uom_conversions', 'tenant' => true, 'site' => false, 'fields' => ['from_uom_id', 'to_uom_id', 'multiplier', 'divider', 'is_active']],
+        'uom-conversions' => ['title' => 'UoM Conversions', 'table' => 'uom_conversions', 'tenant' => true, 'site' => false, 'fields' => ['from_uom_id', 'to_uom_id', 'multiplier', 'divider', 'is_active'], 'unique' => ['from_uom_id', 'to_uom_id']],
         'vat' => ['title' => 'VAT', 'table' => 'vat_rates', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'rate', 'description', 'is_active']],
         'wht' => ['title' => 'WHT / PPH', 'table' => 'wht_rates', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'rate', 'description', 'is_active']],
-        'item-vat' => ['title' => 'Item VAT', 'table' => 'item_vat_rates', 'tenant' => true, 'site' => false, 'fields' => ['item_id', 'vat_rate_id', 'is_active']],
+        'item-vat' => ['title' => 'Item VAT', 'table' => 'item_vat_rates', 'tenant' => true, 'site' => false, 'fields' => ['item_id', 'vat_rate_id', 'is_active'], 'unique' => ['item_id', 'vat_rate_id']],
         'address-master' => ['title' => 'Address Master', 'table' => 'addresses', 'tenant' => true, 'site' => true, 'fields' => ['address_type', 'owner_type', 'owner_code', 'code', 'name', 'country_id', 'province_id', 'city_id', 'postal_code_id', 'address_line1', 'address_line2', 'phone', 'email', 'is_active']],
         'customers' => ['title' => 'Customers', 'table' => 'customers', 'tenant' => true, 'site' => true, 'fields' => ['code', 'name', 'terms_code', 'currency_code', 'tax_number', 'phone', 'email', 'address', 'is_active'], 'view_permission' => 'sales.customer.view', 'manage_permission' => 'sales.customer.manage'],
         'suppliers' => ['title' => 'Suppliers', 'table' => 'suppliers', 'tenant' => true, 'site' => true, 'fields' => ['code', 'name', 'terms_code', 'currency_code', 'tax_number', 'phone', 'email', 'address', 'is_active'], 'view_permission' => 'purchase.supplier.view', 'manage_permission' => 'purchase.supplier.manage'],
         'items' => ['title' => 'Items', 'table' => 'items', 'tenant' => true, 'site' => true, 'fields' => ['code', 'name', 'item_type', 'brand', 'stock_uom_id', 'sales_uom_id', 'purchase_uom_id', 'standard_cost', 'sales_price', 'shelf_life_days', 'is_active'], 'view_permission' => 'inventory.item.view', 'manage_permission' => 'inventory.item.manage'],
+    ];
+
+    /**
+     * @var array<string, array<string, mixed>>
+     */
+    private array $relations = [
+        'warehouse_id' => ['alias' => 'warehouse_code', 'table' => 'warehouses', 'tenant' => true, 'site' => true],
+        'parent_id' => ['alias' => 'parent_code', 'table' => null, 'tenant' => false, 'site' => false],
+        'country_id' => ['alias' => 'country_code', 'table' => 'countries', 'tenant' => false, 'site' => false],
+        'province_id' => ['alias' => 'province_code', 'table' => 'provinces', 'tenant' => false, 'site' => false],
+        'city_id' => ['alias' => 'city_code', 'table' => 'cities', 'tenant' => false, 'site' => false],
+        'postal_code_id' => ['alias' => 'postal_code', 'table' => 'postal_codes', 'tenant' => false, 'site' => false],
+        'from_uom_id' => ['alias' => 'from_uom_code', 'table' => 'uoms', 'tenant' => true, 'site' => false],
+        'to_uom_id' => ['alias' => 'to_uom_code', 'table' => 'uoms', 'tenant' => true, 'site' => false],
+        'stock_uom_id' => ['alias' => 'stock_uom_code', 'table' => 'uoms', 'tenant' => true, 'site' => false],
+        'sales_uom_id' => ['alias' => 'sales_uom_code', 'table' => 'uoms', 'tenant' => true, 'site' => false],
+        'purchase_uom_id' => ['alias' => 'purchase_uom_code', 'table' => 'uoms', 'tenant' => true, 'site' => false],
+        'item_id' => ['alias' => 'item_code', 'table' => 'items', 'tenant' => true, 'site' => true],
+        'vat_rate_id' => ['alias' => 'vat_code', 'table' => 'vat_rates', 'tenant' => true, 'site' => false],
     ];
 
     public function importForm(string $resource): string
@@ -45,7 +64,7 @@ class MasterDataTransferController extends BaseController
             'title' => 'Import ' . $config['title'],
             'resource' => $resource,
             'config' => $config,
-            'headers' => $this->headers($config),
+            'headers' => $this->importHeaders($config),
         ]);
     }
 
@@ -55,7 +74,7 @@ class MasterDataTransferController extends BaseController
 
         return $this->csvResponse(
             $this->slug($config['title']) . '-template.csv',
-            [$this->headers($config), $this->sampleRow($config)]
+            [$this->importHeaders($config), $this->sampleRow($config)]
         );
     }
 
@@ -64,7 +83,7 @@ class MasterDataTransferController extends BaseController
         $config = $this->config($resource, 'view');
         $db = Database::connect();
         $builder = $db->table($config['table']);
-        $headers = $this->headers($config);
+        $headers = $this->exportHeaders($config);
         $tenant = new TenantContext(session());
 
         if ($config['tenant'] && $tenant->activeCompanyId() !== null) {
@@ -83,7 +102,7 @@ class MasterDataTransferController extends BaseController
         foreach ($builder->orderBy('id', 'ASC')->get()->getResultArray() as $row) {
             $line = [];
             foreach ($headers as $header) {
-                $line[] = (string) ($row[$header] ?? '');
+                $line[] = $this->exportValue($config, $row, $header);
             }
             $rows[] = $line;
         }
@@ -104,7 +123,7 @@ class MasterDataTransferController extends BaseController
             return redirect()->back()->with('error', 'Please upload a valid CSV file.');
         }
 
-        if (! in_array($file->getClientExtension(), ['csv', 'txt'], true)) {
+        if (! in_array(strtolower($file->getClientExtension()), ['csv', 'txt'], true)) {
             return redirect()->back()->with('error', 'Only CSV files are supported for now.');
         }
 
@@ -133,9 +152,9 @@ class MasterDataTransferController extends BaseController
         }
 
         $headers = array_map(static fn ($value) => trim((string) $value), $headers);
-        $allowed = $this->headers($config);
-        $missing = array_diff(['code'], $allowed) === [] && in_array('code', $allowed, true) && ! in_array('code', $headers, true);
-        if ($missing) {
+        $allowed = array_merge($config['fields'], $this->relationAliases($config));
+        $needsCode = in_array('code', $config['fields'], true) && ! in_array('code', $headers, true);
+        if ($needsCode) {
             fclose($handle);
             throw new RuntimeException('CSV header must include code column.');
         }
@@ -146,8 +165,10 @@ class MasterDataTransferController extends BaseController
         $updated = 0;
         $skipped = 0;
         $now = date('Y-m-d H:i:s');
+        $rowNumber = 1;
 
         while (($row = fgetcsv($handle)) !== false) {
+            $rowNumber++;
             if ($row === [null] || $row === false) {
                 continue;
             }
@@ -166,6 +187,8 @@ class MasterDataTransferController extends BaseController
                 $skipped++;
                 continue;
             }
+
+            $data = $this->normalizeRelationCodes($config, $data, $rowNumber);
 
             if (isset($data['is_active']) && $data['is_active'] === null) {
                 $data['is_active'] = 1;
@@ -200,15 +223,99 @@ class MasterDataTransferController extends BaseController
         return compact('created', 'updated', 'skipped');
     }
 
+    private function normalizeRelationCodes(array $config, array $data, int $rowNumber): array
+    {
+        foreach ($config['fields'] as $field) {
+            if (! isset($this->relations[$field])) {
+                continue;
+            }
+
+            $relation = $this->relationFor($config, $field);
+            $alias = $relation['alias'];
+            if (! empty($data[$field]) || empty($data[$alias])) {
+                unset($data[$alias]);
+                continue;
+            }
+
+            $id = $this->lookupIdByCode($relation, (string) $data[$alias]);
+            if ($id === null) {
+                throw new RuntimeException("Row {$rowNumber}: {$alias} '{$data[$alias]}' was not found.");
+            }
+
+            $data[$field] = $id;
+            unset($data[$alias]);
+        }
+
+        foreach ($this->relationAliases($config) as $alias) {
+            unset($data[$alias]);
+        }
+
+        return $data;
+    }
+
+    private function lookupIdByCode(array $relation, string $code): ?int
+    {
+        $table = $relation['table'];
+        if ($table === null) {
+            return null;
+        }
+
+        $builder = Database::connect()->table($table)->where('code', $code);
+        $tenant = new TenantContext(session());
+
+        if (! empty($relation['tenant']) && $tenant->activeCompanyId() !== null) {
+            $builder->where('company_id', $tenant->activeCompanyId());
+        }
+
+        if (! empty($relation['site']) && $tenant->activeSiteId() !== null && Database::connect()->fieldExists('site_id', $table)) {
+            $builder->where('site_id', $tenant->activeSiteId());
+        }
+
+        $row = $builder->get()->getRowArray();
+
+        return $row !== null ? (int) $row['id'] : null;
+    }
+
+    private function exportValue(array $config, array $row, string $header): string
+    {
+        foreach ($config['fields'] as $field) {
+            if (! isset($this->relations[$field])) {
+                continue;
+            }
+
+            $relation = $this->relationFor($config, $field);
+            if ($header === $relation['alias']) {
+                return $this->lookupCodeById($relation, (int) ($row[$field] ?? 0)) ?? '';
+            }
+        }
+
+        return (string) ($row[$header] ?? '');
+    }
+
+    private function lookupCodeById(array $relation, int $id): ?string
+    {
+        if ($id < 1 || $relation['table'] === null) {
+            return null;
+        }
+
+        $row = Database::connect()->table($relation['table'])->where('id', $id)->get()->getRowArray();
+
+        return $row['code'] ?? null;
+    }
+
     private function findExisting(array $config, array $data): ?array
     {
-        $db = Database::connect();
-        $builder = $db->table($config['table']);
+        $builder = Database::connect()->table($config['table']);
 
         if (! empty($data['code'])) {
             $builder->where('code', $data['code']);
-        } elseif (! empty($data['id'])) {
-            $builder->where('id', $data['id']);
+        } elseif (! empty($config['unique'])) {
+            foreach ($config['unique'] as $field) {
+                if (! array_key_exists($field, $data)) {
+                    return null;
+                }
+                $builder->where($field, $data[$field]);
+            }
         } else {
             return null;
         }
@@ -236,28 +343,65 @@ class MasterDataTransferController extends BaseController
         ];
 
         $permission = $mode === 'view' ? $config['view_permission'] : $config['manage_permission'];
-        if (! auth()->user()?->can($permission)) {
+        $user = auth()->user();
+        if (! $user || (! $user->can($permission) && ! $user->inGroup('superadmin'))) {
             throw PageNotFoundException::forPageNotFound();
         }
 
         return $config;
     }
 
-    private function headers(array $config): array
+    private function importHeaders(array $config): array
     {
-        return $config['fields'];
+        return array_map(fn (string $field): string => $this->relations[$field]['alias'] ?? $field, $config['fields']);
+    }
+
+    private function exportHeaders(array $config): array
+    {
+        return $this->importHeaders($config);
+    }
+
+    private function relationAliases(array $config): array
+    {
+        $aliases = [];
+        foreach ($config['fields'] as $field) {
+            if (isset($this->relations[$field])) {
+                $aliases[] = $this->relationFor($config, $field)['alias'];
+            }
+        }
+
+        return $aliases;
+    }
+
+    private function relationFor(array $config, string $field): array
+    {
+        $relation = $this->relations[$field];
+
+        if ($field === 'parent_id') {
+            $relation['table'] = $config['table'] === 'provinces' ? 'countries' : 'provinces';
+            $relation['alias'] = $config['table'] === 'provinces' ? 'country_code' : 'province_code';
+        }
+
+        return $relation;
     }
 
     private function sampleRow(array $config): array
     {
         $sample = [];
-        foreach ($this->headers($config) as $header) {
+        foreach ($this->importHeaders($config) as $header) {
             $sample[] = match ($header) {
                 'code' => 'EXAMPLE',
                 'name' => 'Example ' . $config['title'],
                 'is_active' => '1',
                 'rate' => '0',
                 'multiplier', 'divider' => '1',
+                'warehouse_code' => 'MAIN',
+                'from_uom_code', 'to_uom_code', 'stock_uom_code', 'sales_uom_code', 'purchase_uom_code' => 'PCS',
+                'item_code' => 'ITEM001',
+                'vat_code' => 'VAT11',
+                'country_code' => 'IDN',
+                'province_code' => 'JBR',
+                'city_code' => 'BDG',
                 default => '',
             };
         }
