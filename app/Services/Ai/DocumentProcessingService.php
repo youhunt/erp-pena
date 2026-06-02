@@ -23,7 +23,11 @@ class DocumentProcessingService
 
     public function registerUpload(UploadedFile $file, int $companyId, ?int $siteId, ?int $userId): int
     {
-        if (! in_array($file->getMimeType(), self::ALLOWED_MIME_TYPES, true)) {
+        $clientName = $file->getClientName();
+        $mimeType = $file->getMimeType();
+        $fileSize = $file->getSize();
+
+        if (! in_array($mimeType, self::ALLOWED_MIME_TYPES, true)) {
             throw new RuntimeException('Unsupported document type. Upload PDF or image files only.');
         }
 
@@ -37,6 +41,10 @@ class DocumentProcessingService
         $storedPath = $targetDir . DIRECTORY_SEPARATOR . $storedName;
         $hash = hash_file('sha256', $storedPath);
 
+        if ($hash === false) {
+            throw new RuntimeException('Failed to calculate document hash.');
+        }
+
         $duplicate = $this->documents
             ->where('company_id', $companyId)
             ->where('sha256_hash', $hash)
@@ -48,10 +56,10 @@ class DocumentProcessingService
             'company_id' => $companyId,
             'site_id' => $siteId,
             'uploaded_by' => $userId,
-            'original_name' => $file->getClientName(),
+            'original_name' => $clientName,
             'stored_path' => $storedPath,
-            'mime_type' => $file->getMimeType(),
-            'file_size' => $file->getSize(),
+            'mime_type' => $mimeType,
+            'file_size' => $fileSize,
             'sha256_hash' => $hash,
             'status' => $status,
             'duplicate_of_id' => $duplicate['id'] ?? null,
@@ -65,15 +73,15 @@ class DocumentProcessingService
             'user_id' => $userId,
             'table_name' => 'document_uploads',
             'record_id' => $id,
-            'record_code' => $file->getClientName(),
+            'record_code' => $clientName,
             'description' => $status === 'duplicate'
                 ? 'Duplicate ERP document uploaded.'
                 : 'ERP document uploaded and queued for OCR.',
             'new_values' => [
                 'id' => $id,
-                'original_name' => $file->getClientName(),
-                'mime_type' => $file->getMimeType(),
-                'file_size' => $file->getSize(),
+                'original_name' => $clientName,
+                'mime_type' => $mimeType,
+                'file_size' => $fileSize,
                 'sha256_hash' => $hash,
                 'status' => $status,
                 'duplicate_of_id' => $duplicate['id'] ?? null,
