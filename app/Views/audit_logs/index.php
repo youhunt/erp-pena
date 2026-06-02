@@ -68,6 +68,7 @@
                         <th>Record</th>
                         <th>Description</th>
                         <th>User</th>
+                        <th class="text-end">Detail</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -83,16 +84,21 @@
                         </td>
                         <td><?= esc($log['description'] ?? '-') ?></td>
                         <td><?= esc($log['user_id'] ?? '-') ?></td>
+                        <td class="text-end">
+                            <a href="<?= site_url('audit-logs/' . $log['id']) ?>" class="btn btn-sm btn-outline-primary">
+                                <i class="bx bx-show"></i>
+                            </a>
+                        </td>
                     </tr>
                 <?php endforeach ?>
 
                 <tr id="auditEmptyRow" class="d-none">
-                    <td colspan="7" class="text-center text-muted py-4">No matching audit logs found.</td>
+                    <td colspan="8" class="text-center text-muted py-4">No matching audit logs found.</td>
                 </tr>
 
                 <?php if ($logs === []): ?>
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">No audit logs yet.</td>
+                        <td colspan="8" class="text-center text-muted py-4">No audit logs yet.</td>
                     </tr>
                 <?php endif ?>
                 </tbody>
