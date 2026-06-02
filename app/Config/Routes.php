@@ -79,5 +79,6 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('(:num)/process', 'Ai\DocumentController::process/$1');
         $routes->get('(:num)/review', 'Ai\DocumentController::review/$1');
         $routes->post('(:num)/review', 'Ai\DocumentController::saveReview/$1');
+        $routes->post('(:num)/convert-po', 'Ai\DocumentController::convertToPo/$1');
     });
 });
