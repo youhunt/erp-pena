@@ -6,6 +6,7 @@ use App\Controllers\BaseController;
 use App\Models\DocumentUploadModel;
 use App\Services\Ai\DocumentProcessingService;
 use App\Services\TenantContext;
+use CodeIgniter\Exceptions\PageNotFoundException;
 use RuntimeException;
 
 class DocumentController extends BaseController
@@ -13,19 +14,26 @@ class DocumentController extends BaseController
     public function index(): string
     {
         $tenant = new TenantContext(session());
-        $documents = new DocumentUploadModel();
-
-        if ($tenant->activeCompanyId() !== null) {
-            $documents->where('company_id', $tenant->activeCompanyId());
-        }
-
-        if ($tenant->activeSiteId() !== null) {
-            $documents->where('site_id', $tenant->activeSiteId());
-        }
+        $documents = $this->scopedDocuments($tenant);
 
         return view('ai/documents/index', [
             'title' => 'AI Documents',
-            'documents' => $documents->orderBy('created_at', 'DESC')->findAll(50),
+            'documents' => $documents->orderBy('created_at', 'DESC')->findAll(100),
+        ]);
+    }
+
+    public function show(int $id): string
+    {
+        $tenant = new TenantContext(session());
+        $document = $this->scopedDocuments($tenant)->find($id);
+
+        if ($document === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        return view('ai/documents/show', [
+            'title' => 'Document Detail',
+            'document' => $document,
         ]);
     }
 
@@ -49,7 +57,7 @@ class DocumentController extends BaseController
         }
 
         try {
-            (new DocumentProcessingService())->registerUpload(
+            $id = (new DocumentProcessingService())->registerUpload(
                 $file,
                 $companyId,
                 $tenant->activeSiteId(),
@@ -59,6 +67,21 @@ class DocumentController extends BaseController
             return redirect()->back()->with('error', $exception->getMessage());
         }
 
-        return redirect()->to('/ai-documents')->with('message', 'Document uploaded and queued for OCR processing.');
+        return redirect()->to('/ai-documents/' . $id)->with('message', 'Document uploaded and queued for OCR processing.');
+    }
+
+    private function scopedDocuments(TenantContext $tenant): DocumentUploadModel
+    {
+        $documents = new DocumentUploadModel();
+
+        if ($tenant->activeCompanyId() !== null) {
+            $documents->where('company_id', $tenant->activeCompanyId());
+        }
+
+        if ($tenant->activeSiteId() !== null) {
+            $documents->where('site_id', $tenant->activeSiteId());
+        }
+
+        return $documents;
     }
 }
