@@ -5,10 +5,11 @@
 $status = $document['status'] ?? 'uploaded';
 $badge = match ($status) {
     'duplicate' => 'warning',
-    'processed' => 'success',
+    'extraction_completed', 'processed' => 'success',
     'failed' => 'danger',
     default => 'info',
 };
+$canProcess = in_array($status, ['uploaded', 'ocr_completed', 'failed'], true) && (($document['duplicate_of_id'] ?? null) === null);
 ?>
 <div class="row">
     <div class="col-xl-5">
@@ -37,10 +38,20 @@ $badge = match ($status) {
                     </tbody>
                 </table>
 
-                <div class="mt-3 d-flex gap-2">
+                <div class="mt-3 d-flex flex-wrap gap-2">
                     <a href="<?= site_url('ai-documents') ?>" class="btn btn-light">
                         <i class="bx bx-arrow-back me-1"></i> Back
                     </a>
+
+                    <?php if ($canProcess): ?>
+                        <form method="post" action="<?= site_url('ai-documents/' . $document['id'] . '/process') ?>" class="d-inline">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn btn-primary" onclick="return confirm('Process this document with OCR/AI now?')">
+                                <i class="bx bx-cog me-1"></i> Process OCR/AI
+                            </button>
+                        </form>
+                    <?php endif ?>
+
                     <?php if (($document['duplicate_of_id'] ?? null) !== null): ?>
                         <a href="<?= site_url('ai-documents/' . $document['duplicate_of_id']) ?>" class="btn btn-outline-warning">
                             View Original
@@ -55,9 +66,23 @@ $badge = match ($status) {
         <div class="card">
             <div class="card-body">
                 <h4 class="card-title mb-3">Processing Status</h4>
-                <div class="alert alert-info mb-0">
-                    OCR and AI extraction worker will be connected in the next phase. This record is currently stored safely and ready for processing.
-                </div>
+                <?php if ($status === 'duplicate'): ?>
+                    <div class="alert alert-warning mb-0">
+                        This document is a duplicate. Open the original document for processing/review.
+                    </div>
+                <?php elseif ($status === 'extraction_completed'): ?>
+                    <div class="alert alert-success mb-0">
+                        OCR and AI extraction completed. Human review screen will be added in the next phase.
+                    </div>
+                <?php elseif ($status === 'failed'): ?>
+                    <div class="alert alert-danger mb-0">
+                        Processing failed. You can retry using the Process OCR/AI button.
+                    </div>
+                <?php else: ?>
+                    <div class="alert alert-info mb-0">
+                        This document is stored safely and ready for manual OCR/AI processing.
+                    </div>
+                <?php endif ?>
             </div>
         </div>
 
