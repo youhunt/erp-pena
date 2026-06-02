@@ -5,6 +5,7 @@ namespace App\Services\Support;
 use App\Services\TenantContext;
 use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Model;
+use Config\Database;
 
 /**
  * Applies the active company/site context to models and query builders.
@@ -42,11 +43,11 @@ final class TenantScope
         $companyId = $this->activeCompanyId();
         $siteId = $this->activeSiteId();
 
-        if ($companyId !== null && $companyId > 0 && $this->modelHasField($model, 'company_id')) {
+        if ($companyId !== null && $companyId > 0 && $this->modelTableHasField($model, 'company_id')) {
             $model->where('company_id', $companyId);
         }
 
-        if ($includeSite && $siteId !== null && $siteId > 0 && $this->modelHasField($model, 'site_id')) {
+        if ($includeSite && $siteId !== null && $siteId > 0 && $this->modelTableHasField($model, 'site_id')) {
             $model->where('site_id', $siteId);
         }
 
@@ -58,6 +59,9 @@ final class TenantScope
      *
      * Use table alias when the query uses aliases, for example: `sales_orders`
      * or `so`. The helper will generate `alias.company_id` and `alias.site_id`.
+     *
+     * This method assumes the target builder/table has tenant columns. For mixed
+     * joins, call it only for tenant-owned table aliases.
      */
     public function applyToBuilder(BaseBuilder $builder, string $tableOrAlias, bool $includeSite = true): BaseBuilder
     {
@@ -107,10 +111,17 @@ final class TenantScope
         return $this->tenant ?? new TenantContext(session());
     }
 
-    private function modelHasField(Model $model, string $field): bool
+    private function modelTableHasField(Model $model, string $field): bool
     {
-        $allowedFields = $model->allowedFields ?? [];
+        if (! method_exists($model, 'getTable')) {
+            return true;
+        }
 
-        return in_array($field, $allowedFields, true);
+        $table = $model->getTable();
+        if ($table === '') {
+            return true;
+        }
+
+        return Database::connect()->fieldExists($field, $table);
     }
 }
