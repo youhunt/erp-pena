@@ -62,6 +62,7 @@ class Filters extends BaseFilters
                 'tenant/*',
                 'setup/*',
                 'admin/*',
+                'sales/*',
                 'purchase/*',
                 'audit-logs',
                 'audit-logs/*',
