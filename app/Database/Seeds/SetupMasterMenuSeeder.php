@@ -44,8 +44,9 @@ class SetupMasterMenuSeeder extends Seeder
         ], $now);
 
         $this->menuGroup($setupId, 'System', 50, [
-            ['Audit Logs', 'audit-logs'],
-        ], $now, 'audit.logs.view');
+            ['Users', 'admin/users', 'users.view'],
+            ['Audit Logs', 'audit-logs', 'audit.logs.view'],
+        ], $now);
     }
 
     /**
@@ -72,6 +73,7 @@ class SetupMasterMenuSeeder extends Seeder
             'WHT / PPH',
             'Item VAT',
             'Address Master',
+            'Users',
             'Audit Logs',
         ];
 
@@ -85,15 +87,15 @@ class SetupMasterMenuSeeder extends Seeder
     }
 
     /**
-     * @param array<int, array{0:string,1:string}> $children
+     * @param array<int, array{0:string,1:string,2?:string}> $children
      */
-    private function menuGroup(int $parentId, string $label, int $sort, array $children, string $now, string $permission = 'setup.master.view'): void
+    private function menuGroup(int $parentId, string $label, int $sort, array $children, string $now, string $defaultPermission = 'setup.master.view'): void
     {
         $groupId = $this->menuItem($parentId, $label, '#', null, null, $sort, $now);
         $childSort = 10;
 
-        foreach ($children as [$childLabel, $route]) {
-            $this->menuItem($groupId, $childLabel, $route, null, $permission, $childSort, $now);
+        foreach ($children as $child) {
+            $this->menuItem($groupId, $child[0], $child[1], null, $child[2] ?? $defaultPermission, $childSort, $now);
             $childSort += 10;
         }
     }
