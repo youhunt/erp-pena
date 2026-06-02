@@ -20,12 +20,22 @@ class MenuService
             ->orderBy('sort_order', 'ASC')
             ->findAll();
 
-        return array_values(array_filter($items, static function (array $item): bool {
+        $user = function_exists('auth') ? auth()->user() : null;
+
+        return array_values(array_filter($items, static function (array $item) use ($user): bool {
             if (empty($item['permission'])) {
                 return true;
             }
 
-            return function_exists('auth') && auth()->user()?->can($item['permission']);
+            if ($user === null) {
+                return false;
+            }
+
+            if (method_exists($user, 'inGroup') && $user->inGroup('superadmin')) {
+                return true;
+            }
+
+            return $user->can($item['permission']);
         }));
     }
 
@@ -47,8 +57,10 @@ class MenuService
 
             foreach ($childrenByParent[$parentId] ?? [] as $item) {
                 $item['children'] = $build((int) $item['id']);
+                $route = trim((string) ($item['route'] ?? ''));
+                $isClickable = $route !== '' && $route !== '#';
 
-                if ($item['children'] !== [] || ! empty($item['route'])) {
+                if ($item['children'] !== [] || $isClickable) {
                     $branch[] = $item;
                 }
             }
