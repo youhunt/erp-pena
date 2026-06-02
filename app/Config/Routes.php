@@ -13,6 +13,15 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->get('modules/(:segment)', 'ModulePlaceholderController::show/$1');
     $routes->get('audit-logs', 'AuditLogController::index');
 
+    $routes->group('admin', static function (RouteCollection $routes): void {
+        $routes->get('users', 'Admin\UserController::index');
+        $routes->get('users/new', 'Admin\UserController::create');
+        $routes->post('users', 'Admin\UserController::store');
+        $routes->get('users/(:num)/edit', 'Admin\UserController::edit/$1');
+        $routes->post('users/(:num)', 'Admin\UserController::update/$1');
+        $routes->post('users/(:num)/toggle', 'Admin\UserController::toggle/$1');
+    });
+
     $routes->group('setup', static function (RouteCollection $routes): void {
         foreach ([
             'transaction-codes',
