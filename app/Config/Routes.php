@@ -20,6 +20,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('users/(:num)/edit', 'Admin\UserController::edit/$1');
         $routes->post('users/(:num)', 'Admin\UserController::update/$1');
         $routes->post('users/(:num)/toggle', 'Admin\UserController::toggle/$1');
+        $routes->get('roles', 'Admin\RoleController::index');
     });
 
     $routes->group('setup', static function (RouteCollection $routes): void {
