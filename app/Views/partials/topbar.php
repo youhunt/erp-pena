@@ -4,9 +4,17 @@ use App\Services\TenantContext;
 $tenantContext = new TenantContext(session());
 $currentUser = auth()->user();
 $companies = $currentUser === null ? [] : $tenantContext->accessibleCompanies((int) $currentUser->id);
-$sites = $currentUser === null ? [] : $tenantContext->accessibleSites((int) $currentUser->id);
 $activeCompanyId = $tenantContext->activeCompanyId();
 $activeSiteId = $tenantContext->activeSiteId();
+$sitesByCompany = [];
+
+if ($currentUser !== null) {
+    foreach ($companies as $company) {
+        $sitesByCompany[(int) $company['id']] = $tenantContext->accessibleSites((int) $currentUser->id, (int) $company['id']);
+    }
+}
+
+$sites = $activeCompanyId === null ? [] : ($sitesByCompany[(int) $activeCompanyId] ?? []);
 ?>
 
 <header id="page-topbar">
@@ -39,16 +47,16 @@ $activeSiteId = $tenantContext->activeSiteId();
 
         <div class="d-flex">
             <?php if ($companies !== []): ?>
-                <form class="d-none d-lg-flex align-items-center gap-2 me-3" action="<?= site_url('tenant/switch') ?>" method="post">
+                <form class="d-none d-lg-flex align-items-center gap-2 me-3" action="<?= site_url('tenant/switch') ?>" method="post" id="tenantSwitchForm">
                     <?= csrf_field() ?>
-                    <select class="form-select form-select-sm" name="company_id" onchange="this.form.submit()" aria-label="Active company">
+                    <select class="form-select form-select-sm" name="company_id" id="tenantCompanySelect" aria-label="Active company">
                         <?php foreach ($companies as $company): ?>
                             <option value="<?= esc((string) $company['id']) ?>" <?= (int) $company['id'] === (int) $activeCompanyId ? 'selected' : '' ?>>
                                 <?= esc($company['code']) ?>
                             </option>
                         <?php endforeach ?>
                     </select>
-                    <select class="form-select form-select-sm" name="site_id" onchange="this.form.submit()" aria-label="Active site">
+                    <select class="form-select form-select-sm" name="site_id" id="tenantSiteSelect" aria-label="Active site">
                         <option value="">All Sites</option>
                         <?php foreach ($sites as $site): ?>
                             <option value="<?= esc((string) $site['id']) ?>" <?= (int) $site['id'] === (int) $activeSiteId ? 'selected' : '' ?>>
@@ -77,3 +85,43 @@ $activeSiteId = $tenantContext->activeSiteId();
         </div>
     </div>
 </header>
+
+<?php if ($companies !== []): ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('tenantSwitchForm');
+    const companySelect = document.getElementById('tenantCompanySelect');
+    const siteSelect = document.getElementById('tenantSiteSelect');
+    const sitesByCompany = <?= json_encode($sitesByCompany, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+
+    function rebuildSites(companyId, selectedSiteId) {
+        const sites = sitesByCompany[companyId] || [];
+        siteSelect.innerHTML = '';
+
+        const allOption = document.createElement('option');
+        allOption.value = '';
+        allOption.textContent = 'All Sites';
+        siteSelect.appendChild(allOption);
+
+        sites.forEach(function (site) {
+            const option = document.createElement('option');
+            option.value = String(site.id);
+            option.textContent = site.code;
+            if (String(site.id) === String(selectedSiteId)) {
+                option.selected = true;
+            }
+            siteSelect.appendChild(option);
+        });
+    }
+
+    companySelect.addEventListener('change', function () {
+        rebuildSites(companySelect.value, '');
+        form.submit();
+    });
+
+    siteSelect.addEventListener('change', function () {
+        form.submit();
+    });
+});
+</script>
+<?php endif ?>
