@@ -4,6 +4,7 @@ namespace App\Controllers\Ai;
 
 use App\Controllers\BaseController;
 use App\Models\DocumentUploadModel;
+use App\Services\Ai\ConvertToPurchaseOrderService;
 use App\Services\Ai\DocumentProcessingService;
 use App\Services\Ai\DocumentProcessorService;
 use App\Services\Ai\DocumentReviewService;
@@ -100,6 +101,24 @@ class DocumentController extends BaseController
         }
 
         return redirect()->to('/ai-documents/' . $id)->with('message', 'Document review saved.');
+    }
+
+    public function convertToPo(int $id)
+    {
+        $tenant = new TenantContext(session());
+        $document = $this->scopedDocuments($tenant)->find($id);
+
+        if ($document === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        try {
+            $poId = (new ConvertToPurchaseOrderService())->convert($id, auth()->id());
+        } catch (RuntimeException $exception) {
+            return redirect()->to('/ai-documents/' . $id)->with('error', $exception->getMessage());
+        }
+
+        return redirect()->to('/purchase/orders/' . $poId)->with('message', 'Reviewed document converted to Purchase Order.');
     }
 
     public function process(int $id)
