@@ -11,7 +11,7 @@ $badge = match ($status) {
 };
 $canProcess = in_array($status, ['uploaded', 'ocr_completed', 'failed'], true) && (($document['duplicate_of_id'] ?? null) === null);
 $canReview = ! empty($extraction) && (($document['duplicate_of_id'] ?? null) === null);
-$canConvertPo = $canReview && (($extraction['review_status'] ?? '') === 'reviewed');
+$canConvert = $canReview && (($extraction['review_status'] ?? '') === 'reviewed');
 $fields = ! empty($extraction['extracted_fields']) ? json_decode($extraction['extracted_fields'], true) : null;
 $lineItems = ! empty($extraction['line_items']) ? json_decode($extraction['line_items'], true) : null;
 ?>
@@ -60,11 +60,18 @@ $lineItems = ! empty($extraction['line_items']) ? json_decode($extraction['line_
                         </a>
                     <?php endif ?>
 
-                    <?php if ($canConvertPo): ?>
+                    <?php if ($canConvert): ?>
                         <form method="post" action="<?= site_url('ai-documents/' . $document['id'] . '/convert-po') ?>" class="d-inline">
                             <?= csrf_field() ?>
                             <button type="submit" class="btn btn-warning" onclick="return confirm('Convert reviewed extraction to Purchase Order?')">
                                 <i class="bx bx-transfer me-1"></i> Convert to PO
+                            </button>
+                        </form>
+
+                        <form method="post" action="<?= site_url('ai-documents/' . $document['id'] . '/convert-so') ?>" class="d-inline">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn btn-info" onclick="return confirm('Convert reviewed extraction to Sales Order?')">
+                                <i class="bx bx-transfer-alt me-1"></i> Convert to SO
                             </button>
                         </form>
                     <?php endif ?>
@@ -110,8 +117,8 @@ $lineItems = ! empty($extraction['line_items']) ? json_decode($extraction['line_
                 <h4 class="card-title mb-3">Processing Status</h4>
                 <?php if ($status === 'duplicate'): ?>
                     <div class="alert alert-warning mb-0">This document is a duplicate. Open the original document for processing/review.</div>
-                <?php elseif ($canConvertPo): ?>
-                    <div class="alert alert-success mb-0">Document has been reviewed and is ready to convert to Purchase Order.</div>
+                <?php elseif ($canConvert): ?>
+                    <div class="alert alert-success mb-0">Document has been reviewed and is ready to convert to Purchase Order or Sales Order.</div>
                 <?php elseif ($status === 'extraction_completed'): ?>
                     <div class="alert alert-info mb-0">OCR and AI extraction completed. Please review the result before conversion.</div>
                 <?php elseif ($status === 'failed'): ?>
