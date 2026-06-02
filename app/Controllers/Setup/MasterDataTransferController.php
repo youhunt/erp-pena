@@ -3,6 +3,7 @@
 namespace App\Controllers\Setup;
 
 use App\Controllers\BaseController;
+use App\Services\AuditLogService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use Config\Database;
@@ -10,9 +11,7 @@ use RuntimeException;
 
 class MasterDataTransferController extends BaseController
 {
-    /**
-     * @var array<string, array<string, mixed>>
-     */
+    /** @var array<string, array<string, mixed>> */
     private array $resources = [
         'transaction-codes' => ['title' => 'Transaction Codes', 'table' => 'transaction_codes', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'description', 'is_active']],
         'prefix-codes' => ['title' => 'Prefix Codes', 'table' => 'prefix_codes', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'description', 'is_active']],
@@ -37,9 +36,7 @@ class MasterDataTransferController extends BaseController
         'items' => ['title' => 'Items', 'table' => 'items', 'tenant' => true, 'site' => true, 'fields' => ['code', 'name', 'item_type', 'brand', 'stock_uom_id', 'sales_uom_id', 'purchase_uom_id', 'standard_cost', 'sales_price', 'shelf_life_days', 'is_active'], 'view_permission' => 'inventory.item.view', 'manage_permission' => 'inventory.item.manage'],
     ];
 
-    /**
-     * @var array<string, array<string, mixed>>
-     */
+    /** @var array<string, array<string, mixed>> */
     private array $relations = [
         'warehouse_id' => ['alias' => 'warehouse_code', 'table' => 'warehouses', 'tenant' => true, 'site' => true],
         'parent_id' => ['alias' => 'parent_code', 'table' => null, 'tenant' => false, 'site' => false],
@@ -130,8 +127,12 @@ class MasterDataTransferController extends BaseController
         try {
             $result = $this->importCsv($config, $file->getTempName());
         } catch (RuntimeException $exception) {
+            $this->auditImport($config, ['created' => 0, 'updated' => 0, 'skipped' => 0], $file->getClientName(), $exception->getMessage());
+
             return redirect()->back()->with('error', $exception->getMessage());
         }
+
+        $this->auditImport($config, $result, $file->getClientName());
 
         return redirect()
             ->to(site_url('setup/' . $resource))
@@ -383,6 +384,26 @@ class MasterDataTransferController extends BaseController
         }
 
         return $relation;
+    }
+
+    private function auditImport(array $config, array $result, string $filename, ?string $error = null): void
+    {
+        $action = $error === null ? 'master.import' : 'master.import_failed';
+        (new AuditLogService())->log('setup.master', $action, [
+            'table_name' => $config['table'],
+            'description' => $error === null
+                ? $config['title'] . ' CSV import completed.'
+                : $config['title'] . ' CSV import failed: ' . $error,
+            'new_values' => [
+                'title' => $config['title'],
+                'table' => $config['table'],
+                'filename' => $filename,
+                'created' => $result['created'] ?? 0,
+                'updated' => $result['updated'] ?? 0,
+                'skipped' => $result['skipped'] ?? 0,
+                'error' => $error,
+            ],
+        ]);
     }
 
     private function sampleRow(array $config): array
