@@ -18,7 +18,7 @@ $activeSiteId = $tenantContext->activeSiteId();
                         <img src="<?= base_url('assets/skote/images/logo-sm-dark.png') ?>" alt="PENA ERP" height="22">
                     </span>
                     <span class="logo-lg">
-                        <strong class="fs-5 text-dark">PENA ERP</strong>
+                        <img src="<?= base_url('assets/skote/images/logo-dark.png') ?>" alt="Pena ERP" height="22">
                     </span>
                 </a>
 
@@ -27,7 +27,7 @@ $activeSiteId = $tenantContext->activeSiteId();
                         <img src="<?= base_url('assets/skote/images/logo-sm-light.png') ?>" alt="PENA ERP" height="22">
                     </span>
                     <span class="logo-lg">
-                        <strong class="fs-5 text-white">PENA ERP</strong>
+                        <img src="<?= base_url('assets/skote/images/logo-light.png') ?>" alt="Pena ERP" height="22">
                     </span>
                 </a>
             </div>
