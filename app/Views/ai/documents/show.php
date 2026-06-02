@@ -10,6 +10,8 @@ $badge = match ($status) {
     default => 'info',
 };
 $canProcess = in_array($status, ['uploaded', 'ocr_completed', 'failed'], true) && (($document['duplicate_of_id'] ?? null) === null);
+$fields = ! empty($extraction['extracted_fields']) ? json_decode($extraction['extracted_fields'], true) : null;
+$lineItems = ! empty($extraction['line_items']) ? json_decode($extraction['line_items'], true) : null;
 ?>
 <div class="row">
     <div class="col-xl-5">
@@ -39,9 +41,7 @@ $canProcess = in_array($status, ['uploaded', 'ocr_completed', 'failed'], true) &
                 </table>
 
                 <div class="mt-3 d-flex flex-wrap gap-2">
-                    <a href="<?= site_url('ai-documents') ?>" class="btn btn-light">
-                        <i class="bx bx-arrow-back me-1"></i> Back
-                    </a>
+                    <a href="<?= site_url('ai-documents') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back</a>
 
                     <?php if ($canProcess): ?>
                         <form method="post" action="<?= site_url('ai-documents/' . $document['id'] . '/process') ?>" class="d-inline">
@@ -53,11 +53,36 @@ $canProcess = in_array($status, ['uploaded', 'ocr_completed', 'failed'], true) &
                     <?php endif ?>
 
                     <?php if (($document['duplicate_of_id'] ?? null) !== null): ?>
-                        <a href="<?= site_url('ai-documents/' . $document['duplicate_of_id']) ?>" class="btn btn-outline-warning">
-                            View Original
-                        </a>
+                        <a href="<?= site_url('ai-documents/' . $document['duplicate_of_id']) ?>" class="btn btn-outline-warning">View Original</a>
                     <?php endif ?>
                 </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h4 class="card-title mb-3">Processing Logs</h4>
+                <?php if (! empty($processingLogs)): ?>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr><th>Time</th><th>Step</th><th>Status</th><th>Message</th></tr>
+                            </thead>
+                            <tbody>
+                            <?php foreach ($processingLogs as $log): ?>
+                                <tr>
+                                    <td class="text-muted small"><?= esc($log['created_at'] ?? '-') ?></td>
+                                    <td><?= esc($log['step'] ?? '-') ?></td>
+                                    <td><span class="badge bg-secondary"><?= esc($log['status'] ?? '-') ?></span></td>
+                                    <td><?= esc($log['message'] ?? '-') ?></td>
+                                </tr>
+                            <?php endforeach ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php else: ?>
+                    <p class="text-muted mb-0">No processing logs yet.</p>
+                <?php endif ?>
             </div>
         </div>
     </div>
@@ -67,21 +92,47 @@ $canProcess = in_array($status, ['uploaded', 'ocr_completed', 'failed'], true) &
             <div class="card-body">
                 <h4 class="card-title mb-3">Processing Status</h4>
                 <?php if ($status === 'duplicate'): ?>
-                    <div class="alert alert-warning mb-0">
-                        This document is a duplicate. Open the original document for processing/review.
-                    </div>
+                    <div class="alert alert-warning mb-0">This document is a duplicate. Open the original document for processing/review.</div>
                 <?php elseif ($status === 'extraction_completed'): ?>
-                    <div class="alert alert-success mb-0">
-                        OCR and AI extraction completed. Human review screen will be added in the next phase.
-                    </div>
+                    <div class="alert alert-success mb-0">OCR and AI extraction completed. Human review screen will be added in the next phase.</div>
                 <?php elseif ($status === 'failed'): ?>
-                    <div class="alert alert-danger mb-0">
-                        Processing failed. You can retry using the Process OCR/AI button.
-                    </div>
+                    <div class="alert alert-danger mb-0">Processing failed. You can retry using the Process OCR/AI button.</div>
                 <?php else: ?>
-                    <div class="alert alert-info mb-0">
-                        This document is stored safely and ready for manual OCR/AI processing.
+                    <div class="alert alert-info mb-0">This document is stored safely and ready for manual OCR/AI processing.</div>
+                <?php endif ?>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h4 class="card-title mb-3">OCR Result</h4>
+                <?php if (! empty($ocrResult)): ?>
+                    <div class="mb-2 text-muted small">
+                        Provider: <strong><?= esc($ocrResult['provider'] ?? '-') ?></strong> | Confidence: <strong><?= esc($ocrResult['confidence_score'] ?? '0') ?></strong>
                     </div>
+                    <pre class="bg-light border rounded p-3 mb-0" style="white-space: pre-wrap; max-height: 280px; overflow:auto;"><code><?= esc($ocrResult['ocr_text'] ?? '') ?></code></pre>
+                <?php else: ?>
+                    <p class="text-muted mb-0">No OCR result yet.</p>
+                <?php endif ?>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h4 class="card-title mb-3">AI Extraction Result</h4>
+                <?php if (! empty($extraction)): ?>
+                    <div class="mb-2 text-muted small">
+                        Provider: <strong><?= esc($extraction['provider'] ?? '-') ?></strong> |
+                        Type: <strong><?= esc($extraction['document_type'] ?? '-') ?></strong> |
+                        Confidence: <strong><?= esc($extraction['confidence_score'] ?? '0') ?></strong> |
+                        Review: <strong><?= esc($extraction['review_status'] ?? '-') ?></strong>
+                    </div>
+                    <h6>Fields</h6>
+                    <pre class="bg-light border rounded p-3" style="white-space: pre-wrap; max-height: 220px; overflow:auto;"><code><?= esc(json_encode($fields, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?></code></pre>
+                    <h6>Line Items</h6>
+                    <pre class="bg-light border rounded p-3 mb-0" style="white-space: pre-wrap; max-height: 220px; overflow:auto;"><code><?= esc(json_encode($lineItems, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?></code></pre>
+                <?php else: ?>
+                    <p class="text-muted mb-0">No AI extraction result yet.</p>
                 <?php endif ?>
             </div>
         </div>
@@ -90,15 +141,6 @@ $canProcess = in_array($status, ['uploaded', 'ocr_completed', 'failed'], true) &
             <div class="card-body">
                 <h4 class="card-title mb-3">SHA256 Hash</h4>
                 <pre class="bg-light border rounded p-3 mb-0" style="white-space: pre-wrap;"><code><?= esc($document['sha256_hash'] ?? '-') ?></code></pre>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-body">
-                <h4 class="card-title mb-3">Storage Note</h4>
-                <p class="text-muted mb-0">
-                    The file is stored under the server writeable secure upload directory and is not exposed directly as a public asset.
-                </p>
             </div>
         </div>
     </div>
