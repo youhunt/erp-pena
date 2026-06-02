@@ -12,6 +12,7 @@ class AiDocumentsMenuSeeder extends Seeder
         $aiId = $this->menuItem(null, 'AI / OCR', '#', 'bx-brain', null, 80, $now);
         $this->menuItem($aiId, 'Documents', 'ai-documents', null, 'ai.document.upload', 10, $now);
         $this->menuItem($aiId, 'OCR Review Queue', 'ai-documents', null, 'ai.document.review', 20, $now);
+        $this->menuItem($aiId, 'OCR Diagnostics', 'ai-ocr/diagnostics', null, 'ai.ocr.diagnostics', 30, $now);
     }
 
     private function menuItem(?int $parentId, string $label, string $route, ?string $icon, ?string $permission, int $sort, string $now): int
