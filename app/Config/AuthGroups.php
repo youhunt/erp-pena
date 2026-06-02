@@ -126,7 +126,7 @@ class AuthGroups extends ShieldAuthGroups
         'ai.document.upload'      => 'Upload ERP documents for OCR',
         'ai.document.review'      => 'Review OCR and AI extraction result',
         'ai.document.convert'     => 'Convert reviewed document to ERP transaction',
-        'audit.view'              => 'View audit trail',
+        'audit.logs.view'         => 'View audit logs',
     ];
 
     /**
@@ -156,7 +156,7 @@ class AuthGroups extends ShieldAuthGroups
             'cashbank.*',
             'fixedasset.*',
             'ai.document.*',
-            'audit.view',
+            'audit.logs.view',
         ],
         'finance' => [
             'dashboard.view',
@@ -170,7 +170,7 @@ class AuthGroups extends ShieldAuthGroups
             'sales.order.view',
             'purchase.po.view',
             'ai.document.review',
-            'audit.view',
+            'audit.logs.view',
         ],
         'sales' => [
             'dashboard.view',
