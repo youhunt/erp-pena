@@ -352,7 +352,7 @@ class MasterDataController extends BaseController
 
             $type = $field['type'] ?? 'text';
             $rule = ! empty($field['required']) ? 'required' : 'permit_empty';
-            $rule .= in_array($type, ['number', 'select', 'checkbox'], true) ? '' : '|max_length:500';
+            $rule .= in_array($type, ['number', 'select', 'checkbox'], true) ? '' : '|max_length[500]';
             $rules[$name] = $rule;
         }
 
