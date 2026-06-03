@@ -42,15 +42,8 @@ class Filters extends BaseFilters
     ];
 
     public array $globals = [
-        'before' => [
-            // 'honeypot',
-            // 'csrf',
-            // 'invalidchars',
-        ],
-        'after' => [
-            // 'honeypot',
-            // 'secureheaders',
-        ],
+        'before' => [],
+        'after' => [],
     ];
 
     public array $methods = [];
@@ -64,6 +57,7 @@ class Filters extends BaseFilters
                 'admin/*',
                 'sales/*',
                 'purchase/*',
+                'inventory/*',
                 'audit-logs',
                 'audit-logs/*',
                 'ai-documents/*',
