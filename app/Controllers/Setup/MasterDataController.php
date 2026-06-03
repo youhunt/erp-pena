@@ -536,7 +536,7 @@ class MasterDataController extends BaseController
     {
         return [
             'address_type' => ['label' => 'Address Type', 'type' => 'select', 'options' => ['general' => 'General', 'bill_to' => 'Bill To', 'ship_to' => 'Ship To', 'mail_to' => 'Mail To'], 'default' => 'general'],
-            'owner_type' => ['label' => 'Owner Type', 'type' => 'select', 'options' => ['' => 'None', 'customer' => 'Customer', 'supplier' => 'Supplier', 'company' => 'Company', 'site' => 'Site']],
+            'owner_type' => ['label' => 'Owner Type', 'type' => 'select', 'options' => ['' => 'None', 'template' => 'Template', 'customer' => 'Customer', 'supplier' => 'Supplier', 'company' => 'Company', 'site' => 'Site']],
             'owner_code' => ['label' => 'Owner Code', 'type' => 'text'],
             'code' => ['label' => 'Address Code', 'type' => 'text', 'required' => true],
             'name' => ['label' => 'Address Name', 'type' => 'text', 'required' => true],
