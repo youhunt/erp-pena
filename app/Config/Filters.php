@@ -2,6 +2,7 @@
 
 namespace Config;
 
+use App\Filters\PermissionFilter;
 use App\Filters\TenantBootstrapFilter;
 use CodeIgniter\Config\Filters as BaseFilters;
 use CodeIgniter\Filters\Cors;
@@ -27,6 +28,7 @@ class Filters extends BaseFilters
         'pagecache'     => PageCache::class,
         'performance'   => PerformanceMetrics::class,
         'tenant'        => TenantBootstrapFilter::class,
+        'permission'    => PermissionFilter::class,
     ];
 
     public array $required = [
