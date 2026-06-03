@@ -4,6 +4,7 @@
 <?php
 $isEdit = isset($row['id']);
 $action = $isEdit ? site_url("setup/{$resource}/{$row['id']}") : site_url("setup/{$resource}");
+$addressTemplates ??= [];
 ?>
 
 <div class="row">
@@ -28,6 +29,21 @@ $action = $isEdit ? site_url("setup/{$resource}/{$row['id']}") : site_url("setup
                                         <input class="form-check-input" type="checkbox" id="<?= esc($name) ?>" name="<?= esc($name) ?>" value="1" <?= (int) $value === 1 ? 'checked' : '' ?>>
                                         <label class="form-check-label" for="<?= esc($name) ?>"><?= esc($field['label']) ?></label>
                                     </div>
+                                </div>
+                            <?php elseif ($type === 'address_template'): ?>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label" for="<?= esc($name) ?>"><?= esc($field['label']) ?></label>
+                                    <select
+                                        class="form-select js-address-template"
+                                        id="<?= esc($name) ?>"
+                                        data-targets='<?= esc(json_encode($field['targets'] ?? [], JSON_HEX_APOS | JSON_HEX_QUOT), 'attr') ?>'
+                                    >
+                                        <option value="">Select address template</option>
+                                        <?php foreach ($addressTemplates as $templateId => $template): ?>
+                                            <option value="<?= esc((string) $templateId) ?>"><?= esc((string) ($template['label'] ?? $templateId)) ?></option>
+                                        <?php endforeach ?>
+                                    </select>
+                                    <div class="form-text">Filled from Address Master. You can still edit the copied values.</div>
                                 </div>
                             <?php elseif ($type === 'textarea'): ?>
                                 <div class="col-12 mb-3">
@@ -65,4 +81,42 @@ $action = $isEdit ? site_url("setup/{$resource}/{$row['id']}") : site_url("setup
         </div>
     </div>
 </div>
+<?php if ($addressTemplates !== []): ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const templates = <?= json_encode($addressTemplates, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    const sourceAliases = {
+        main_address: 'address',
+        main_phone: 'phone',
+        main_email: 'email'
+    };
+
+    function valueFor(template, source) {
+        return template[sourceAliases[source] || source] || '';
+    }
+
+    document.querySelectorAll('.js-address-template').forEach(function (select) {
+        select.addEventListener('change', function () {
+            const template = templates[select.value];
+            const targets = JSON.parse(select.dataset.targets || '{}');
+
+            if (!template) {
+                return;
+            }
+
+            Object.keys(targets).forEach(function (source) {
+                const targetId = targets[source];
+                const input = document.getElementById(targetId);
+                if (!input) {
+                    return;
+                }
+
+                input.value = valueFor(template, source);
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+        });
+    });
+});
+</script>
+<?php endif ?>
 <?= $this->endSection() ?>
