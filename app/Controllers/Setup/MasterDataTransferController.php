@@ -12,29 +12,34 @@ use RuntimeException;
 class MasterDataTransferController extends BaseController
 {
     /** @var array<string, array<string, mixed>> */
-    private array $resources = [
-        'transaction-codes' => ['title' => 'Transaction Codes', 'table' => 'transaction_codes', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'description', 'is_active']],
-        'prefix-codes' => ['title' => 'Prefix Codes', 'table' => 'prefix_codes', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'description', 'is_active']],
-        'companies' => ['title' => 'Companies', 'table' => 'companies', 'tenant' => false, 'site' => false, 'fields' => ['code', 'name', 'legal_name', 'tax_number', 'base_currency', 'address', 'is_active']],
-        'sites' => ['title' => 'Sites', 'table' => 'sites', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'address', 'is_active']],
-        'departments' => ['title' => 'Departments', 'table' => 'departments', 'tenant' => true, 'site' => true, 'fields' => ['code', 'name', 'description', 'is_active']],
-        'warehouses' => ['title' => 'Warehouses', 'table' => 'warehouses', 'tenant' => true, 'site' => true, 'fields' => ['code', 'name', 'description', 'is_active']],
-        'locations' => ['title' => 'Locations', 'table' => 'locations', 'tenant' => true, 'site' => true, 'fields' => ['warehouse_id', 'code', 'name', 'description', 'is_active']],
-        'countries' => ['title' => 'Countries', 'table' => 'countries', 'tenant' => false, 'site' => false, 'fields' => ['code', 'name', 'is_active']],
-        'provinces' => ['title' => 'Provinces', 'table' => 'provinces', 'tenant' => false, 'site' => false, 'fields' => ['parent_id', 'code', 'name', 'is_active']],
-        'cities' => ['title' => 'Cities', 'table' => 'cities', 'tenant' => false, 'site' => false, 'fields' => ['parent_id', 'code', 'name', 'is_active']],
-        'postal-codes' => ['title' => 'Postal Codes', 'table' => 'postal_codes', 'tenant' => false, 'site' => false, 'fields' => ['country_id', 'province_id', 'city_id', 'code', 'name', 'district', 'village', 'is_active']],
-        'currencies' => ['title' => 'Currencies', 'table' => 'currencies', 'tenant' => false, 'site' => false, 'fields' => ['code', 'name', 'rounding', 'is_active']],
-        'uoms' => ['title' => 'UoM', 'table' => 'uoms', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'description', 'is_active']],
-        'uom-conversions' => ['title' => 'UoM Conversions', 'table' => 'uom_conversions', 'tenant' => true, 'site' => false, 'fields' => ['from_uom_id', 'to_uom_id', 'multiplier', 'divider', 'is_active'], 'unique' => ['from_uom_id', 'to_uom_id']],
-        'vat' => ['title' => 'VAT', 'table' => 'vat_rates', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'rate', 'description', 'is_active']],
-        'wht' => ['title' => 'WHT / PPH', 'table' => 'wht_rates', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'rate', 'description', 'is_active']],
-        'item-vat' => ['title' => 'Item VAT', 'table' => 'item_vat_rates', 'tenant' => true, 'site' => false, 'fields' => ['item_id', 'vat_rate_id', 'is_active'], 'unique' => ['item_id', 'vat_rate_id']],
-        'address-master' => ['title' => 'Address Master', 'table' => 'addresses', 'tenant' => true, 'site' => true, 'fields' => ['address_type', 'owner_type', 'owner_code', 'code', 'name', 'country_id', 'province_id', 'city_id', 'postal_code_id', 'address_line1', 'address_line2', 'phone', 'email', 'is_active']],
-        'customers' => ['title' => 'Customers', 'table' => 'customers', 'tenant' => true, 'site' => true, 'fields' => ['code', 'name', 'terms_code', 'currency_code', 'tax_number', 'phone', 'email', 'address', 'is_active'], 'view_permission' => 'sales.customer.view', 'manage_permission' => 'sales.customer.manage'],
-        'suppliers' => ['title' => 'Suppliers', 'table' => 'suppliers', 'tenant' => true, 'site' => true, 'fields' => ['code', 'name', 'terms_code', 'currency_code', 'tax_number', 'phone', 'email', 'address', 'is_active'], 'view_permission' => 'purchase.supplier.view', 'manage_permission' => 'purchase.supplier.manage'],
-        'items' => ['title' => 'Items', 'table' => 'items', 'tenant' => true, 'site' => true, 'fields' => ['code', 'name', 'item_type', 'brand', 'stock_uom_id', 'sales_uom_id', 'purchase_uom_id', 'standard_cost', 'sales_price', 'shelf_life_days', 'is_active'], 'view_permission' => 'inventory.item.view', 'manage_permission' => 'inventory.item.manage'],
-    ];
+    private array $resources;
+
+    public function __construct()
+    {
+        $this->resources = [
+            'transaction-codes' => ['title' => 'Transaction Codes', 'table' => 'transaction_codes', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'description', 'is_active']],
+            'prefix-codes' => ['title' => 'Prefix Codes', 'table' => 'prefix_codes', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'description', 'is_active']],
+            'companies' => ['title' => 'Companies', 'table' => 'companies', 'tenant' => false, 'site' => false, 'fields' => ['code', 'name', 'legal_name', 'tax_number', 'base_currency', 'address', 'is_active']],
+            'sites' => ['title' => 'Sites', 'table' => 'sites', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'address', 'is_active']],
+            'departments' => ['title' => 'Departments', 'table' => 'departments', 'tenant' => true, 'site' => true, 'fields' => ['code', 'name', 'description', 'is_active']],
+            'warehouses' => ['title' => 'Warehouses', 'table' => 'warehouses', 'tenant' => true, 'site' => true, 'fields' => ['code', 'name', 'description', 'is_active']],
+            'locations' => ['title' => 'Locations', 'table' => 'locations', 'tenant' => true, 'site' => true, 'fields' => ['warehouse_id', 'code', 'name', 'description', 'is_active']],
+            'countries' => ['title' => 'Countries', 'table' => 'countries', 'tenant' => false, 'site' => false, 'fields' => ['code', 'name', 'is_active']],
+            'provinces' => ['title' => 'Provinces', 'table' => 'provinces', 'tenant' => false, 'site' => false, 'fields' => ['parent_id', 'code', 'name', 'is_active']],
+            'cities' => ['title' => 'Cities', 'table' => 'cities', 'tenant' => false, 'site' => false, 'fields' => ['parent_id', 'code', 'name', 'is_active']],
+            'postal-codes' => ['title' => 'Postal Codes', 'table' => 'postal_codes', 'tenant' => false, 'site' => false, 'fields' => ['country_id', 'province_id', 'city_id', 'code', 'name', 'district', 'village', 'is_active']],
+            'currencies' => ['title' => 'Currencies', 'table' => 'currencies', 'tenant' => false, 'site' => false, 'fields' => ['code', 'name', 'rounding', 'is_active']],
+            'uoms' => ['title' => 'UoM', 'table' => 'uoms', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'description', 'is_active']],
+            'uom-conversions' => ['title' => 'UoM Conversions', 'table' => 'uom_conversions', 'tenant' => true, 'site' => false, 'fields' => ['from_uom_id', 'to_uom_id', 'multiplier', 'divider', 'is_active'], 'unique' => ['from_uom_id', 'to_uom_id']],
+            'vat' => ['title' => 'VAT', 'table' => 'vat_rates', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'rate', 'description', 'is_active']],
+            'wht' => ['title' => 'WHT / PPH', 'table' => 'wht_rates', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'rate', 'description', 'is_active']],
+            'item-vat' => ['title' => 'Item VAT', 'table' => 'item_vat_rates', 'tenant' => true, 'site' => false, 'fields' => ['item_id', 'vat_rate_id', 'is_active'], 'unique' => ['item_id', 'vat_rate_id']],
+            'address-master' => ['title' => 'Address Master', 'table' => 'addresses', 'tenant' => true, 'site' => true, 'fields' => ['address_type', 'owner_type', 'owner_code', 'code', 'name', 'country_id', 'province_id', 'city_id', 'postal_code_id', 'address_line1', 'address_line2', 'phone', 'email', 'is_active']],
+            'customers' => ['title' => 'Customers', 'table' => 'customers', 'tenant' => true, 'site' => true, 'fields' => ['code', 'name', 'terms_code', 'currency_code', 'tax_number', 'phone', 'email', 'address', 'is_active'], 'view_permission' => 'sales.customer.view', 'manage_permission' => 'sales.customer.manage'],
+            'suppliers' => ['title' => 'Suppliers', 'table' => 'suppliers', 'tenant' => true, 'site' => true, 'fields' => ['code', 'name', 'terms_code', 'currency_code', 'tax_number', 'phone', 'email', 'address', 'is_active'], 'view_permission' => 'purchase.supplier.view', 'manage_permission' => 'purchase.supplier.manage'],
+            'items' => ['title' => 'Items', 'table' => 'items', 'tenant' => true, 'site' => true, 'fields' => $this->itemFields(), 'view_permission' => 'inventory.item.view', 'manage_permission' => 'inventory.item.manage', 'unique' => ['item_code']],
+        ];
+    }
 
     /** @var array<string, array<string, mixed>> */
     private array $relations = [
@@ -155,9 +160,10 @@ class MasterDataTransferController extends BaseController
         $headers = array_map(static fn ($value) => trim((string) $value), $headers);
         $allowed = array_merge($config['fields'], $this->relationAliases($config));
         $needsCode = in_array('code', $config['fields'], true) && ! in_array('code', $headers, true);
-        if ($needsCode) {
+        $needsItemCode = $config['table'] === 'items' && ! in_array('item_code', $headers, true);
+        if ($needsCode || $needsItemCode) {
             fclose($handle);
-            throw new RuntimeException('CSV header must include code column.');
+            throw new RuntimeException($needsItemCode ? 'CSV header must include item_code column.' : 'CSV header must include code column.');
         }
 
         $db = Database::connect();
@@ -191,6 +197,12 @@ class MasterDataTransferController extends BaseController
 
             $data = $this->normalizeRelationCodes($config, $data, $rowNumber);
 
+            if ($config['table'] === 'items') {
+                $data['code'] = $data['item_code'] ?? null;
+                $data['name'] = $data['item_name'] ?? null;
+                $data['is_active'] = $data['active'] ?? 1;
+            }
+
             if (isset($data['is_active']) && $data['is_active'] === null) {
                 $data['is_active'] = 1;
             }
@@ -203,7 +215,7 @@ class MasterDataTransferController extends BaseController
                 $data['site_id'] = $tenant->activeSiteId();
             }
 
-            $data['updated_by'] = auth()->id();
+            $data['updated_by'] = (string) auth()->id();
             $data['updated_at'] = $now;
 
             $existing = $this->findExisting($config, $data);
@@ -213,7 +225,7 @@ class MasterDataTransferController extends BaseController
                 continue;
             }
 
-            $data['created_by'] = auth()->id();
+            $data['created_by'] = (string) auth()->id();
             $data['created_at'] = $now;
             $db->table($config['table'])->insert($data);
             $created++;
@@ -308,7 +320,9 @@ class MasterDataTransferController extends BaseController
     {
         $builder = Database::connect()->table($config['table']);
 
-        if (! empty($data['code'])) {
+        if ($config['table'] === 'items' && ! empty($data['item_code'])) {
+            $builder->where('item_code', $data['item_code']);
+        } elseif (! empty($data['code'])) {
             $builder->where('code', $data['code']);
         } elseif (! empty($config['unique'])) {
             foreach ($config['unique'] as $field) {
@@ -413,13 +427,18 @@ class MasterDataTransferController extends BaseController
             $sample[] = match ($header) {
                 'code' => 'EXAMPLE',
                 'name' => 'Example ' . $config['title'],
-                'is_active' => '1',
+                'item_code' => 'ITEM001',
+                'item_name' => 'Example Item',
+                'company' => 'PENA',
+                'site' => 'HO',
+                'stockuom', 'purchaseuom', 'sellinguom' => 'PCS',
+                'stockwhs' => 'MAIN',
+                'active', 'is_active' => '1',
                 'rate' => '0',
                 'multiplier', 'divider' => '1',
                 'warehouse_code' => 'MAIN',
                 'from_uom_code', 'to_uom_code', 'stock_uom_code', 'sales_uom_code', 'purchase_uom_code' => 'PCS',
-                'item_code' => 'ITEM001',
-                'vat_code' => 'VAT11',
+                'vat_code', 'vat' => 'VAT11',
                 'country_code' => 'IDN',
                 'province_code' => 'JBR',
                 'city_code' => 'BDG',
@@ -454,5 +473,16 @@ class MasterDataTransferController extends BaseController
     private function slug(string $value): string
     {
         return trim(strtolower((string) preg_replace('/[^a-zA-Z0-9]+/', '-', $value)), '-');
+    }
+
+    private function itemFields(): array
+    {
+        return [
+            'company', 'site', 'item_code', 'item_name', 'item_coded', 'item_named', 'shelf_life',
+            'stockuom', 'purchaseuom', 'sellinguom', 'stockwhs', 'item_price', 'purchasep', 'sellingprice', 'vat',
+            'item_length', 'item_width', 'item_heigh', 'item_diam', 'item_lengt', 'item_widthh', 'item_heigh_uom', 'item_diam_uom',
+            'out_length', 'out_width', 'out_height', 'out_diame', 'out_lengt', 'out_widthh', 'out_height_uom', 'out_diame_uom',
+            'item_group', 'item_subg', 'item_class', 'item_subc', 'item_type', 'item_subty', 'item_atribu', 'active',
+        ];
     }
 }
