@@ -25,6 +25,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     });
 
     $routes->group('inventory', static function (RouteCollection $routes): void {
+        $routes->get('stock-balances', 'Inventory\StockBalanceController::index');
         $routes->get('stock-adjustment', 'Inventory\StockAdjustmentController::create');
         $routes->post('stock-adjustment', 'Inventory\StockAdjustmentController::store');
     });
