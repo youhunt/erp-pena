@@ -51,6 +51,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
             $routes->get($resource, 'Setup\MasterDataController::index/' . $resource);
             $routes->get($resource . '/new', 'Setup\MasterDataController::create/' . $resource);
             $routes->post($resource, 'Setup\MasterDataController::store/' . $resource);
+            $routes->get($resource . '/(:num)', 'Setup\MasterDataController::show/' . $resource . '/$1');
             $routes->get($resource . '/(:num)/edit', 'Setup\MasterDataController::edit/' . $resource . '/$1');
             $routes->post($resource . '/(:num)', 'Setup\MasterDataController::update/' . $resource . '/$1');
             $routes->post($resource . '/(:num)/delete', 'Setup\MasterDataController::delete/' . $resource . '/$1');

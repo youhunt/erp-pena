@@ -98,6 +98,24 @@ class MasterDataController extends BaseController
         ]);
     }
 
+    public function show(string $resource, int $id): string
+    {
+        $config = $this->hydrateOptions($this->config($resource, 'view'));
+        $row = $this->scope($this->model($config), $config)->find($id);
+
+        if ($row === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        return view('setup/master/show', [
+            'title' => $config['title'] . ' Detail',
+            'resource' => $resource,
+            'config' => $config,
+            'row' => $row,
+            'canManage' => $this->can($config['manage_permission']),
+        ]);
+    }
+
     public function store(string $resource)
     {
         $config = $this->hydrateOptions($this->config($resource, 'manage'));
@@ -395,6 +413,7 @@ class MasterDataController extends BaseController
             ->groupStart()
                 ->where('a.owner_type', null)
                 ->orWhere('a.owner_type', '')
+                ->orWhere('a.owner_type', 'template')
                 ->orWhere('a.owner_type', $resource === 'customers' ? 'customer' : 'supplier')
                 ->orWhere('a.owner_type', 'company')
             ->groupEnd();

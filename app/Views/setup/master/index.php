@@ -161,13 +161,16 @@ $formatValue = static function (string $field, mixed $value) use ($relationLabel
                             </span>
                         </td>
                         <td class="text-end">
+                            <a class="btn btn-sm btn-outline-secondary" href="<?= site_url("setup/{$resource}/{$row['id']}") ?>" title="View">
+                                <i class="bx bx-show"></i>
+                            </a>
                             <?php if ($canManage): ?>
-                                <a class="btn btn-sm btn-outline-primary" href="<?= site_url("setup/{$resource}/{$row['id']}/edit") ?>">
+                                <a class="btn btn-sm btn-outline-primary" href="<?= site_url("setup/{$resource}/{$row['id']}/edit") ?>" title="Edit">
                                     <i class="bx bx-edit"></i>
                                 </a>
                                 <form class="d-inline" action="<?= site_url("setup/{$resource}/{$row['id']}/delete") ?>" method="post" onsubmit="return confirm('Delete this record?')">
                                     <?= csrf_field() ?>
-                                    <button class="btn btn-sm btn-outline-danger" type="submit">
+                                    <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete">
                                         <i class="bx bx-trash"></i>
                                     </button>
                                 </form>
