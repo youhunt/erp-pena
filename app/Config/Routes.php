@@ -45,6 +45,8 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     });
 
     $routes->group('setup', static function (RouteCollection $routes): void {
+        $routes->get('options/cities', 'Setup\MasterDataController::cityOptions');
+
         foreach (['transaction-codes','prefix-codes','companies','sites','departments','warehouses','locations','countries','provinces','cities','postal-codes','currencies','uoms','uom-conversions','vat','wht','item-vat','address-master','customers','suppliers','items'] as $resource) {
             $routes->get($resource, 'Setup\MasterDataController::index/' . $resource);
             $routes->get($resource . '/new', 'Setup\MasterDataController::create/' . $resource);

@@ -50,7 +50,7 @@ class MasterDataController extends BaseController
             'postal-codes' => $this->globalResource('Postal Codes', PostalCodeModel::class, 'postal_codes', [
                 'country_id' => ['label' => 'Country', 'type' => 'select', 'options_source' => 'countries'],
                 'province_id' => ['label' => 'Province', 'type' => 'select', 'options_source' => 'provinces'],
-                'city_id' => ['label' => 'City', 'type' => 'select', 'options_source' => 'cities'],
+                'city_id' => ['label' => 'City', 'type' => 'select', 'options_source' => 'cities', 'depends_on' => 'province_id', 'options_endpoint' => 'setup/options/cities'],
             ] + $this->fields(['code' => 'Postal Code*', 'name' => 'Area Name*', 'district' => 'District', 'village' => 'Village', 'is_active' => 'Active!'])),
             'uoms' => $this->tenantResource('Units of Measure', UomModel::class, 'uoms', false, $this->fields(['code' => 'Code*', 'name' => 'Name*', 'description' => 'Description~', 'is_active' => 'Active!'])),
             'uom-conversions' => $this->tenantResource('UoM Conversions', UomConversionModel::class, 'uom_conversions', false, [
@@ -174,6 +174,30 @@ class MasterDataController extends BaseController
         $this->audit('master.delete', $config, $id, $old, null);
 
         return redirect()->to(site_url("setup/{$resource}"))->with('message', $config['title'] . ' deleted.');
+    }
+
+    public function cityOptions()
+    {
+        if (! $this->can('setup.master.view')) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        $provinceId = (int) $this->request->getGet('province_id');
+        $model = new CityModel();
+
+        if ($provinceId > 0) {
+            $model->where('parent_id', $provinceId);
+        }
+
+        $options = [];
+        foreach ($model->where('is_active', 1)->orderBy('name', 'ASC')->findAll() as $row) {
+            $options[] = [
+                'value' => (string) $row['id'],
+                'label' => trim(($row['code'] ?? $row['id']) . ' - ' . ($row['name'] ?? '')),
+            ];
+        }
+
+        return $this->response->setJSON($options);
     }
 
     private function setupResource(string $title, string $model, string $table, bool $tenant, bool $site, bool $withRate = false): array
@@ -499,7 +523,7 @@ class MasterDataController extends BaseController
             'name' => ['label' => 'Address Name', 'type' => 'text', 'required' => true],
             'country_id' => ['label' => 'Country', 'type' => 'select', 'options_source' => 'countries'],
             'province_id' => ['label' => 'Province', 'type' => 'select', 'options_source' => 'provinces'],
-            'city_id' => ['label' => 'City', 'type' => 'select', 'options_source' => 'cities'],
+            'city_id' => ['label' => 'City', 'type' => 'select', 'options_source' => 'cities', 'depends_on' => 'province_id', 'options_endpoint' => 'setup/options/cities'],
             'postal_code_id' => ['label' => 'Postal Code', 'type' => 'select', 'options_source' => 'postal_codes'],
             'address_line1' => ['label' => 'Address Line 1', 'type' => 'textarea'],
             'address_line2' => ['label' => 'Address Line 2', 'type' => 'textarea'],

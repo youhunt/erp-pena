@@ -53,7 +53,14 @@ $addressTemplates ??= [];
                             <?php elseif ($type === 'select'): ?>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label" for="<?= esc($name) ?>"><?= esc($field['label']) ?></label>
-                                    <select class="form-select" id="<?= esc($name) ?>" name="<?= esc($name) ?>">
+                                    <select
+                                        class="form-select <?= ! empty($field['depends_on']) ? 'js-dependent-select' : '' ?>"
+                                        id="<?= esc($name) ?>"
+                                        name="<?= esc($name) ?>"
+                                        data-depends-on="<?= esc((string) ($field['depends_on'] ?? ''), 'attr') ?>"
+                                        data-options-url="<?= ! empty($field['options_endpoint']) ? esc(site_url($field['options_endpoint']), 'attr') : '' ?>"
+                                        data-current-value="<?= esc((string) $value, 'attr') ?>"
+                                    >
                                         <?php foreach ($field['options'] as $optionValue => $optionLabel): ?>
                                             <option value="<?= esc((string) $optionValue) ?>" <?= (string) $value === (string) $optionValue ? 'selected' : '' ?>>
                                                 <?= esc($optionLabel) ?>
@@ -119,4 +126,66 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 <?php endif ?>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.js-dependent-select').forEach(function (select) {
+        const parent = document.getElementById(select.dataset.dependsOn || '');
+        const url = select.dataset.optionsUrl || '';
+
+        if (!parent || !url) {
+            return;
+        }
+
+        function resetOptions(placeholder) {
+            select.innerHTML = '';
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = placeholder;
+            select.appendChild(option);
+        }
+
+        function loadOptions(keepCurrent) {
+            const parentValue = parent.value || '';
+            const currentValue = keepCurrent ? (select.dataset.currentValue || select.value || '') : '';
+
+            if (parentValue === '') {
+                resetOptions('Select parent first');
+                select.dataset.currentValue = '';
+                return;
+            }
+
+            resetOptions('Loading...');
+
+            fetch(url + '?' + new URLSearchParams({ province_id: parentValue }).toString(), {
+                headers: { 'Accept': 'application/json' }
+            })
+                .then(function (response) { return response.json(); })
+                .then(function (rows) {
+                    resetOptions('Select ' + (select.closest('.mb-3').querySelector('label')?.textContent || 'option'));
+
+                    rows.forEach(function (row) {
+                        const option = document.createElement('option');
+                        option.value = row.value;
+                        option.textContent = row.label;
+                        if (currentValue !== '' && currentValue === String(row.value)) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    });
+
+                    select.dataset.currentValue = '';
+                })
+                .catch(function () {
+                    resetOptions('Unable to load options');
+                });
+        }
+
+        parent.addEventListener('change', function () {
+            loadOptions(false);
+        });
+
+        loadOptions(true);
+    });
+});
+</script>
 <?= $this->endSection() ?>
