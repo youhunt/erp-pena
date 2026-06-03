@@ -6,6 +6,7 @@ use App\Controllers\BaseController;
 use App\Models\SalesOrderLineModel;
 use App\Models\SalesOrderModel;
 use App\Services\Sales\SalesOrderService;
+use App\Services\Support\TenantScope;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use Config\Database;
@@ -15,16 +16,8 @@ class SalesOrderController extends BaseController
 {
     public function index(): string
     {
-        $tenant = new TenantContext(session());
         $orders = new SalesOrderModel();
-
-        if ($tenant->activeCompanyId() !== null) {
-            $orders->where('company_id', $tenant->activeCompanyId());
-        }
-
-        if ($tenant->activeSiteId() !== null) {
-            $orders->where('site_id', $tenant->activeSiteId());
-        }
+        (new TenantScope())->applyToModel($orders);
 
         return view('sales/orders/index', [
             'title' => 'Sales Orders',
@@ -83,8 +76,7 @@ class SalesOrderController extends BaseController
 
     public function show(int $id): string
     {
-        $tenant = new TenantContext(session());
-        $order = $this->scopedOrder($tenant, $id);
+        $order = $this->scopedOrder($id);
 
         if ($order === null) {
             throw PageNotFoundException::forPageNotFound();
@@ -97,15 +89,10 @@ class SalesOrderController extends BaseController
         ]);
     }
 
-    private function scopedOrder(TenantContext $tenant, int $id): ?array
+    private function scopedOrder(int $id): ?array
     {
         $orders = new SalesOrderModel();
-        if ($tenant->activeCompanyId() !== null) {
-            $orders->where('company_id', $tenant->activeCompanyId());
-        }
-        if ($tenant->activeSiteId() !== null) {
-            $orders->where('site_id', $tenant->activeSiteId());
-        }
+        (new TenantScope())->applyToModel($orders);
 
         return $orders->find($id);
     }
