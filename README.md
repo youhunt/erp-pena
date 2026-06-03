@@ -19,7 +19,7 @@ This repository was empty at initial audit time, so the first implementation cre
 - Vendor-neutral OCR/AI service contracts
 - Documentation under `docs/`
 
-The current continuation branch adds formal repository audit documentation, route permission mapping, and a reusable tenant scope helper so development can continue safely without regenerating the project.
+The current continuation branch adds formal repository audit documentation, route permission mapping, a reusable tenant scope helper, route-level Shield permission enforcement, and a local health-check command so development can continue safely without regenerating the project.
 
 Skote assets are stored in `resources.zip` and extracted into `public/assets/skote` for the current layout.
 
@@ -33,6 +33,10 @@ Skote assets are stored in `resources.zip` and extracted into `public/assets/sko
 ## Quick Start
 
 ```bash
+git clone https://github.com/youhunt/erp-pena.git
+cd erp-pena
+git checkout feature/audit-architecture-foundation
+composer install
 cp env .env
 ```
 
@@ -53,10 +57,10 @@ wilayah.baseUrl = 'https://api-wilayah.belajardisiniaja.com'
 wilayah.apiToken = 'YOUR_WILAYAH_API_TOKEN'
 ```
 
-Install dependencies:
+Create the database:
 
-```bash
-composer install
+```sql
+CREATE DATABASE pena_erp CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
 Run migrations and seeders:
@@ -68,10 +72,22 @@ php spark db:seed PenaErpSeeder
 
 Run the seeder again after menu or baseline master updates; it refreshes `menu_items` without deleting transactional data.
 
+Run local readiness check:
+
+```bash
+php spark pena:health
+```
+
 Start the app:
 
 ```bash
 php spark serve
+```
+
+Open:
+
+```text
+http://localhost:8080
 ```
 
 Default admin:
@@ -80,6 +96,40 @@ Default admin:
 - Password: `Admin123!`
 
 Change the password immediately after first login.
+
+## Core Security Notes
+
+- All ERP routes remain protected by Shield `session` authentication.
+- Sensitive route groups now also use the custom `permission` filter.
+- Sidebar visibility is not treated as security; route-level permissions enforce access even if a URL is typed manually.
+- `TenantBootstrapFilter` still initializes active company/site context for protected ERP areas.
+- `App\Services\Support\TenantScope` is available for repositories, models, services, and controllers that need consistent `company_id` and `site_id` scoping.
+
+## Implemented Core Areas
+
+- Login, register, logout, and Shield auth route foundation
+- Group/permission matrix in `app/Config/AuthGroups.php`
+- Dashboard route and Skote-compatible layout foundation
+- Dynamic sidebar through menu records and permission checks
+- Company/site tenant context and topbar switcher foundation
+- Setup/master CRUD foundation
+- User and role admin foundation
+- Sales Order and Purchase Order starter routes retained as existing foundation
+- AI document routes retained as existing foundation, but no new OCR scope is added in this continuation
+- Audit documentation and route permission map
+- Local health check command: `php spark pena:health`
+
+## Not Yet Implemented in This Core Continuation
+
+- Inventory operational flow
+- Purchasing receiving and vendor invoice flow
+- Sales delivery order and sales invoice flow
+- Accounting journal/posting flow
+- POS
+- Production
+- OCR queue/worker hardening
+
+These are intentionally deferred until the core system is runnable, permission-protected, and tenant-safe.
 
 ## Documentation
 
