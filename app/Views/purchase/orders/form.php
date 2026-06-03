@@ -63,7 +63,7 @@
                 <table class="table table-nowrap align-middle" id="poLinesTable">
                     <thead class="table-light">
                         <tr>
-                            <th style="min-width:140px;">Item Code</th>
+                            <th style="min-width:220px;">Item Code</th>
                             <th style="min-width:220px;">Item Name</th>
                             <th style="width:110px;">Qty</th>
                             <th style="width:100px;">UoM</th>
@@ -77,7 +77,29 @@
                     <tbody>
                         <?php for ($i = 0; $i < 3; $i++): ?>
                             <tr>
-                                <td><input type="text" name="item_code[]" class="form-control item-code"></td>
+                                <td>
+                                    <input type="hidden" name="item_id[]" class="item-id">
+                                    <select name="item_code[]" class="form-select item-select">
+                                        <option value="">Manual item</option>
+                                        <?php foreach ($items as $item): ?>
+                                            <?php
+                                            $code = (string) ($item['item_code'] ?? $item['code'] ?? '');
+                                            $name = (string) ($item['item_name'] ?? $item['name'] ?? '');
+                                            $uom = (string) ($item['purchaseuom'] ?? $item['stockuom'] ?? 'PCS');
+                                            $price = (float) ($item['purchasep'] ?? $item['item_price'] ?? 0);
+                                            ?>
+                                            <option
+                                                value="<?= esc($code) ?>"
+                                                data-id="<?= (int) ($item['id'] ?? 0) ?>"
+                                                data-name="<?= esc($name) ?>"
+                                                data-uom="<?= esc($uom) ?>"
+                                                data-price="<?= esc((string) $price) ?>"
+                                            >
+                                                <?= esc($code . ' - ' . $name) ?>
+                                            </option>
+                                        <?php endforeach ?>
+                                    </select>
+                                </td>
                                 <td><input type="text" name="item_name[]" class="form-control item-name"></td>
                                 <td><input type="number" step="0.0001" name="qty[]" class="form-control calc text-end" value="<?= $i === 0 ? '1' : '' ?>"></td>
                                 <td><input type="text" name="uom_code[]" class="form-control" value="PCS"></td>
@@ -160,6 +182,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function bindRow(row) {
         row.querySelectorAll('.calc').forEach(input => input.addEventListener('input', recalc));
+        row.querySelector('.item-select').addEventListener('change', function () {
+            const option = this.options[this.selectedIndex];
+            row.querySelector('.item-id').value = option?.dataset.id || '';
+            row.querySelector('[name="item_name[]"]').value = option?.dataset.name || '';
+            row.querySelector('[name="uom_code[]"]').value = option?.dataset.uom || 'PCS';
+            row.querySelector('[name="unit_price[]"]').value = option?.dataset.price || '0';
+            recalc();
+        });
         row.querySelector('.remove-line').addEventListener('click', function () {
             if (tbody.querySelectorAll('tr').length > 1) {
                 row.remove();
@@ -171,7 +201,14 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('addLineBtn').addEventListener('click', function () {
         const clone = tbody.querySelector('tr').cloneNode(true);
         clone.querySelectorAll('input').forEach(function (input) {
+            if (input.type === 'hidden') {
+                input.value = '';
+                return;
+            }
             input.value = input.name === 'uom_code[]' ? 'PCS' : (input.classList.contains('calc') ? '0' : '');
+        });
+        clone.querySelectorAll('select').forEach(function (select) {
+            select.selectedIndex = 0;
         });
         tbody.appendChild(clone);
         bindRow(clone);

@@ -113,6 +113,7 @@ class SalesOrderController extends BaseController
     private function postedLines(): array
     {
         $itemCodes = (array) $this->request->getPost('item_code');
+        $itemIds = (array) $this->request->getPost('item_id');
         $itemNames = (array) $this->request->getPost('item_name');
         $qtys = (array) $this->request->getPost('qty');
         $uoms = (array) $this->request->getPost('uom_code');
@@ -136,6 +137,7 @@ class SalesOrderController extends BaseController
             }
 
             $lines[] = [
+                'item_id' => (int) ($itemIds[$index] ?? 0) > 0 ? (int) $itemIds[$index] : null,
                 'item_code' => $code !== '' ? $code : null,
                 'item_name' => $name !== '' ? $name : $code,
                 'qty' => $qty,
