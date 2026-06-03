@@ -31,7 +31,6 @@ use CodeIgniter\Model;
 
 class MasterDataController extends BaseController
 {
-    /** @var array<string, array<string, mixed>> */
     private array $resources;
 
     public function __construct()
@@ -167,12 +166,9 @@ class MasterDataController extends BaseController
         if (! $this->validate($this->rules($config))) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
-
         $payload = $this->payload($config, true);
-        $model = $this->model($config);
-        $id = $model->insert($payload, true);
+        $id = $this->model($config)->insert($payload, true);
         $this->audit('master.create', $config, (int) $id, null, $payload);
-
         return redirect()->to(site_url("setup/{$resource}"))->with('message', $config['title'] . ' created.');
     }
 
@@ -195,17 +191,14 @@ class MasterDataController extends BaseController
         if (! $this->validate($this->rules($config))) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
-
         $model = $this->scope($this->model($config), $config);
         $old = $model->find($id);
         if ($old === null) {
             throw PageNotFoundException::forPageNotFound();
         }
-
         $payload = $this->payload($config, false);
         $model->update($id, $payload);
         $this->audit('master.update', $config, $id, $old, $payload);
-
         return redirect()->to(site_url("setup/{$resource}"))->with('message', $config['title'] . ' updated.');
     }
 
@@ -217,10 +210,8 @@ class MasterDataController extends BaseController
         if ($old === null) {
             throw PageNotFoundException::forPageNotFound();
         }
-
         $model->delete($id);
         $this->audit('master.delete', $config, $id, $old, null);
-
         return redirect()->to(site_url("setup/{$resource}"))->with('message', $config['title'] . ' deleted.');
     }
 
@@ -297,13 +288,11 @@ class MasterDataController extends BaseController
             }
             $payload[$name] = $value;
         }
-
         if ($config['table'] === 'items') {
             $payload['code'] = $payload['item_code'] ?? null;
             $payload['name'] = $payload['item_name'] ?? null;
             $payload['is_active'] = $payload['active'] ?? 1;
         }
-
         $tenant = new TenantContext(session());
         if ($config['tenant']) {
             $payload['company_id'] = $tenant->activeCompanyId();
@@ -352,7 +341,8 @@ class MasterDataController extends BaseController
                 continue;
             }
             if (! empty($field['options_source'])) {
-                $config['fields'][$name]['options'] = ['' => 'Select ' . $field['label']] + $this->optionsFor($field['options_source']);
+                $valueField = $field['option_value'] ?? 'id';
+                $config['fields'][$name]['options'] = ['' => 'Select ' . $field['label']] + $this->optionsFor($field['options_source'], $valueField);
                 continue;
             }
             $config['fields'][$name]['options'] ??= ['' => 'Select ' . $field['label']];
@@ -360,8 +350,7 @@ class MasterDataController extends BaseController
         return $config;
     }
 
-    /** @return array<string, string> */
-    private function optionsFor(string $source): array
+    private function optionsFor(string $source, string $valueField = 'id'): array
     {
         $map = [
             'countries' => [CountryModel::class, false, false],
@@ -390,7 +379,8 @@ class MasterDataController extends BaseController
         foreach ($rows as $row) {
             $code = $row['item_code'] ?? $row['code'] ?? $row['id'];
             $name = $row['item_name'] ?? $row['name'] ?? '';
-            $options[(string) $row['id']] = trim($code . ' - ' . $name);
+            $value = $valueField === 'code' ? (string) $code : (string) $row['id'];
+            $options[$value] = trim($code . ' - ' . $name);
         }
         return $options;
     }
@@ -420,6 +410,11 @@ class MasterDataController extends BaseController
         ];
     }
 
+    private function uomCodeSelect(string $label): array
+    {
+        return ['label' => $label, 'type' => 'select', 'options_source' => 'uoms', 'option_value' => 'code'];
+    }
+
     private function itemFields(): array
     {
         return [
@@ -430,30 +425,30 @@ class MasterDataController extends BaseController
             'item_coded' => ['label' => 'Item Code Detail', 'type' => 'text'],
             'item_named' => ['label' => 'Item Name Detail', 'type' => 'text'],
             'shelf_life' => ['label' => 'Shelf Life', 'type' => 'number', 'default' => 0],
-            'stockuom' => ['label' => 'Stock UoM', 'type' => 'text'],
-            'purchaseuom' => ['label' => 'Purchase UoM', 'type' => 'text'],
-            'sellinguom' => ['label' => 'Selling UoM', 'type' => 'text'],
-            'stockwhs' => ['label' => 'Warehouse', 'type' => 'text'],
+            'stockuom' => $this->uomCodeSelect('Stock UoM'),
+            'purchaseuom' => $this->uomCodeSelect('Purchase UoM'),
+            'sellinguom' => $this->uomCodeSelect('Selling UoM'),
+            'stockwhs' => ['label' => 'Warehouse', 'type' => 'select', 'options_source' => 'warehouses', 'option_value' => 'code'],
             'item_price' => ['label' => 'Stock Price', 'type' => 'number', 'default' => 0],
             'purchasep' => ['label' => 'Purchase Price', 'type' => 'number', 'default' => 0],
             'sellingprice' => ['label' => 'Selling Price', 'type' => 'number', 'default' => 0],
-            'vat' => ['label' => 'VAT Code', 'type' => 'text'],
+            'vat' => ['label' => 'VAT Code', 'type' => 'select', 'options_source' => 'vat_rates', 'option_value' => 'code'],
             'item_length' => ['label' => 'Item Length', 'type' => 'number', 'default' => 0],
             'item_width' => ['label' => 'Item Width', 'type' => 'number', 'default' => 0],
             'item_heigh' => ['label' => 'Item Height', 'type' => 'number', 'default' => 0],
             'item_diam' => ['label' => 'Item Diameter', 'type' => 'number', 'default' => 0],
-            'item_lengt' => ['label' => 'UoM Length', 'type' => 'text'],
-            'item_widthh' => ['label' => 'UoM Width', 'type' => 'text'],
-            'item_heigh_uom' => ['label' => 'UoM Height', 'type' => 'text'],
-            'item_diam_uom' => ['label' => 'UoM Diameter', 'type' => 'text'],
+            'item_lengt' => $this->uomCodeSelect('UoM Length'),
+            'item_widthh' => $this->uomCodeSelect('UoM Width'),
+            'item_heigh_uom' => $this->uomCodeSelect('UoM Height'),
+            'item_diam_uom' => $this->uomCodeSelect('UoM Diameter'),
             'out_length' => ['label' => 'Outer Length', 'type' => 'number', 'default' => 0],
             'out_width' => ['label' => 'Outer Width', 'type' => 'number', 'default' => 0],
             'out_height' => ['label' => 'Outer Height', 'type' => 'number', 'default' => 0],
             'out_diame' => ['label' => 'Outer Diameter', 'type' => 'number', 'default' => 0],
-            'out_lengt' => ['label' => 'Outer UoM Length', 'type' => 'text'],
-            'out_widthh' => ['label' => 'Outer UoM Width', 'type' => 'text'],
-            'out_height_uom' => ['label' => 'Outer UoM Height', 'type' => 'text'],
-            'out_diame_uom' => ['label' => 'Outer UoM Diameter', 'type' => 'text'],
+            'out_lengt' => $this->uomCodeSelect('Outer UoM Length'),
+            'out_widthh' => $this->uomCodeSelect('Outer UoM Width'),
+            'out_height_uom' => $this->uomCodeSelect('Outer UoM Height'),
+            'out_diame_uom' => $this->uomCodeSelect('Outer UoM Diameter'),
             'item_group' => ['label' => 'Group', 'type' => 'text'],
             'item_subg' => ['label' => 'SubGroup', 'type' => 'text'],
             'item_class' => ['label' => 'Class', 'type' => 'text'],
