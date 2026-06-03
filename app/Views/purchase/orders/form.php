@@ -28,7 +28,7 @@
                     <select name="supplier_id" class="form-select" id="supplierSelect">
                         <option value="">Manual / No Supplier Master</option>
                         <?php foreach ($suppliers as $supplier): ?>
-                            <option value="<?= (int) $supplier['id'] ?>" data-name="<?= esc($supplier['name']) ?>">
+                            <option value="<?= (int) $supplier['id'] ?>" data-name="<?= esc($supplier['name']) ?>" data-terms="<?= esc((string) ($supplier['terms_code'] ?? $supplier['terms'] ?? ''), 'attr') ?>">
                                 <?= esc($supplier['code'] . ' - ' . $supplier['name']) ?>
                             </option>
                         <?php endforeach ?>
@@ -42,7 +42,11 @@
                     <label class="form-label">Supplier Name</label>
                     <input type="text" name="supplier_name" id="supplierName" class="form-control" value="<?= esc(old('supplier_name')) ?>">
                 </div>
-                <div class="col-md-6 mb-3">
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Terms</label>
+                    <input type="text" name="terms_code" id="termsCode" class="form-control" value="<?= esc(old('terms_code')) ?>">
+                </div>
+                <div class="col-md-3 mb-3">
                     <label class="form-label">Notes</label>
                     <input type="text" name="notes" class="form-control" value="<?= esc(old('notes')) ?>">
                 </div>
@@ -150,6 +154,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const tbody = table.querySelector('tbody');
     const supplierSelect = document.getElementById('supplierSelect');
     const supplierName = document.getElementById('supplierName');
+    const termsCode = document.getElementById('termsCode');
 
     function number(value) {
         const parsed = parseFloat(value || '0');
@@ -219,6 +224,9 @@ document.addEventListener('DOMContentLoaded', function () {
         const option = supplierSelect.options[supplierSelect.selectedIndex];
         if (option && option.dataset.name) {
             supplierName.value = option.dataset.name;
+        }
+        if (option && option.dataset.terms) {
+            termsCode.value = option.dataset.terms;
         }
     });
 

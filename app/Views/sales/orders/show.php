@@ -18,6 +18,7 @@
                         <tr><th>SO No</th><td><?= esc($order['so_no']) ?></td></tr>
                         <tr><th>Date</th><td><?= esc($order['so_date']) ?></td></tr>
                         <tr><th>Customer</th><td><?= esc($order['customer_name'] ?? '-') ?></td></tr>
+                        <tr><th>Terms</th><td><?= esc($order['terms_code'] ?? '-') ?></td></tr>
                         <tr><th>Currency</th><td><?= esc($order['currency_code']) ?></td></tr>
                         <tr><th>Company</th><td><?= esc($order['company_id']) ?></td></tr>
                         <tr><th>Site</th><td><?= esc($order['site_id'] ?? '-') ?></td></tr>

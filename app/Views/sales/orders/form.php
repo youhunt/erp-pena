@@ -28,7 +28,7 @@
                     <select name="customer_id" class="form-select" id="customerSelect">
                         <option value="">Manual / No Customer Master</option>
                         <?php foreach ($customers as $customer): ?>
-                            <option value="<?= (int) $customer['id'] ?>" data-name="<?= esc($customer['name']) ?>">
+                            <option value="<?= (int) $customer['id'] ?>" data-name="<?= esc($customer['name']) ?>" data-terms="<?= esc((string) ($customer['terms_code'] ?? $customer['terms'] ?? ''), 'attr') ?>">
                                 <?= esc($customer['code'] . ' - ' . $customer['name']) ?>
                             </option>
                         <?php endforeach ?>
@@ -42,7 +42,11 @@
                     <label class="form-label">Customer Name</label>
                     <input type="text" name="customer_name" id="customerName" class="form-control" value="<?= esc(old('customer_name')) ?>">
                 </div>
-                <div class="col-md-6 mb-3">
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Terms</label>
+                    <input type="text" name="terms_code" id="termsCode" class="form-control" value="<?= esc(old('terms_code')) ?>">
+                </div>
+                <div class="col-md-3 mb-3">
                     <label class="form-label">Notes</label>
                     <input type="text" name="notes" class="form-control" value="<?= esc(old('notes')) ?>">
                 </div>
@@ -134,6 +138,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const tbody = table.querySelector('tbody');
     const customerSelect = document.getElementById('customerSelect');
     const customerName = document.getElementById('customerName');
+    const termsCode = document.getElementById('termsCode');
 
     function number(value) {
         const parsed = parseFloat(value || '0');
@@ -203,6 +208,9 @@ document.addEventListener('DOMContentLoaded', function () {
         const option = customerSelect.options[customerSelect.selectedIndex];
         if (option && option.dataset.name) {
             customerName.value = option.dataset.name;
+        }
+        if (option && option.dataset.terms) {
+            termsCode.value = option.dataset.terms;
         }
     });
 

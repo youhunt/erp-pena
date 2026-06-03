@@ -70,6 +70,7 @@ class SalesOrderController extends BaseController
                 'so_date' => (string) $this->request->getPost('so_date'),
                 'customer_id' => $customerId > 0 ? $customerId : null,
                 'customer_name' => $customer['name'] ?? trim((string) $this->request->getPost('customer_name')),
+                'terms_code' => trim((string) ($this->request->getPost('terms_code') ?: ($customer['terms_code'] ?? $customer['terms'] ?? ''))),
                 'currency_code' => trim((string) ($this->request->getPost('currency_code') ?: 'IDR')),
                 'status' => 'draft',
                 'notes' => trim((string) $this->request->getPost('notes')),

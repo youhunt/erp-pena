@@ -75,6 +75,7 @@ class PurchaseOrderController extends BaseController
                 'po_date' => (string) $this->request->getPost('po_date'),
                 'supplier_id' => $supplierId > 0 ? $supplierId : null,
                 'supplier_name' => $supplier['name'] ?? trim((string) $this->request->getPost('supplier_name')),
+                'terms_code' => trim((string) ($this->request->getPost('terms_code') ?: ($supplier['terms_code'] ?? $supplier['terms'] ?? ''))),
                 'currency_code' => trim((string) ($this->request->getPost('currency_code') ?: 'IDR')),
                 'status' => 'draft',
                 'notes' => trim((string) $this->request->getPost('notes')),

@@ -18,6 +18,7 @@
                         <tr><th>PO No</th><td><?= esc($order['po_no']) ?></td></tr>
                         <tr><th>Date</th><td><?= esc($order['po_date']) ?></td></tr>
                         <tr><th>Supplier</th><td><?= esc($order['supplier_name'] ?? '-') ?></td></tr>
+                        <tr><th>Terms</th><td><?= esc($order['terms_code'] ?? '-') ?></td></tr>
                         <tr><th>Currency</th><td><?= esc($order['currency_code']) ?></td></tr>
                         <tr><th>Company</th><td><?= esc($order['company_id']) ?></td></tr>
                         <tr><th>Site</th><td><?= esc($order['site_id'] ?? '-') ?></td></tr>
