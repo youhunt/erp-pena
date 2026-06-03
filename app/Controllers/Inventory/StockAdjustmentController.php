@@ -30,22 +30,27 @@ class StockAdjustmentController extends BaseController
             return redirect()->back()->withInput()->with('error', 'Active company is required.');
         }
 
-        $rules = [
-            'item_code' => 'required|max_length[80]',
-            'qty' => 'required|decimal',
-        ];
-
-        if (! $this->validate($rules)) {
-            return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
-        }
-
         $qty = (float) $this->request->getPost('qty');
         if ($qty === 0.0) {
             return redirect()->back()->withInput()->with('error', 'Adjustment quantity cannot be zero.');
         }
 
-        $itemCode = trim((string) $this->request->getPost('item_code'));
-        $item = Database::connect()->table('items')->where('code', $itemCode)->get()->getRowArray();
+        $itemCode = trim((string) ($this->request->getPost('item_code') ?: $this->request->getPost('manual_item_code')));
+        if ($itemCode === '') {
+            return redirect()->back()->withInput()->with('error', 'Item code is required. Select item or fill manual item code.');
+        }
+
+        if (! $this->validate(['qty' => 'required|decimal'])) {
+            return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
+        }
+
+        $db = Database::connect();
+        $item = $db->table('items')->where('code', $itemCode)->get()->getRowArray();
+        $itemName = $item['name'] ?? trim((string) $this->request->getPost('item_name'));
+
+        if ($itemName === '') {
+            $itemName = $itemCode;
+        }
 
         try {
             (new InventoryStockService())->adjust([
@@ -55,7 +60,7 @@ class StockAdjustmentController extends BaseController
                 'location_id' => $this->nullableInt($this->request->getPost('location_id')),
                 'item_id' => isset($item['id']) ? (int) $item['id'] : null,
                 'item_code' => $itemCode,
-                'item_name' => $item['name'] ?? trim((string) $this->request->getPost('item_name')),
+                'item_name' => $itemName,
                 'uom_code' => trim((string) ($this->request->getPost('uom_code') ?: 'PCS')),
                 'qty' => $qty,
                 'unit_cost' => (float) ($this->request->getPost('unit_cost') ?: 0),
@@ -76,6 +81,11 @@ class StockAdjustmentController extends BaseController
     {
         $tenant = new TenantContext(session());
         $db = Database::connect();
+
+        if (! $db->tableExists($table)) {
+            return [];
+        }
+
         $builder = $db->table($table);
 
         if ($db->fieldExists('deleted_at', $table)) {
