@@ -10,10 +10,15 @@ class SalesMenuSeeder extends Seeder
     {
         $now = date('Y-m-d H:i:s');
         $salesId = $this->menuItem(null, 'Sales', '#', 'bx-cart', null, 25, $now);
-        $this->menuItem($salesId, 'Sales Orders', 'sales/orders', null, 'sales.order.view', 10, $now);
+        $this->menuItem($salesId, 'Sales Order', 'sales/orders', null, 'sales.order.view', 10, $now);
 
         $this->db->table('menu_items')
             ->where('route', 'modules/sales-order')
+            ->update(['is_active' => 0, 'updated_at' => $now]);
+
+        $this->db->table('menu_items')
+            ->where('parent_id', $salesId)
+            ->where('label', 'Sales Orders')
             ->update(['is_active' => 0, 'updated_at' => $now]);
     }
 

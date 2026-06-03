@@ -10,7 +10,12 @@ class PurchaseMenuSeeder extends Seeder
     {
         $now = date('Y-m-d H:i:s');
         $purchaseId = $this->menuItem(null, 'Purchase', '#', 'bx-cart', null, 30, $now);
-        $this->menuItem($purchaseId, 'Purchase Orders', 'purchase/orders', null, 'purchase.po.view', 10, $now);
+        $this->menuItem($purchaseId, 'Purchase Order', 'purchase/orders', null, 'purchase.po.view', 10, $now);
+
+        $this->db->table('menu_items')
+            ->where('parent_id', $purchaseId)
+            ->where('label', 'Purchase Orders')
+            ->update(['is_active' => 0, 'updated_at' => $now]);
     }
 
     private function menuItem(?int $parentId, string $label, string $route, ?string $icon, ?string $permission, int $sort, string $now): int
