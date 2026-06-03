@@ -20,6 +20,7 @@ class DemoMasterDataSeeder extends Seeder
         $this->seedUoms();
         $this->seedWarehousesAndLocations();
         $this->seedVat();
+        $this->seedTermsAndPromotions();
         $this->seedPostalCodes();
         $this->seedAddressTemplates();
         $this->seedCustomers();
@@ -141,6 +142,95 @@ class DemoMasterDataSeeder extends Seeder
                 'description' => 'Demo ' . $name,
                 'is_active' => 1,
             ], ['company_id' => $this->companyId, 'code' => $code]);
+        }
+    }
+
+    private function seedTermsAndPromotions(): void
+    {
+        foreach ([['COD', 'Cash On Delivery', 0, ''], ['NET14', 'Net 14 Days', 14, ''], ['NET21', 'Net 21 Days', 21, 'PROMO-REG'], ['NET30', 'Net 30 Days', 30, 'PROMO-REG']] as [$code, $name, $days, $promo]) {
+            foreach (['customer_terms', 'supplier_terms'] as $table) {
+                $this->upsertByCode($table, [
+                    'company_id' => $this->companyId,
+                    'site_id' => $this->siteId,
+                    'company' => $this->companyCode,
+                    'site' => $this->siteCode,
+                    'terms_code' => $code,
+                    'terms_name' => $name,
+                    'terms_days' => $days,
+                    'promo_code' => $promo !== '' ? $promo : null,
+                    'is_active' => 1,
+                ], ['company_id' => $this->companyId, 'site_id' => $this->siteId, 'terms_code' => $code]);
+            }
+        }
+
+        $customerPromos = [
+            ['PROMO-REG', 'Regular customer percent discount', 'CUST-001', 'PT Nusantara Retailindo', 'ITEM-0001', 'Kertas A4 80gsm 001', 10, 'percent', 1, 100, 'PCS', 0, 5, 0, null, null, 0],
+            ['PROMO-FREE', 'Buy 10 get 1 free item', 'CUST-002', 'CV Bandung Makmur', 'ITEM-0002', 'Pulpen Hitam 002', 10, 'free', 10, 999, 'PCS', 0, 0, 0, 'ITEM-0002', 'Pulpen Hitam 002', 1],
+        ];
+
+        foreach ($customerPromos as $promo) {
+            [$code, $description, $customer, $customerName, $item, $itemName, $line, $type, $fromQty, $toQty, $uom, $price, $pct, $disc, $freeItem, $freeItemName, $freeQty] = $promo;
+            $this->upsertByCode('customer_promotions', [
+                'company_id' => $this->companyId,
+                'site_id' => $this->siteId,
+                'company' => $this->companyCode,
+                'site' => $this->siteCode,
+                'promo_code' => $code,
+                'promo_description' => $description,
+                'customer' => $customer,
+                'customer_name' => $customerName,
+                'item_parent' => $item,
+                'item_parent_name' => $itemName,
+                'line_no' => $line,
+                'promo_type' => $type,
+                'from_qty' => $fromQty,
+                'to_qty' => $toQty,
+                'uom' => $uom,
+                'promo_price' => $price,
+                'pct' => $pct,
+                'disc_amount' => $disc,
+                'free_item' => $freeItem,
+                'free_item_name' => $freeItemName,
+                'free_qty' => $freeQty,
+                'active_date' => date('Y-m-01'),
+                'inactive_date' => date('Y-m-t'),
+                'is_active' => 1,
+            ], ['company_id' => $this->companyId, 'site_id' => $this->siteId, 'promo_code' => $code, 'line_no' => $line]);
+        }
+
+        $supplierPromos = [
+            ['SUP-DISC', 'Supplier bulk purchase discount', 'SUP-001', 'PT Sumber Material Prima', 'ITEM-0005', 'Karton Box 005', 10, 'disc_amount', 50, 9999, 'BOX', 0, 0, 25000, null, null, 0],
+            ['SUP-PRICE', 'Supplier special purchase price', 'SUP-002', 'CV Bandung Packaging', 'ITEM-0006', 'Plastik Wrap 006', 10, 'disc_amount', 1, 500, 'ROLL', 125000, 0, 0, null, null, 0],
+        ];
+
+        foreach ($supplierPromos as $promo) {
+            [$code, $description, $supplier, $supplierName, $item, $itemName, $line, $type, $fromQty, $toQty, $uom, $price, $pct, $disc, $freeItem, $freeItemName, $freeQty] = $promo;
+            $this->upsertByCode('supplier_promotions', [
+                'company_id' => $this->companyId,
+                'site_id' => $this->siteId,
+                'company' => $this->companyCode,
+                'site' => $this->siteCode,
+                'promo_code' => $code,
+                'promo_description' => $description,
+                'supplier' => $supplier,
+                'supplier_name' => $supplierName,
+                'item_parent' => $item,
+                'item_parent_name' => $itemName,
+                'line_no' => $line,
+                'promo_type' => $type,
+                'from_qty' => $fromQty,
+                'to_qty' => $toQty,
+                'uom' => $uom,
+                'promo_price' => $price,
+                'pct' => $pct,
+                'disc_amount' => $disc,
+                'free_item' => $freeItem,
+                'free_item_name' => $freeItemName,
+                'free_qty' => $freeQty,
+                'active_date' => date('Y-m-01'),
+                'inactive_date' => date('Y-m-t'),
+                'is_active' => 1,
+            ], ['company_id' => $this->companyId, 'site_id' => $this->siteId, 'promo_code' => $code, 'line_no' => $line]);
         }
     }
 

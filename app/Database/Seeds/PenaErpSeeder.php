@@ -135,8 +135,8 @@ class PenaErpSeeder extends Seeder
 
         $this->menuGroup('Sales', 'bx-cart', 40, [
             ['Customer Master', 'setup/customers', 'sales.customer.view'],
-            ['Customer Terms', $this->placeholderRoute('Customer Terms'), 'sales.customer.view'],
-            ['Customer Promo', $this->placeholderRoute('Customer Promo'), 'sales.customer.view'],
+            ['Customer Terms', 'setup/customer-terms', 'sales.customer.view'],
+            ['Customer Promo', 'setup/customer-promos', 'sales.customer.view'],
             ['Customer Address', $this->placeholderRoute('Customer Address'), 'sales.customer.view'],
             ['Sales Order', 'sales/orders', 'sales.order.view'],
             ['Allocation Order', $this->placeholderRoute('Allocation Order'), 'sales.order.view'],
@@ -146,8 +146,8 @@ class PenaErpSeeder extends Seeder
 
         $this->menuGroup('Purchase', 'bx-shopping-bag', 50, [
             ['Supplier Master', 'setup/suppliers', 'purchase.supplier.view'],
-            ['Supplier Terms', $this->placeholderRoute('Supplier Terms'), 'purchase.supplier.view'],
-            ['Supplier Promo', $this->placeholderRoute('Supplier Promo'), 'purchase.supplier.view'],
+            ['Supplier Terms', 'setup/supplier-terms', 'purchase.supplier.view'],
+            ['Supplier Promo', 'setup/supplier-promos', 'purchase.supplier.view'],
             ['Supplier Address', $this->placeholderRoute('Supplier Address'), 'purchase.supplier.view'],
             ['Purchase Order', 'purchase/orders', 'purchase.po.view'],
             ['Purchase Intransit', $this->placeholderRoute('Purchase Intransit'), 'purchase.po.view'],

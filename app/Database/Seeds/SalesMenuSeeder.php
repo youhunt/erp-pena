@@ -10,6 +10,8 @@ class SalesMenuSeeder extends Seeder
     {
         $now = date('Y-m-d H:i:s');
         $salesId = $this->menuItem(null, 'Sales', '#', 'bx-cart', null, 25, $now);
+        $this->menuItem($salesId, 'Customer Terms', 'setup/customer-terms', null, 'sales.customer.view', 20, $now);
+        $this->menuItem($salesId, 'Customer Promo', 'setup/customer-promos', null, 'sales.customer.view', 30, $now);
         $this->menuItem($salesId, 'Sales Order', 'sales/orders', null, 'sales.order.view', 10, $now);
 
         $this->db->table('menu_items')

@@ -8,6 +8,8 @@ use App\Models\CityModel;
 use App\Models\CompanyModel;
 use App\Models\CountryModel;
 use App\Models\CurrencyModel;
+use App\Models\CustomerPromotionModel;
+use App\Models\CustomerTermModel;
 use App\Models\CustomerModel;
 use App\Models\DepartmentModel;
 use App\Models\ItemModel;
@@ -17,6 +19,8 @@ use App\Models\PostalCodeModel;
 use App\Models\PrefixCodeModel;
 use App\Models\ProvinceModel;
 use App\Models\SiteModel;
+use App\Models\SupplierPromotionModel;
+use App\Models\SupplierTermModel;
 use App\Models\SupplierModel;
 use App\Models\TransactionCodeModel;
 use App\Models\UomConversionModel;
@@ -65,7 +69,11 @@ class MasterDataController extends BaseController
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
             ]) + ['display' => ['code' => 'item_id', 'name' => 'vat_rate_id'], 'order_by' => 'id'],
             'address-master' => $this->tenantResource('Address Master', AddressModel::class, 'addresses', true, $this->addressFields()) + ['list_fields' => ['code', 'name', 'address_type', 'owner_type', 'address_line1', 'phone', 'mobile']],
+            'customer-terms' => $this->tenantResource('Customer Terms', CustomerTermModel::class, 'customer_terms', true, $this->termsFields('Customer'), 'sales.customer.view', 'sales.customer.manage') + ['display' => ['code' => 'terms_code', 'name' => 'terms_name', 'description' => 'terms_days'], 'list_fields' => ['terms_code', 'terms_name', 'terms_days', 'promo_code'], 'order_by' => 'terms_code'],
+            'customer-promos' => $this->tenantResource('Customer Promotions', CustomerPromotionModel::class, 'customer_promotions', true, $this->customerPromotionFields(), 'sales.customer.view', 'sales.customer.manage') + ['display' => ['code' => 'promo_code', 'name' => 'promo_description', 'description' => 'customer_name'], 'list_fields' => ['promo_code', 'promo_description', 'customer', 'item_parent', 'promo_type', 'active_date'], 'order_by' => 'promo_code'],
             'customers' => $this->tenantResource('Customers', CustomerModel::class, 'customers', true, $this->customerFields(), 'sales.customer.view', 'sales.customer.manage') + ['display' => ['code' => 'customer', 'name' => 'customern', 'description' => 'officecity'], 'list_fields' => ['customer', 'customern', 'customerr', 'contactnar', 'officecity', 'officephon'], 'order_by' => 'customer'],
+            'supplier-terms' => $this->tenantResource('Supplier Terms', SupplierTermModel::class, 'supplier_terms', true, $this->termsFields('Supplier'), 'purchase.supplier.view', 'purchase.supplier.manage') + ['display' => ['code' => 'terms_code', 'name' => 'terms_name', 'description' => 'terms_days'], 'list_fields' => ['terms_code', 'terms_name', 'terms_days', 'promo_code'], 'order_by' => 'terms_code'],
+            'supplier-promos' => $this->tenantResource('Supplier Promotions', SupplierPromotionModel::class, 'supplier_promotions', true, $this->supplierPromotionFields(), 'purchase.supplier.view', 'purchase.supplier.manage') + ['display' => ['code' => 'promo_code', 'name' => 'promo_description', 'description' => 'supplier_name'], 'list_fields' => ['promo_code', 'promo_description', 'supplier', 'item_parent', 'promo_type', 'active_date'], 'order_by' => 'promo_code'],
             'suppliers' => $this->tenantResource('Suppliers', SupplierModel::class, 'suppliers', true, $this->supplierFields(), 'purchase.supplier.view', 'purchase.supplier.manage') + ['display' => ['code' => 'supplier', 'name' => 'supplierna', 'description' => 'officecity'], 'list_fields' => ['supplier', 'supplierna', 'supplierref', 'contactnar', 'officecity', 'officephon'], 'order_by' => 'supplier'],
             'items' => $this->tenantResource('Items', ItemModel::class, 'items', true, $this->itemFields(), 'inventory.item.view', 'inventory.item.manage') + ['display' => ['code' => 'item_code', 'name' => 'item_name', 'description' => 'stockuom'], 'order_by' => 'item_code'],
         ];
@@ -296,6 +304,9 @@ class MasterDataController extends BaseController
             if (($field['type'] ?? 'text') === 'number' && $value === '') {
                 $value = $field['default'] ?? null;
             }
+            if (in_array(($field['type'] ?? 'text'), ['date', 'time'], true) && $value === '') {
+                $value = null;
+            }
             if (($field['type'] ?? 'text') === 'select' && isset($field['options_source']) && $value === '') {
                 $value = null;
             }
@@ -467,8 +478,14 @@ class MasterDataController extends BaseController
             'warehouses' => [WarehouseModel::class, true, true],
             'uoms' => [UomModel::class, true, false],
             'items' => [ItemModel::class, true, true],
+            'customers' => [CustomerModel::class, true, true],
+            'suppliers' => [SupplierModel::class, true, true],
             'vat_rates' => [VatRateModel::class, true, false],
             'addresses' => [AddressModel::class, true, true],
+            'customer_terms' => [CustomerTermModel::class, true, true],
+            'supplier_terms' => [SupplierTermModel::class, true, true],
+            'customer_promotions' => [CustomerPromotionModel::class, true, true],
+            'supplier_promotions' => [SupplierPromotionModel::class, true, true],
         ];
         if (! isset($map[$source])) {
             return [];
@@ -484,11 +501,25 @@ class MasterDataController extends BaseController
             $model->where('site_id', $tenant->activeSiteId());
         }
 
-        $rows = $model->orderBy('code', 'ASC')->findAll();
+        $orderField = 'code';
+        if ($source === 'items') {
+            $orderField = 'item_code';
+        } elseif (str_ends_with($source, '_terms')) {
+            $orderField = 'terms_code';
+        } elseif (str_ends_with($source, '_promotions')) {
+            $orderField = 'promo_code';
+        } elseif ($source === 'customers') {
+            $orderField = 'customer';
+        } elseif ($source === 'suppliers') {
+            $orderField = 'supplier';
+        }
+
+        $rows = $model->orderBy($orderField, 'ASC')->findAll();
         $options = [];
         foreach ($rows as $row) {
             $code = $row['item_code'] ?? $row['code'] ?? $row['id'];
-            $name = $row['item_name'] ?? $row['name'] ?? '';
+            $code = $row['customer'] ?? $row['supplier'] ?? $row['terms_code'] ?? $row['promo_code'] ?? $code;
+            $name = $row['item_name'] ?? $row['name'] ?? $row['customern'] ?? $row['supplierna'] ?? $row['terms_name'] ?? $row['promo_description'] ?? '';
             $value = $valueField === 'code' ? (string) $code : (string) $row['id'];
             $options[$value] = trim($code . ' - ' . $name);
         }
@@ -564,7 +595,6 @@ class MasterDataController extends BaseController
             'customerr' => 'Customer Reference',
             'contactnar' => 'Main Contact',
             'description' => 'Description~',
-            'terms' => 'Terms',
             'taxcode' => 'Tax Code',
             'taxnumber' => 'Tax Number',
             'limitamound' => 'Credit Limit Amount#',
@@ -576,6 +606,7 @@ class MasterDataController extends BaseController
         ]);
         $fields['shipwhs'] = $this->codeSelect('Ship Warehouse', 'warehouses');
         $fields['vat'] = $this->codeSelect('VAT Code', 'vat_rates');
+        $fields['terms'] = $this->codeSelect('Terms', 'customer_terms');
         $fields['office_address_template'] = $this->addressTemplateField('Use Office Address Template', $this->addressTargets('officeaddre', 'officecity', 'officeprovir', 'officecount', 'officeposta', 'officeconta', 'officephon', 'officehp', true));
         $fields += $this->fields(['officeaddre' => 'Office Address~', 'officecity' => 'Office City', 'officeprovir' => 'Office Province', 'officecount' => 'Office Country', 'officeposta' => 'Office Postal Code', 'officeconta' => 'Office Contact', 'officephon' => 'Office Phone', 'officehp' => 'Office Mobile']);
         $fields['billing_address_template'] = $this->addressTemplateField('Use Billing Address Template', $this->addressTargets('billingaddre', 'billingcity', 'billingprovi', 'billingcoun', 'billingposta', 'billingconta', 'billingphon', 'billinghp'));
@@ -598,7 +629,6 @@ class MasterDataController extends BaseController
             'supplierref' => 'Supplier Reference',
             'contactnar' => 'Main Contact',
             'description' => 'Description~',
-            'terms' => 'Terms',
             'taxcode' => 'Tax Code',
             'taxnumber' => 'Tax Number',
             'limitamound' => 'Limit Amount#',
@@ -609,6 +639,7 @@ class MasterDataController extends BaseController
             'email' => 'Main Email',
         ]);
         $fields['vat'] = $this->codeSelect('VAT Code', 'vat_rates');
+        $fields['terms'] = $this->codeSelect('Terms', 'supplier_terms');
         $fields['office_address_template'] = $this->addressTemplateField('Use Office Address Template', $this->addressTargets('officeaddre', 'officecity', 'officeprovir', 'officecoun', 'officeposta', 'officeconta', 'officephon', 'officehp', true));
         $fields += $this->fields(['officeaddre' => 'Office Address~', 'officecity' => 'Office City', 'officeprovir' => 'Office Province', 'officecoun' => 'Office Country', 'officeposta' => 'Office Postal Code', 'officeconta' => 'Office Contact', 'officephon' => 'Office Phone', 'officehp' => 'Office Mobile']);
         $fields['billing_address_template'] = $this->addressTemplateField('Use Billing Address Template', $this->addressTargets('billingadre', 'billingcity', 'billingprovi', 'billingcoun', 'billingposta', 'billingconta', 'billingphon', 'billinghp'));
@@ -624,6 +655,74 @@ class MasterDataController extends BaseController
     private function addressTemplateField(string $label, array $targets): array
     {
         return ['label' => $label, 'type' => 'address_template', 'persist' => false, 'targets' => $targets];
+    }
+
+    private function termsFields(string $partner): array
+    {
+        return $this->fields([
+            'company' => 'Company Code',
+            'site' => 'Site Code',
+            'terms_code' => 'Terms Code*',
+            'terms_name' => 'Terms Name',
+            'terms_days' => 'Terms Days#',
+            'promo_code' => 'Promo Code',
+            'is_active' => 'Active!',
+        ]);
+    }
+
+    private function customerPromotionFields(): array
+    {
+        return $this->promotionFields([
+            'customer' => ['label' => 'Customer', 'type' => 'select', 'options_source' => 'customers', 'option_value' => 'code'],
+            'customer_name' => ['label' => 'Customer Name', 'type' => 'text'],
+        ]);
+    }
+
+    private function supplierPromotionFields(): array
+    {
+        return $this->promotionFields([
+            'supplier' => ['label' => 'Supplier', 'type' => 'select', 'options_source' => 'suppliers', 'option_value' => 'code'],
+            'supplier_name' => ['label' => 'Supplier Name', 'type' => 'text'],
+        ]);
+    }
+
+    private function promotionFields(array $partnerFields): array
+    {
+        return $this->fields([
+            'company' => 'Company Code',
+            'site' => 'Site Code',
+            'promo_code' => 'Promo Code*',
+            'promo_description' => 'Promo Description*',
+        ])
+            + $partnerFields
+            + [
+                'item_parent' => ['label' => 'Item Parent', 'type' => 'select', 'options_source' => 'items', 'option_value' => 'code'],
+                'item_parent_name' => ['label' => 'Item Parent Name', 'type' => 'text'],
+            ]
+            + $this->fields([
+                'line_no' => 'Line No#',
+            ])
+            + [
+                'promo_type' => ['label' => 'Promo Type', 'type' => 'select', 'options' => ['percent' => 'Percent', 'disc_amount' => 'Disc Amount', 'free' => 'Free Item']],
+            ]
+            + $this->fields([
+                'from_qty' => 'From Qty#',
+                'to_qty' => 'To Qty#',
+                'uom' => 'UoM',
+                'promo_price' => 'Promo Price#',
+                'pct' => 'Percent#',
+                'disc_amount' => 'Disc Amount#',
+                'free_item' => 'Free Item',
+                'free_item_name' => 'Free Item Name',
+                'free_qty' => 'Free Qty#',
+            ])
+            + [
+                'active_date' => ['label' => 'Active Date', 'type' => 'date'],
+                'active_hour' => ['label' => 'Active Hour', 'type' => 'time'],
+                'inactive_date' => ['label' => 'Inactive Date', 'type' => 'date'],
+                'inactive_hour' => ['label' => 'Inactive Hour', 'type' => 'time'],
+            ]
+            + $this->fields(['is_active' => 'Active!']);
     }
 
     private function addressTargets(string $address, string $city, string $province, string $country, string $postalCode, string $contact, string $phone, string $mobile, bool $alsoMain = false): array
