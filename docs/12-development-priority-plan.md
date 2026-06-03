@@ -30,9 +30,39 @@ Acuan utama: `pena_erp_data_dictionary_filled.xlsx`.
 | POS | POS Master, POS System | Menengah |
 | AI/OCR | Document Upload, OCR Extraction, AI Field Extraction, Review, Convert to Transaction | Setelah transaksi inti |
 
+## Status Legend
+
+| Status | Arti |
+|---|---|
+| Done | Sudah ada implementasi dasar yang bisa dipakai atau menjadi fondasi resmi |
+| Partial | Sudah mulai dibuat, tetapi belum end-to-end atau belum lengkap enterprise-grade |
+| Pending | Belum dibuat selain menu placeholder atau rencana dokumentasi |
+| Next | Tahap yang sebaiknya difokuskan berikutnya |
+
+## Snapshot Status Saat Ini
+
+| Phase | Status | Yang Sudah Dikerjakan |
+|---|---|---|
+| Phase 0 - Project Stabilization | Done | CodeIgniter 4, Shield, layout Skote, dynamic menu, migration/seeder, docs, test smoke |
+| Phase 1 - Tenant, User, Role, Permission Core | Partial | Role/permission config, user access table, active company/site switcher, user/role page awal |
+| Phase 2 - Setup Master Core | Partial | CRUD generic setup master, wilayah sync, import/export view, menu setup, beberapa schema tambahan |
+| Phase 3 - Partner, Item, Tax, Commercial Master | Partial | Customer, supplier, item, UoM, VAT, item VAT, schema item/customer/supplier diselaraskan dengan Excel |
+| Phase 4 - Inventory Core | Partial | Stock balance, stock movement, stock adjustment, inventory stock service |
+| Phase 5 - Purchase Core | Partial | Purchase Order header/line, controller, service, views, schema ensure |
+| Phase 6 - Sales Core | Partial | Sales Order header/line, controller, service, views, schema ensure |
+| Phase 7 - Finance Backbone | Pending | Baru menu placeholder dan permission dasar, belum ada GL transaction engine |
+| Phase 8 - AP dan AR | Pending | Baru menu placeholder, belum ada AP/AR ledger dan payment/receipt |
+| Phase 9 - Costing | Pending | Baru rencana/menu placeholder, belum ada item cost engine |
+| Phase 10 - Planning dan Production | Pending | Baru menu placeholder, belum ada BOM/MRP/work order engine |
+| Phase 11 - POS dan Fixed Asset | Pending | Baru menu placeholder, belum ada transaksi POS/asset |
+| Phase 12 - AI/OCR Document Processing | Partial | Upload, document tables, OCR/AI interfaces, diagnostics/sample, review, convert service ke PO/SO |
+| Phase 13 - Reporting, Dashboard, Enhancement UI | Partial | Dashboard awal, audit log viewer, sidebar Skote, placeholder modul |
+
 ## Phase 0 - Project Stabilization
 
 Tujuan: memastikan aplikasi bisa dikembangkan tanpa sering rusak.
+
+Status: Done.
 
 Scope:
 - CodeIgniter 4 baseline.
@@ -51,12 +81,15 @@ Output:
 - Dokumentasi install tersedia.
 
 Status saat ini:
-- Sebagian besar sudah ada.
-- Perlu lanjut hardening UI, menu, permission page, dan CRUD validation.
+- Sudah ada CodeIgniter 4, Shield, Skote layout, dynamic sidebar, menu seeder, migrations, seeders, README, dan docs.
+- Sudah ada smoke/unit test dasar.
+- Perlu tetap dijaga setiap selesai modul baru: route check, lint, phpunit, dan seeder check.
 
 ## Phase 1 - Tenant, User, Role, Permission Core
 
 Tujuan: semua data ERP aman untuk multi-company dan multi-site.
+
+Status: Partial.
 
 Scope:
 - User management.
@@ -81,9 +114,24 @@ Done jika:
 - Query transaksi dan master tenant-scoped selalu pakai `company_id`.
 - Route penting tidak bisa dibuka tanpa permission.
 
+Yang sudah dikerjakan:
+- Shield authentication sudah digunakan.
+- Role dan permission matrix tersedia di `AuthGroups`.
+- Tabel akses company/site tersedia.
+- Active company/site switcher tersedia.
+- User dan role controller/view awal tersedia.
+- Tenant bootstrap filter dan tenant context tersedia.
+
+Sisa pekerjaan:
+- Permission CRUD granular belum lengkap di UI.
+- Assignment company/site per user perlu dipoles dan dites lebih dalam.
+- Route-level permission filter perlu diperluas ke semua modul transaksi.
+
 ## Phase 2 - Setup Master Core
 
 Tujuan: membuat data pondasi yang dipakai semua transaksi.
+
+Status: Partial. Ini adalah kandidat fokus berikutnya karena dipakai semua modul.
 
 Prioritas master:
 - Company.
@@ -127,9 +175,25 @@ Done jika:
 - Address Master bisa pakai Country/Province/City/Postal Code.
 - Transaction Code dan Prefix Code bisa dipakai generate nomor dokumen.
 
+Yang sudah dikerjakan:
+- Generic CRUD setup master tersedia melalui `MasterDataController`.
+- Menu Setup dua level sudah aktif.
+- Company, Site, Department, Warehouse, Location, Country, Province, City, Postal Code, UoM, UoM Conversion, VAT, Item VAT, Address Master sudah punya route CRUD.
+- Province/City sync API sudah tersedia.
+- Prefix Code, Currency, dan WHT/PPH model sudah mulai tersedia.
+- Import/export view setup master sudah ada.
+
+Sisa pekerjaan:
+- Validasi per tabel masih perlu dibuat lebih spesifik.
+- Field dan display beberapa master masih perlu diselaraskan penuh dengan Excel.
+- Number generator dari Transaction Code + Prefix Code belum menjadi service resmi.
+- Soft delete dan audit trail perlu dipastikan konsisten di semua master.
+
 ## Phase 3 - Partner, Item, Tax, dan Commercial Master
 
 Tujuan: transaksi bisa memilih customer, supplier, item, terms, promo, dan pajak.
+
+Status: Partial.
 
 Scope:
 - Customer Master.
@@ -163,9 +227,24 @@ Done jika:
 - Item punya kontrol stock/service/asset.
 - Batch bisa disiapkan untuk item yang perlu batch/expired date.
 
+Yang sudah dikerjakan:
+- Customer, supplier, dan item master sudah punya model, CRUD route, dan view generic.
+- Schema item master sudah diselaraskan dengan Excel dalam beberapa migrasi/commit.
+- Customer dan supplier schema sudah diselaraskan dengan Excel.
+- UoM master code dropdown sudah mulai dipakai untuk item master.
+- Demo master data seeder tersedia.
+
+Sisa pekerjaan:
+- Customer Terms, Customer Promo, Customer Address belum menjadi CRUD khusus.
+- Supplier Terms, Supplier Promo, Supplier Address belum menjadi CRUD khusus.
+- Batch Master dan Item UoM Conversion belum menjadi modul lengkap.
+- Lookup transaksi perlu dibuat lebih nyaman, bukan hanya dropdown sederhana.
+
 ## Phase 4 - Inventory Core
 
 Tujuan: stok menjadi single source of truth untuk purchase, sales, production, dan POS.
+
+Status: Partial.
 
 Scope:
 - Warehouse stock balance.
@@ -187,9 +266,23 @@ Done jika:
 - Tidak boleh ada stock movement tanpa transaction code dan posting status.
 - Period close inventory bisa lock periode.
 
+Yang sudah dikerjakan:
+- Tabel inventory stock core tersedia.
+- Model stock balance dan stock movement tersedia.
+- Inventory stock service tersedia.
+- Stock balance controller/view tersedia.
+- Stock adjustment form tersedia dan sudah mendukung manual item entry.
+
+Sisa pekerjaan:
+- Inventory In Out, Transfer, dan Stock Opname belum lengkap sebagai workflow.
+- Posting/reversal dan period close belum lengkap.
+- Integrasi stock ledger dengan PO receipt, DO, POS, dan production masih perlu dipastikan end-to-end.
+
 ## Phase 5 - Purchase Core
 
 Tujuan: alur procure-to-stock/payable mulai berjalan.
+
+Status: Partial.
 
 Scope:
 - Purchase Order.
@@ -212,9 +305,24 @@ Done jika:
 - Purchase invoice bisa dibuat dari receipt.
 - Status PO jelas: draft, submitted, approved, partially received, closed, cancelled.
 
+Yang sudah dikerjakan:
+- Purchase Order migration tersedia.
+- Ensure purchase order schema tersedia.
+- PurchaseOrderModel dan PurchaseOrderLineModel tersedia.
+- PurchaseOrderController, PurchaseOrderService, dan views index/form/show tersedia.
+- Menu Purchase Order sudah diarahkan ke modul nyata.
+
+Sisa pekerjaan:
+- Purchase receipt belum lengkap.
+- Purchase intransit, cost purchase receipt, dan invoice belum ada sebagai workflow penuh.
+- Approval PO dan status lifecycle perlu dipoles.
+- Posting ke stock/AP/GL belum end-to-end.
+
 ## Phase 6 - Sales Core
 
 Tujuan: alur order-to-delivery/invoice mulai berjalan.
+
+Status: Partial.
 
 Scope:
 - Sales Order.
@@ -238,9 +346,24 @@ Done jika:
 - Sales Invoice bisa dibuat dari DO/SO.
 - Status SO jelas: draft, submitted, approved, allocated, delivered, invoiced, closed, cancelled.
 
+Yang sudah dikerjakan:
+- Sales Order migration tersedia.
+- Ensure sales order schema tersedia.
+- SalesOrderModel dan SalesOrderLineModel tersedia.
+- SalesOrderController, SalesOrderService, dan views index/form/show tersedia.
+- Menu Sales Order sudah diarahkan ke modul nyata.
+
+Sisa pekerjaan:
+- Allocation Order dan Delivery Order belum lengkap.
+- Sales invoice belum lengkap.
+- Stock allocation dan stock issue belum end-to-end.
+- Approval SO dan status lifecycle perlu dipoles.
+
 ## Phase 7 - Finance Backbone
 
 Tujuan: ERP mulai punya akuntansi yang bisa dipertanggungjawabkan.
+
+Status: Pending.
 
 Scope:
 - Chart of Account.
@@ -275,9 +398,20 @@ Done jika:
 - Currency rate dipakai untuk transaksi multi-currency.
 - Period close GL bisa lock transaksi.
 
+Yang sudah dikerjakan:
+- Permission dan menu dasar Finance/GL tersedia.
+- Currency model sudah tersedia sebagai master pendukung.
+
+Sisa pekerjaan:
+- GL Book, GL Column, Account No, Chart of Account belum menjadi CRUD lengkap.
+- GL Entry, recurring, posting, reversal, dan period close belum dibangun.
+- Belum ada journal generation dari transaksi purchase/sales/inventory.
+
 ## Phase 8 - AP dan AR
 
 Tujuan: hutang dan piutang terhubung ke purchase, sales, cash bank, dan GL.
+
+Status: Pending.
 
 Scope AP:
 - Manual A/P Invoice.
@@ -308,9 +442,19 @@ Done jika:
 - Posting AP/AR ke GL valid.
 - Period close AP/AR lock dokumen.
 
+Yang sudah dikerjakan:
+- Menu AP/AR tersedia sebagai placeholder.
+- Sales Invoice dan Purchase Invoice sudah masuk roadmap dan menu.
+
+Sisa pekerjaan:
+- Belum ada invoice ledger, aging, payment, receipt, dan posting AP/AR.
+- Belum ada link dari PO/SO ke invoice yang final.
+
 ## Phase 9 - Costing
 
 Tujuan: biaya item dan transaksi bisa dihitung untuk margin dan produksi.
+
+Status: Pending.
 
 Scope:
 - Cost Type.
@@ -329,9 +473,19 @@ Done jika:
 - Purchase receipt bisa mempengaruhi cost.
 - Sales margin bisa mengambil cost.
 
+Yang sudah dikerjakan:
+- Menu costing tersedia sebagai placeholder.
+- Cost Type sudah tercatat dalam roadmap master prioritas.
+
+Sisa pekerjaan:
+- Belum ada cost type CRUD khusus, item cost table, dan calculate cost service.
+- Belum ada inventory valuation.
+
 ## Phase 10 - Planning dan Production
 
 Tujuan: manufaktur berjalan setelah item, stock, UoM, batch, dan costing siap.
+
+Status: Pending.
 
 Scope Planning:
 - Forecast.
@@ -364,9 +518,17 @@ Done jika:
 - Finished goods receipt menambah stock.
 - Labor dan overhead bisa masuk costing.
 
+Yang sudah dikerjakan:
+- Menu Planning dan Production tersedia sebagai placeholder.
+
+Sisa pekerjaan:
+- Belum ada BOM, Work Center, Routing, MRP, MPS, dan Work Order engine.
+
 ## Phase 11 - POS dan Fixed Asset
 
 Tujuan: modul tambahan operasional setelah sales, inventory, cash bank, dan GL siap.
+
+Status: Pending.
 
 Scope POS:
 - POS Master.
@@ -391,9 +553,17 @@ Done jika:
 - POS bisa membuat transaksi sales dan mengurangi stok.
 - Asset bisa dihitung depresiasinya dan diposting ke GL.
 
+Yang sudah dikerjakan:
+- Menu POS dan FA tersedia sebagai placeholder.
+
+Sisa pekerjaan:
+- Belum ada POS transaction, settlement, asset acquisition, depreciation, disposal, dan posting GL.
+
 ## Phase 12 - AI/OCR Document Processing
 
 Tujuan: dokumen PDF/gambar bisa membantu input transaksi tanpa mengunci ke satu provider OCR.
+
+Status: Partial.
 
 Scope:
 - Document upload.
@@ -423,9 +593,25 @@ Done jika:
 - User bisa koreksi hasil ekstraksi.
 - Hasil review bisa dikonversi menjadi transaksi ERP.
 
+Yang sudah dikerjakan:
+- Config AI/OCR tersedia.
+- Document upload table dan processing tables tersedia.
+- Upload page, index, show, review page tersedia.
+- OCR provider interface dan OCR engine interface tersedia.
+- Null OCR, local command OCR, diagnostics, sample document, dan rule-based extraction tersedia.
+- Convert service ke Purchase Order dan Sales Order tersedia.
+
+Sisa pekerjaan:
+- Provider OCR/AI produksi belum dipilih dan dikonfigurasi final.
+- Duplicate checking dan confidence workflow perlu dipoles.
+- Convert ke invoice dan delivery order belum ada.
+- Review UI perlu dibuat lebih operasional untuk koreksi line item.
+
 ## Phase 13 - Reporting, Dashboard, dan Enhancement UI
 
 Tujuan: aplikasi lebih informatif, nyaman, dan siap dipakai user harian.
+
+Status: Partial.
 
 Scope:
 - Dashboard total sales, purchase, invoice.
@@ -447,20 +633,38 @@ Done jika:
 - User bisa mencari, filter, export, dan audit data.
 - UI konsisten dengan Skote.
 
+Yang sudah dikerjakan:
+- Dashboard awal tersedia.
+- Layout Skote dan sidebar dinamis tersedia.
+- Audit log table, service, controller, dan viewer tersedia.
+- Placeholder module page tersedia agar menu tidak dead link.
+
+Sisa pekerjaan:
+- Dashboard belum penuh mengambil KPI transaksi nyata.
+- DataTables server-side, export, notification, global search, dan mobile polish belum selesai.
+
 ## Prioritas Sprint yang Disarankan
 
-| Sprint | Fokus | Output Praktis |
-|---|---|---|
-| 1 | Stabilkan Setup CRUD | Semua menu Setup jalan dan validation lebih rapi |
-| 2 | User Access Management | Halaman user, role, company access, site access |
-| 3 | Customer, Supplier, Item | Master commercial dan inventory siap dipakai transaksi |
-| 4 | Inventory Ledger | Stock movement dan stock balance valid |
-| 5 | Purchase Order + Receipt | Procure-to-stock minimum berjalan |
-| 6 | Sales Order + Delivery Order | Order-to-delivery minimum berjalan |
-| 7 | Invoice + AP/AR Basic | Outstanding payable/receivable berjalan |
-| 8 | GL Posting Basic | Posting journal dari transaksi inti |
-| 9 | AI/OCR Review Basic | Upload, OCR/AI result, review, convert draft |
-| 10 | Dashboard + Polish | Monitoring dan usability |
+| Sprint | Fokus | Status | Output Praktis |
+|---|---|---|---|
+| 1 | Stabilkan Setup CRUD | Partial / Next | Semua menu Setup jalan dan validation lebih rapi |
+| 2 | User Access Management | Partial | Halaman user, role, company access, site access |
+| 3 | Customer, Supplier, Item | Partial | Master commercial dan inventory siap dipakai transaksi |
+| 4 | Inventory Ledger | Partial | Stock movement dan stock balance valid |
+| 5 | Purchase Order + Receipt | Partial | Procure-to-stock minimum berjalan |
+| 6 | Sales Order + Delivery Order | Partial | Order-to-delivery minimum berjalan |
+| 7 | Invoice + AP/AR Basic | Pending | Outstanding payable/receivable berjalan |
+| 8 | GL Posting Basic | Pending | Posting journal dari transaksi inti |
+| 9 | AI/OCR Review Basic | Partial | Upload, OCR/AI result, review, convert draft |
+| 10 | Dashboard + Polish | Partial | Monitoring dan usability |
+
+## Rekomendasi Fokus Berikutnya
+
+1. Selesaikan Setup CRUD yang masih tanggung: validation, field Excel alignment, prefix number generator, WHT/PPH, import/export, audit.
+2. Selesaikan User Access Management supaya multi-company/site tidak bocor saat modul transaksi makin banyak.
+3. Rapikan Master Customer/Supplier/Item supaya PO dan SO punya lookup data yang stabil.
+4. Lanjutkan Inventory Ledger sampai posting stock adjustment benar-benar reliable.
+5. Baru lanjut Purchase Receipt dan Delivery Order, karena keduanya menggerakkan stok dan menjadi dasar invoice.
 
 ## Catatan Teknis Penting
 
@@ -471,4 +675,3 @@ Done jika:
 - Gunakan service untuk posting, stock mutation, journal generation, approval, dan OCR conversion.
 - Controller cukup mengatur request, validation, response.
 - Gunakan database transaction untuk posting PO receipt, DO, invoice, payment, GL entry, stock opname, dan conversion OCR.
-
