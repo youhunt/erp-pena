@@ -91,3 +91,4 @@ Change the password immediately after first login.
 - [Development Guide](docs/08-development-guide.md)
 - [Testing Checklist](docs/09-testing-checklist.md)
 - [Roadmap](docs/10-roadmap.md)
+- [Development Priority Plan](docs/12-development-priority-plan.md)
