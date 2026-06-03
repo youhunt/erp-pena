@@ -134,19 +134,8 @@ class MasterDataController extends BaseController
             ]),
             'customers' => $this->tenantResource('Customers', CustomerModel::class, 'customers', true, $this->partnerFields(), 'sales.customer.view', 'sales.customer.manage'),
             'suppliers' => $this->tenantResource('Suppliers', SupplierModel::class, 'suppliers', true, $this->partnerFields(), 'purchase.supplier.view', 'purchase.supplier.manage'),
-            'items' => $this->tenantResource('Items', ItemModel::class, 'items', true, [
-                'code' => ['label' => 'Code', 'type' => 'text', 'required' => true],
-                'name' => ['label' => 'Name', 'type' => 'text', 'required' => true],
-                'item_type' => ['label' => 'Item Type', 'type' => 'select', 'options' => ['stock' => 'Stock', 'service' => 'Service', 'asset' => 'Asset'], 'default' => 'stock'],
-                'brand' => ['label' => 'Brand', 'type' => 'text'],
-                'stock_uom_id' => ['label' => 'Stock UoM', 'type' => 'select', 'options_source' => 'uoms'],
-                'sales_uom_id' => ['label' => 'Sales UoM', 'type' => 'select', 'options_source' => 'uoms'],
-                'purchase_uom_id' => ['label' => 'Purchase UoM', 'type' => 'select', 'options_source' => 'uoms'],
-                'standard_cost' => ['label' => 'Standard Cost', 'type' => 'number', 'default' => 0],
-                'sales_price' => ['label' => 'Sales Price', 'type' => 'number', 'default' => 0],
-                'shelf_life_days' => ['label' => 'Shelf Life Days', 'type' => 'number'],
-                'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
-            ], 'inventory.item.view', 'inventory.item.manage'),
+            'items' => $this->tenantResource('Items', ItemModel::class, 'items', true, $this->itemFields(), 'inventory.item.view', 'inventory.item.manage')
+                + ['display' => ['code' => 'item_code', 'name' => 'item_name', 'description' => 'stockuom'], 'order_by' => 'item_code'],
         ];
     }
 
@@ -308,6 +297,13 @@ class MasterDataController extends BaseController
             }
             $payload[$name] = $value;
         }
+
+        if ($config['table'] === 'items') {
+            $payload['code'] = $payload['item_code'] ?? null;
+            $payload['name'] = $payload['item_name'] ?? null;
+            $payload['is_active'] = $payload['active'] ?? 1;
+        }
+
         $tenant = new TenantContext(session());
         if ($config['tenant']) {
             $payload['company_id'] = $tenant->activeCompanyId();
@@ -315,9 +311,9 @@ class MasterDataController extends BaseController
         if ($config['site']) {
             $payload['site_id'] = $tenant->activeSiteId();
         }
-        $payload['updated_by'] = auth()->id();
+        $payload['updated_by'] = (string) auth()->id();
         if ($isCreate) {
-            $payload['created_by'] = auth()->id();
+            $payload['created_by'] = (string) auth()->id();
         }
         return $payload;
     }
@@ -330,7 +326,7 @@ class MasterDataController extends BaseController
             'site_id' => $record['site_id'] ?? null,
             'table_name' => $config['table'],
             'record_id' => $id,
-            'record_code' => $record['code'] ?? $record['name'] ?? null,
+            'record_code' => $record['item_code'] ?? $record['code'] ?? $record['name'] ?? null,
             'description' => $config['title'] . ' ' . str_replace('master.', '', $action),
             'old_values' => $oldValues,
             'new_values' => $newValues,
@@ -392,8 +388,9 @@ class MasterDataController extends BaseController
         $rows = $model->orderBy('code', 'ASC')->findAll();
         $options = [];
         foreach ($rows as $row) {
-            $label = trim(($row['code'] ?? $row['id']) . ' - ' . ($row['name'] ?? ''));
-            $options[(string) $row['id']] = $label;
+            $code = $row['item_code'] ?? $row['code'] ?? $row['id'];
+            $name = $row['item_name'] ?? $row['name'] ?? '';
+            $options[(string) $row['id']] = trim($code . ' - ' . $name);
         }
         return $options;
     }
@@ -420,6 +417,51 @@ class MasterDataController extends BaseController
             'email' => ['label' => 'Email', 'type' => 'email'],
             'address' => ['label' => 'Address', 'type' => 'textarea'],
             'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
+        ];
+    }
+
+    private function itemFields(): array
+    {
+        return [
+            'company' => ['label' => 'Company Code', 'type' => 'text'],
+            'site' => ['label' => 'Site Code', 'type' => 'text'],
+            'item_code' => ['label' => 'Item Code', 'type' => 'text', 'required' => true],
+            'item_name' => ['label' => 'Item Name', 'type' => 'text', 'required' => true],
+            'item_coded' => ['label' => 'Item Code Detail', 'type' => 'text'],
+            'item_named' => ['label' => 'Item Name Detail', 'type' => 'text'],
+            'shelf_life' => ['label' => 'Shelf Life', 'type' => 'number', 'default' => 0],
+            'stockuom' => ['label' => 'Stock UoM', 'type' => 'text'],
+            'purchaseuom' => ['label' => 'Purchase UoM', 'type' => 'text'],
+            'sellinguom' => ['label' => 'Selling UoM', 'type' => 'text'],
+            'stockwhs' => ['label' => 'Warehouse', 'type' => 'text'],
+            'item_price' => ['label' => 'Stock Price', 'type' => 'number', 'default' => 0],
+            'purchasep' => ['label' => 'Purchase Price', 'type' => 'number', 'default' => 0],
+            'sellingprice' => ['label' => 'Selling Price', 'type' => 'number', 'default' => 0],
+            'vat' => ['label' => 'VAT Code', 'type' => 'text'],
+            'item_length' => ['label' => 'Item Length', 'type' => 'number', 'default' => 0],
+            'item_width' => ['label' => 'Item Width', 'type' => 'number', 'default' => 0],
+            'item_heigh' => ['label' => 'Item Height', 'type' => 'number', 'default' => 0],
+            'item_diam' => ['label' => 'Item Diameter', 'type' => 'number', 'default' => 0],
+            'item_lengt' => ['label' => 'UoM Length', 'type' => 'text'],
+            'item_widthh' => ['label' => 'UoM Width', 'type' => 'text'],
+            'item_heigh_uom' => ['label' => 'UoM Height', 'type' => 'text'],
+            'item_diam_uom' => ['label' => 'UoM Diameter', 'type' => 'text'],
+            'out_length' => ['label' => 'Outer Length', 'type' => 'number', 'default' => 0],
+            'out_width' => ['label' => 'Outer Width', 'type' => 'number', 'default' => 0],
+            'out_height' => ['label' => 'Outer Height', 'type' => 'number', 'default' => 0],
+            'out_diame' => ['label' => 'Outer Diameter', 'type' => 'number', 'default' => 0],
+            'out_lengt' => ['label' => 'Outer UoM Length', 'type' => 'text'],
+            'out_widthh' => ['label' => 'Outer UoM Width', 'type' => 'text'],
+            'out_height_uom' => ['label' => 'Outer UoM Height', 'type' => 'text'],
+            'out_diame_uom' => ['label' => 'Outer UoM Diameter', 'type' => 'text'],
+            'item_group' => ['label' => 'Group', 'type' => 'text'],
+            'item_subg' => ['label' => 'SubGroup', 'type' => 'text'],
+            'item_class' => ['label' => 'Class', 'type' => 'text'],
+            'item_subc' => ['label' => 'Sub Class', 'type' => 'text'],
+            'item_type' => ['label' => 'Type', 'type' => 'text'],
+            'item_subty' => ['label' => 'Sub Type', 'type' => 'text'],
+            'item_atribu' => ['label' => 'Attribute', 'type' => 'text'],
+            'active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
         ];
     }
 }
