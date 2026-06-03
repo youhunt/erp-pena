@@ -8,6 +8,12 @@
                 <h4 class="card-title mb-1">Stock Adjustment</h4>
                 <p class="text-muted mb-4">Post stock correction into inventory ledger and balance.</p>
 
+                <?php if ($items === []): ?>
+                    <div class="alert alert-warning">
+                        Master item belum ada / belum cocok dengan active company-site. Isi <strong>Manual Item Code</strong> di bawah untuk tetap testing stock engine.
+                    </div>
+                <?php endif ?>
+
                 <form method="post" action="<?= site_url('inventory/stock-adjustment') ?>">
                     <?= csrf_field() ?>
 
@@ -37,20 +43,26 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Item</label>
-                        <select name="item_code" class="form-select" id="itemSelect" required>
-                            <option value="">Select Item</option>
+                        <label class="form-label">Select Item</label>
+                        <select name="item_code" class="form-select" id="itemSelect">
+                            <option value="">Manual Item / Select Item</option>
                             <?php foreach ($items as $item): ?>
                                 <option value="<?= esc($item['code'] ?? '') ?>" data-name="<?= esc($item['name'] ?? '') ?>" data-uom="<?= esc($item['uom_code'] ?? $item['base_uom_code'] ?? 'PCS') ?>">
                                     <?= esc(($item['code'] ?? '-') . ' - ' . ($item['name'] ?? '-')) ?>
                                 </option>
                             <?php endforeach ?>
                         </select>
+                        <div class="form-text">Pilih dari master item, atau kosongkan lalu isi manual item code.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Manual Item Code</label>
+                        <input type="text" name="manual_item_code" id="manualItemCode" class="form-control" value="<?= esc(old('manual_item_code')) ?>" placeholder="Contoh: ITEM-001">
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Item Name</label>
-                        <input type="text" name="item_name" id="itemName" class="form-control" value="<?= esc(old('item_name')) ?>">
+                        <input type="text" name="item_name" id="itemName" class="form-control" value="<?= esc(old('item_name')) ?>" placeholder="Contoh: Barang Testing">
                     </div>
 
                     <div class="row">
@@ -78,7 +90,7 @@
                         <button type="submit" class="btn btn-primary" onclick="return confirm('Post this stock adjustment?')">
                             <i class="bx bx-save me-1"></i> Post Adjustment
                         </button>
-                        <a href="<?= site_url('dashboard') ?>" class="btn btn-light">Cancel</a>
+                        <a href="<?= site_url('inventory/stock-balances') ?>" class="btn btn-light">Cancel</a>
                     </div>
                 </form>
             </div>
@@ -130,12 +142,14 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const itemSelect = document.getElementById('itemSelect');
+    const manualItemCode = document.getElementById('manualItemCode');
     const itemName = document.getElementById('itemName');
     const uomCode = document.getElementById('uomCode');
 
     itemSelect.addEventListener('change', function () {
         const option = itemSelect.options[itemSelect.selectedIndex];
-        if (option) {
+        if (option && option.value) {
+            manualItemCode.value = '';
             itemName.value = option.dataset.name || '';
             uomCode.value = option.dataset.uom || 'PCS';
         }
