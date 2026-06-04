@@ -182,7 +182,7 @@ class PenaErpSeeder extends Seeder
             ['Work Order', 'production/work-orders', 'production.view'],
             ['Allocate Work Order', 'production/work-orders', 'production.view'],
             ['Work Order In', $this->placeholderRoute('Work Order In'), 'production.view'],
-            ['Work Order Out', $this->placeholderRoute('Work Order Out'), 'production.view'],
+            ['Work Order Out', 'production/work-orders', 'production.view'],
             ['Work Order In Out', $this->placeholderRoute('Work Order In Out'), 'production.view'],
             ['Work Order Labor', $this->placeholderRoute('Work Order Labor'), 'production.view'],
             ['Production Period Close', $this->placeholderRoute('Production Period Close'), 'production.view'],

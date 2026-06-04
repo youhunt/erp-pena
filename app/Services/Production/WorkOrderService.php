@@ -220,6 +220,97 @@ class WorkOrderService
         }
     }
 
+    public function issueMaterials(int $workOrderId, ?int $userId = null): void
+    {
+        $woModel = new ProductionWorkOrderModel();
+        $componentModel = new ProductionWorkOrderComponentModel();
+        $workOrder = $woModel->find($workOrderId);
+        if ($workOrder === null) {
+            throw new RuntimeException('Work order not found.');
+        }
+
+        $status = (string) ($workOrder['status'] ?? 'draft');
+        if (! in_array($status, ['allocated', 'partial_issued'], true)) {
+            throw new RuntimeException('Only allocated or partially issued work order can be issued. Current status: ' . $status);
+        }
+
+        $components = $componentModel->where('production_work_order_id', $workOrderId)->orderBy('line_no', 'ASC')->findAll();
+        if ($components === []) {
+            throw new RuntimeException('Work order has no component lines.');
+        }
+
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            $stock = new InventoryStockService();
+            $issuedAny = false;
+            $warehouseId = $this->warehouseIdByCode((string) ($workOrder['warehouse_code'] ?? ''), (int) $workOrder['company_id'], $workOrder['site_id'] ?? null);
+            $locationId = $this->defaultLocationId((int) $workOrder['company_id'], $workOrder['site_id'] ?? null);
+
+            foreach ($components as $component) {
+                $allocatedQty = (float) ($component['allocated_qty'] ?? 0);
+                $issuedQty = (float) ($component['issued_qty'] ?? 0);
+                $toIssue = max(0.0, $allocatedQty - $issuedQty);
+                if ($toIssue <= 0) {
+                    continue;
+                }
+
+                $stockPayload = [
+                    'company_id' => $workOrder['company_id'],
+                    'site_id' => $workOrder['site_id'] ?? null,
+                    'warehouse_id' => $warehouseId,
+                    'location_id' => $locationId,
+                    'item_id' => $component['component_item_id'] ?? null,
+                    'item_code' => $component['component_item_code'],
+                    'item_name' => $component['component_item_name'] ?? null,
+                    'uom_code' => $component['uom_code'] ?? 'PCS',
+                    'qty' => $toIssue,
+                    'movement_type' => 'production_issue',
+                    'reference_type' => 'production_work_order',
+                    'reference_id' => $workOrderId,
+                    'reference_no' => $workOrder['wo_no'] ?? null,
+                    'notes' => 'Work order material issue.',
+                ];
+
+                $stock->releaseReservation($stockPayload, $userId);
+                $stock->stockOut($stockPayload, $userId);
+
+                $newIssued = $issuedQty + $toIssue;
+                $bookingQty = (float) ($component['booking_qty'] ?? $component['qty_used'] ?? 0);
+                $componentModel->update($component['id'], [
+                    'issued_qty' => $newIssued,
+                    'line_status' => $newIssued >= $bookingQty ? 'issued' : 'partial_issued',
+                ]);
+                $issuedAny = true;
+            }
+
+            if (! $issuedAny) {
+                throw new RuntimeException('No allocated component quantity can be issued.');
+            }
+
+            $this->refreshIssueStatus($workOrderId, $userId);
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to issue work order material.');
+            }
+            $db->transCommit();
+
+            (new AuditLogService())->log('production.wo', 'wo.issue_material', [
+                'company_id' => $workOrder['company_id'] ?? null,
+                'site_id' => $workOrder['site_id'] ?? null,
+                'user_id' => $userId,
+                'table_name' => 'production_work_orders',
+                'record_id' => $workOrderId,
+                'record_code' => $workOrder['wo_no'] ?? null,
+                'description' => 'Work order components issued to production.',
+            ]);
+        } catch (RuntimeException $e) {
+            $db->transRollback();
+            throw $e;
+        }
+    }
+
     private function refreshAllocationStatus(int $workOrderId, ?int $userId): void
     {
         $components = (new ProductionWorkOrderComponentModel())->where('production_work_order_id', $workOrderId)->findAll();
@@ -231,6 +322,23 @@ class WorkOrderService
         }
 
         $status = $allocated >= $required && $required > 0 ? 'allocated' : 'partial_allocated';
+        (new ProductionWorkOrderModel())->update($workOrderId, [
+            'status' => $status,
+            'updated_by' => $userId,
+        ]);
+    }
+
+    private function refreshIssueStatus(int $workOrderId, ?int $userId): void
+    {
+        $components = (new ProductionWorkOrderComponentModel())->where('production_work_order_id', $workOrderId)->findAll();
+        $required = 0.0;
+        $issued = 0.0;
+        foreach ($components as $component) {
+            $required += (float) ($component['booking_qty'] ?? 0);
+            $issued += (float) ($component['issued_qty'] ?? 0);
+        }
+
+        $status = $issued >= $required && $required > 0 ? 'material_issued' : 'partial_issued';
         (new ProductionWorkOrderModel())->update($workOrderId, [
             'status' => $status,
             'updated_by' => $userId,

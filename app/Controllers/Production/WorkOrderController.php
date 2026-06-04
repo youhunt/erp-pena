@@ -122,6 +122,17 @@ class WorkOrderController extends BaseController
         return redirect()->to('/production/work-orders/' . $id)->with('message', 'Work order material allocated.');
     }
 
+    public function issueMaterials(int $id)
+    {
+        try {
+            (new WorkOrderService())->issueMaterials($id, auth()->id());
+        } catch (RuntimeException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->to('/production/work-orders/' . $id)->with('message', 'Work order material issued.');
+    }
+
     private function masterRows(string $table): array
     {
         $tenant = new TenantContext(session());
