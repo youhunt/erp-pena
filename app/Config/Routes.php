@@ -67,6 +67,20 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('receipts/(:num)', 'Purchase\PurchaseReceiptController::show/$1');
     });
 
+    $routes->group('production', static function (RouteCollection $routes): void {
+        $routes->get('boms', 'Production\ProductionMasterController::boms');
+        $routes->get('boms/new', 'Production\ProductionMasterController::newBom');
+        $routes->post('boms', 'Production\ProductionMasterController::storeBom');
+        $routes->get('boms/(:num)', 'Production\ProductionMasterController::showBom/$1');
+        $routes->get('work-centers', 'Production\ProductionMasterController::workCenters');
+        $routes->get('work-centers/new', 'Production\ProductionMasterController::newWorkCenter');
+        $routes->post('work-centers', 'Production\ProductionMasterController::storeWorkCenter');
+        $routes->get('routings', 'Production\ProductionMasterController::routings');
+        $routes->get('routings/new', 'Production\ProductionMasterController::newRouting');
+        $routes->post('routings', 'Production\ProductionMasterController::storeRouting');
+        $routes->get('routings/(:num)', 'Production\ProductionMasterController::showRouting/$1');
+    });
+
     $routes->group('setup', static function (RouteCollection $routes): void {
         $routes->get('options/cities', 'Setup\MasterDataController::cityOptions');
 

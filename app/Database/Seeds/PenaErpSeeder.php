@@ -176,9 +176,9 @@ class PenaErpSeeder extends Seeder
         ], $now);
 
         $this->menuGroup('Production', 'bx-factory', 80, [
-            ['BOM', $this->placeholderRoute('BOM'), 'production.view'],
-            ['Work Center', $this->placeholderRoute('Work Center'), 'production.view'],
-            ['Routing', $this->placeholderRoute('Routing'), 'production.view'],
+            ['BOM', 'production/boms', 'production.view'],
+            ['Work Center', 'production/work-centers', 'production.view'],
+            ['Routing', 'production/routings', 'production.view'],
             ['Work Order', $this->placeholderRoute('Work Order'), 'production.view'],
             ['Allocate Work Order', $this->placeholderRoute('Allocate Work Order'), 'production.view'],
             ['Work Order In', $this->placeholderRoute('Work Order In'), 'production.view'],
