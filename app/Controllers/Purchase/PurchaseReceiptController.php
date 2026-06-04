@@ -15,6 +15,24 @@ use RuntimeException;
 
 class PurchaseReceiptController extends BaseController
 {
+    public function index(): string
+    {
+        $tenant = new TenantContext(session());
+        $model = new PurchaseReceiptModel();
+
+        if ($tenant->activeCompanyId() !== null) {
+            $model->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $model->where('site_id', $tenant->activeSiteId());
+        }
+
+        return view('purchase/receipts/index', [
+            'title' => 'Purchase Receipts',
+            'receipts' => $model->orderBy('receipt_date', 'DESC')->orderBy('id', 'DESC')->findAll(100),
+        ]);
+    }
+
     public function createFromPo(int $poId): string
     {
         $tenant = new TenantContext(session());
