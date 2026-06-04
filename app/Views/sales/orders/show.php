@@ -11,7 +11,7 @@
                         <h4 class="card-title mb-1">Sales Order</h4>
                         <p class="text-muted mb-0"><?= esc($order['so_no']) ?></p>
                     </div>
-                    <span class="badge bg-<?= match ($status) { 'draft' => 'secondary', 'submitted' => 'info', 'approved' => 'success', 'reserved' => 'primary', 'partial_reserved' => 'warning', 'cancelled' => 'danger', default => 'secondary' } ?>"><?= esc($status) ?></span>
+                    <span class="badge bg-<?= match ($status) { 'draft' => 'secondary', 'submitted' => 'info', 'approved' => 'success', 'reserved' => 'primary', 'partial_reserved', 'partial_delivered' => 'warning', 'delivered' => 'success', 'cancelled' => 'danger', default => 'secondary' } ?>"><?= esc($status) ?></span>
                 </div>
 
                 <table class="table table-sm mb-0">
@@ -39,6 +39,9 @@
                     <?php endif ?>
                     <?php if (in_array($status, ['approved','partial_reserved'], true)): ?>
                         <form method="post" action="<?= site_url('sales/orders/' . $order['id'] . '/reserve') ?>"><?= csrf_field() ?><button class="btn btn-primary" onclick="return confirm('Reserve stock for this SO?')"><i class="bx bx-lock-alt me-1"></i> Reserve Stock</button></form>
+                    <?php endif ?>
+                    <?php if (in_array($status, ['approved','reserved','partial_delivered'], true)): ?>
+                        <a href="<?= site_url('sales/orders/' . $order['id'] . '/deliver') ?>" class="btn btn-success"><i class="bx bx-send me-1"></i> Create DO</a>
                     <?php endif ?>
                     <?php if (in_array($status, ['draft','submitted'], true)): ?>
                         <form method="post" action="<?= site_url('sales/orders/' . $order['id'] . '/cancel') ?>"><?= csrf_field() ?><input type="hidden" name="cancel_reason" value="Cancelled from SO detail"><button class="btn btn-outline-danger" onclick="return confirm('Cancel this SO?')">Cancel</button></form>

@@ -140,7 +140,7 @@ class PenaErpSeeder extends Seeder
             ['Customer Address', $this->placeholderRoute('Customer Address'), 'sales.customer.view'],
             ['Sales Order', 'sales/orders', 'sales.order.view'],
             ['Allocation Order', $this->placeholderRoute('Allocation Order'), 'sales.order.view'],
-            ['Delivery Order', $this->placeholderRoute('Delivery Order'), 'sales.order.view'],
+            ['Delivery Order', 'sales/deliveries', 'sales.order.view'],
             ['Sales Period Close', $this->placeholderRoute('Sales Period Close'), 'sales.order.view'],
         ], $now);
 

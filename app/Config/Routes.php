@@ -39,6 +39,10 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('orders/(:num)/approve', 'Sales\SalesOrderController::approve/$1');
         $routes->post('orders/(:num)/reserve', 'Sales\SalesOrderController::reserve/$1');
         $routes->post('orders/(:num)/cancel', 'Sales\SalesOrderController::cancel/$1');
+        $routes->get('orders/(:num)/deliver', 'Sales\SalesDeliveryController::createFromSo/$1');
+        $routes->post('orders/(:num)/deliver', 'Sales\SalesDeliveryController::storeFromSo/$1');
+        $routes->get('deliveries', 'Sales\SalesDeliveryController::index');
+        $routes->get('deliveries/(:num)', 'Sales\SalesDeliveryController::show/$1');
     });
 
     $routes->group('purchase', static function (RouteCollection $routes): void {
