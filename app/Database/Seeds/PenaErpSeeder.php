@@ -49,8 +49,10 @@ class PenaErpSeeder extends Seeder
             ['wht_rates', ['company_id' => $companyId, 'code' => 'PPH23'], ['company_id' => $companyId, 'code' => 'PPH23', 'name' => 'PPH 23', 'rate' => 2]],
             ['transaction_codes', ['company_id' => $companyId, 'code' => 'SO'], ['company_id' => $companyId, 'code' => 'SO', 'name' => 'Sales Order']],
             ['transaction_codes', ['company_id' => $companyId, 'code' => 'PO'], ['company_id' => $companyId, 'code' => 'PO', 'name' => 'Purchase Order']],
+            ['transaction_codes', ['company_id' => $companyId, 'code' => 'SI'], ['company_id' => $companyId, 'code' => 'SI', 'name' => 'Sales Invoice']],
             ['prefix_codes', ['company_id' => $companyId, 'code' => 'SO'], ['company_id' => $companyId, 'code' => 'SO', 'name' => 'Sales Order Prefix']],
             ['prefix_codes', ['company_id' => $companyId, 'code' => 'PO'], ['company_id' => $companyId, 'code' => 'PO', 'name' => 'Purchase Order Prefix']],
+            ['prefix_codes', ['company_id' => $companyId, 'code' => 'SI'], ['company_id' => $companyId, 'code' => 'SI', 'name' => 'Sales Invoice Prefix']],
         ] as [$table, $where, $data]) {
             $this->upsert($table, $where, $data + ['is_active' => 1, 'created_at' => $now, 'updated_at' => $now]);
         }
@@ -200,7 +202,7 @@ class PenaErpSeeder extends Seeder
             ['Accounts Receivable', $this->placeholderRoute('Accounts Receivable'), 'finance.ar.view'],
             ['Manual A/R Invoice', $this->placeholderRoute('Manual A/R Invoice'), 'finance.ar.view'],
             ['Proforma Invoice', $this->placeholderRoute('Proforma Invoice'), 'finance.ar.view'],
-            ['Sales Invoice', $this->placeholderRoute('Sales Invoice'), 'finance.ar.view'],
+            ['Sales Invoice', 'ar/sales-invoices', 'finance.ar.view'],
             ['Inventory Sales Invoice', $this->placeholderRoute('Inventory Sales Invoice'), 'finance.ar.view'],
             ['Advanced A/R Receipt', $this->placeholderRoute('Advanced A/R Receipt'), 'finance.ar.view'],
             ['Payment Receipt', $this->placeholderRoute('Payment Receipt'), 'finance.ar.view'],

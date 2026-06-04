@@ -21,7 +21,12 @@
                         <tr><th>Posted</th><td><?= esc($delivery['posted_at'] ?? '-') ?></td></tr>
                     </tbody>
                 </table>
-                <div class="mt-3"><a href="<?= site_url('sales/orders/' . $delivery['sales_order_id']) ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to SO</a></div>
+                <div class="d-flex flex-wrap gap-2 mt-3">
+                    <a href="<?= site_url('sales/orders/' . $delivery['sales_order_id']) ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to SO</a>
+                    <?php if (($delivery['status'] ?? '') !== 'invoiced'): ?>
+                        <a href="<?= site_url('sales/deliveries/' . $delivery['id'] . '/invoice') ?>" class="btn btn-primary"><i class="bx bx-receipt me-1"></i> Create Invoice</a>
+                    <?php endif ?>
+                </div>
             </div>
         </div>
     </div>

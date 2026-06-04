@@ -11,7 +11,7 @@
                         <h4 class="card-title mb-1">Sales Order</h4>
                         <p class="text-muted mb-0"><?= esc($order['so_no']) ?></p>
                     </div>
-                    <span class="badge bg-<?= match ($status) { 'draft' => 'secondary', 'submitted' => 'info', 'approved' => 'success', 'reserved' => 'primary', 'partial_reserved', 'partial_delivered' => 'warning', 'delivered' => 'success', 'cancelled' => 'danger', default => 'secondary' } ?>"><?= esc($status) ?></span>
+                    <span class="badge bg-<?= match ($status) { 'draft' => 'secondary', 'submitted' => 'info', 'approved' => 'success', 'reserved' => 'primary', 'partial_reserved', 'partial_delivered' => 'warning', 'delivered', 'invoiced' => 'success', 'cancelled' => 'danger', default => 'secondary' } ?>"><?= esc($status) ?></span>
                 </div>
 
                 <table class="table table-sm mb-0">

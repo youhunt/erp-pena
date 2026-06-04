@@ -43,6 +43,13 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('orders/(:num)/deliver', 'Sales\SalesDeliveryController::storeFromSo/$1');
         $routes->get('deliveries', 'Sales\SalesDeliveryController::index');
         $routes->get('deliveries/(:num)', 'Sales\SalesDeliveryController::show/$1');
+        $routes->get('deliveries/(:num)/invoice', 'AccountsReceivable\SalesInvoiceController::createFromDelivery/$1');
+        $routes->post('deliveries/(:num)/invoice', 'AccountsReceivable\SalesInvoiceController::storeFromDelivery/$1');
+    });
+
+    $routes->group('ar', static function (RouteCollection $routes): void {
+        $routes->get('sales-invoices', 'AccountsReceivable\SalesInvoiceController::index');
+        $routes->get('sales-invoices/(:num)', 'AccountsReceivable\SalesInvoiceController::show/$1');
     });
 
     $routes->group('purchase', static function (RouteCollection $routes): void {
