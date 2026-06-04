@@ -83,6 +83,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('work-orders/new', 'Production\WorkOrderController::create');
         $routes->post('work-orders', 'Production\WorkOrderController::store');
         $routes->get('work-orders/(:num)', 'Production\WorkOrderController::show/$1');
+        $routes->post('work-orders/(:num)/allocate', 'Production\WorkOrderController::allocate/$1');
     });
 
     $routes->group('setup', static function (RouteCollection $routes): void {

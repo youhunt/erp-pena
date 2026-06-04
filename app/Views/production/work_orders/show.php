@@ -4,7 +4,15 @@
 <div class="card"><div class="card-body">
     <div class="d-flex justify-content-between align-items-start mb-4">
         <div><h4 class="card-title mb-1">Work Order</h4><p class="text-muted mb-0"><?= esc($workOrder['wo_no']) ?></p></div>
-        <span class="badge bg-secondary"><?= esc($workOrder['status']) ?></span>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <?php if (in_array($workOrder['status'] ?? 'draft', ['draft', 'partial_allocated'], true)): ?>
+                <form method="post" action="<?= site_url('production/work-orders/' . $workOrder['id'] . '/allocate') ?>">
+                    <?= csrf_field() ?>
+                    <button class="btn btn-primary" onclick="return confirm('Allocate material for this work order?')"><i class="bx bx-lock-alt me-1"></i> Allocate Material</button>
+                </form>
+            <?php endif ?>
+            <span class="badge bg-<?= ($workOrder['status'] ?? '') === 'allocated' ? 'success' : 'secondary' ?>"><?= esc($workOrder['status']) ?></span>
+        </div>
     </div>
     <div class="row">
         <div class="col-md-3 mb-3"><label class="text-muted">WO Code</label><div class="fw-semibold"><?= esc($workOrder['wo_code']) ?></div></div>
@@ -23,10 +31,10 @@
 <div class="card"><div class="card-body">
     <h4 class="card-title mb-3">BOM</h4>
     <div class="table-responsive"><table class="table table-nowrap align-middle mb-0">
-        <thead class="table-light"><tr><th>No.</th><th>Component</th><th>Name</th><th class="text-end">Qty Used</th><th>UoM</th><th>Whs</th><th>Loc</th><th>Batch No.</th><th class="text-end">Booking Qty</th></tr></thead>
+        <thead class="table-light"><tr><th>No.</th><th>Component</th><th>Name</th><th class="text-end">Qty Used</th><th>UoM</th><th>Whs</th><th>Loc</th><th>Batch No.</th><th class="text-end">Booking Qty</th><th class="text-end">Allocated</th><th>Status</th></tr></thead>
         <tbody><?php foreach ($components as $line): ?><tr>
             <td><?= esc($line['line_no']) ?></td><td class="fw-semibold"><?= esc($line['component_item_code']) ?></td><td><?= esc($line['component_item_name'] ?? '-') ?></td>
-            <td class="text-end"><?= esc(number_format((float) $line['qty_used'], 6)) ?></td><td><?= esc($line['uom_code']) ?></td><td><?= esc($line['warehouse_code'] ?? '-') ?></td><td><?= esc($line['location_code'] ?? '-') ?></td><td><?= esc($line['batch_no'] ?? '-') ?></td><td class="text-end"><?= esc(number_format((float) $line['booking_qty'], 6)) ?></td>
+            <td class="text-end"><?= esc(number_format((float) $line['qty_used'], 6)) ?></td><td><?= esc($line['uom_code']) ?></td><td><?= esc($line['warehouse_code'] ?? '-') ?></td><td><?= esc($line['location_code'] ?? '-') ?></td><td><?= esc($line['batch_no'] ?? '-') ?></td><td class="text-end"><?= esc(number_format((float) $line['booking_qty'], 6)) ?></td><td class="text-end"><?= esc(number_format((float) ($line['allocated_qty'] ?? 0), 6)) ?></td><td><span class="badge bg-secondary"><?= esc($line['line_status'] ?? 'open') ?></span></td>
         </tr><?php endforeach ?></tbody>
     </table></div>
 </div></div>

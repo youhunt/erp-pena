@@ -14,8 +14,9 @@ class ProductionMenuSeeder extends Seeder
         $this->menuItem($productionId, 'Work Center', 'production/work-centers', null, 'production.view', 20, $now);
         $this->menuItem($productionId, 'Routing', 'production/routings', null, 'production.view', 30, $now);
         $this->menuItem($productionId, 'Work Order', 'production/work-orders', null, 'production.view', 40, $now);
+        $this->menuItem($productionId, 'Allocate Work Order', 'production/work-orders', null, 'production.view', 50, $now);
 
-        foreach (['modules/bom', 'modules/work-center', 'modules/routing', 'modules/work-order'] as $route) {
+        foreach (['modules/bom', 'modules/work-center', 'modules/routing', 'modules/work-order', 'modules/allocate-work-order'] as $route) {
             $this->db->table('menu_items')->where('route', $route)->update(['is_active' => 0, 'updated_at' => $now]);
         }
     }
