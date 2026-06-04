@@ -10,9 +10,10 @@ class PurchaseMenuSeeder extends Seeder
     {
         $now = date('Y-m-d H:i:s');
         $purchaseId = $this->menuItem(null, 'Purchase', '#', 'bx-cart', null, 30, $now);
+        $this->menuItem($purchaseId, 'Purchase Order', 'purchase/orders', null, 'purchase.po.view', 10, $now);
+        $this->menuItem($purchaseId, 'Purchase Receipt', 'purchase/receipts', null, 'purchase.receipt.view', 15, $now);
         $this->menuItem($purchaseId, 'Supplier Terms', 'setup/supplier-terms', null, 'purchase.supplier.view', 20, $now);
         $this->menuItem($purchaseId, 'Supplier Promo', 'setup/supplier-promos', null, 'purchase.supplier.view', 30, $now);
-        $this->menuItem($purchaseId, 'Purchase Order', 'purchase/orders', null, 'purchase.po.view', 10, $now);
 
         $this->db->table('menu_items')
             ->where('parent_id', $purchaseId)
