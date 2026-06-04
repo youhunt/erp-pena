@@ -21,7 +21,6 @@ class PurchaseOrderController extends BaseController
         if ($tenant->activeCompanyId() !== null) {
             $orders->where('company_id', $tenant->activeCompanyId());
         }
-
         if ($tenant->activeSiteId() !== null) {
             $orders->where('site_id', $tenant->activeSiteId());
         }
@@ -45,17 +44,11 @@ class PurchaseOrderController extends BaseController
     {
         $tenant = new TenantContext(session());
         $companyId = $tenant->activeCompanyId();
-
         if ($companyId === null || $companyId < 1) {
             return redirect()->back()->withInput()->with('error', 'Active company is required.');
         }
 
-        $rules = [
-            'po_no' => 'required|max_length[60]',
-            'po_date' => 'required|valid_date[Y-m-d]',
-        ];
-
-        if (! $this->validate($rules)) {
+        if (! $this->validate(['po_no' => 'required|max_length[60]', 'po_date' => 'required|valid_date[Y-m-d]'])) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
 
@@ -66,18 +59,25 @@ class PurchaseOrderController extends BaseController
 
         $supplierId = (int) ($this->request->getPost('supplier_id') ?: 0);
         $supplier = $supplierId > 0 ? Database::connect()->table('suppliers')->where('id', $supplierId)->get()->getRowArray() : null;
+        $supplierCode = $supplier['supplier'] ?? $supplier['code'] ?? null;
+        $supplierName = $supplier['supplierna'] ?? $supplier['name'] ?? trim((string) $this->request->getPost('supplier_name'));
 
         try {
             $poId = (new PurchaseOrderService())->create([
                 'company_id' => $companyId,
                 'site_id' => $tenant->activeSiteId(),
+                'company' => session('active_company_code'),
+                'site' => session('active_site_code'),
                 'po_no' => trim((string) $this->request->getPost('po_no')),
                 'po_date' => (string) $this->request->getPost('po_date'),
                 'supplier_id' => $supplierId > 0 ? $supplierId : null,
-                'supplier_name' => $supplier['name'] ?? trim((string) $this->request->getPost('supplier_name')),
+                'supplier' => $supplierCode,
+                'supplier_code' => $supplierCode,
+                'supplier_name' => $supplierName,
                 'terms_code' => trim((string) ($this->request->getPost('terms_code') ?: ($supplier['terms_code'] ?? $supplier['terms'] ?? ''))),
                 'currency_code' => trim((string) ($this->request->getPost('currency_code') ?: 'IDR')),
                 'status' => 'draft',
+                'document_status' => 'draft',
                 'notes' => trim((string) $this->request->getPost('notes')),
             ], $lines, auth()->id());
         } catch (RuntimeException $exception) {
@@ -91,7 +91,6 @@ class PurchaseOrderController extends BaseController
     {
         $tenant = new TenantContext(session());
         $order = $this->scopedOrder($tenant, $id);
-
         if ($order === null) {
             throw PageNotFoundException::forPageNotFound();
         }
@@ -103,6 +102,42 @@ class PurchaseOrderController extends BaseController
         ]);
     }
 
+    public function submit(int $id)
+    {
+        return $this->transition($id, 'submit', 'PO submitted.');
+    }
+
+    public function approve(int $id)
+    {
+        return $this->transition($id, 'approve', 'PO approved.');
+    }
+
+    public function close(int $id)
+    {
+        return $this->transition($id, 'close', 'PO closed.');
+    }
+
+    public function cancel(int $id)
+    {
+        $reason = trim((string) $this->request->getPost('cancel_reason'));
+        try {
+            (new PurchaseOrderService())->cancel($id, $reason, auth()->id());
+        } catch (RuntimeException $exception) {
+            return redirect()->back()->with('error', $exception->getMessage());
+        }
+        return redirect()->to('/purchase/orders/' . $id)->with('message', 'PO cancelled.');
+    }
+
+    private function transition(int $id, string $method, string $message)
+    {
+        try {
+            (new PurchaseOrderService())->{$method}($id, auth()->id());
+        } catch (RuntimeException $exception) {
+            return redirect()->back()->with('error', $exception->getMessage());
+        }
+        return redirect()->to('/purchase/orders/' . $id)->with('message', $message);
+    }
+
     private function scopedOrder(TenantContext $tenant, int $id): ?array
     {
         $orders = new PurchaseOrderModel();
@@ -112,7 +147,6 @@ class PurchaseOrderController extends BaseController
         if ($tenant->activeSiteId() !== null) {
             $orders->where('site_id', $tenant->activeSiteId());
         }
-
         return $orders->find($id);
     }
 
@@ -133,15 +167,12 @@ class PurchaseOrderController extends BaseController
             $price = (float) ($prices[$index] ?? 0);
             $name = trim((string) ($itemNames[$index] ?? ''));
             $code = trim((string) $code);
-
             if ($code === '' && $name === '' && $qty <= 0) {
                 continue;
             }
-
             if ($qty <= 0) {
                 continue;
             }
-
             $lines[] = [
                 'item_id' => (int) ($itemIds[$index] ?? 0) > 0 ? (int) $itemIds[$index] : null,
                 'item_code' => $code !== '' ? $code : null,
@@ -153,23 +184,26 @@ class PurchaseOrderController extends BaseController
                 'tax_amount' => (float) ($taxes[$index] ?? 0),
             ];
         }
-
         return $lines;
     }
 
     private function masterRows(string $table): array
     {
         $tenant = new TenantContext(session());
-        $builder = Database::connect()->table($table)->where('deleted_at', null)->where('is_active', 1);
-
-        if ($tenant->activeCompanyId() !== null && Database::connect()->fieldExists('company_id', $table)) {
+        $db = Database::connect();
+        $builder = $db->table($table);
+        if ($db->fieldExists('deleted_at', $table)) {
+            $builder->where('deleted_at', null);
+        }
+        if ($db->fieldExists('is_active', $table)) {
+            $builder->where('is_active', 1);
+        }
+        if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', $table)) {
             $builder->where('company_id', $tenant->activeCompanyId());
         }
-
-        if ($tenant->activeSiteId() !== null && Database::connect()->fieldExists('site_id', $table)) {
+        if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', $table)) {
             $builder->where('site_id', $tenant->activeSiteId());
         }
-
-        return $builder->orderBy('code', 'ASC')->get()->getResultArray();
+        return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get()->getResultArray();
     }
 }
