@@ -46,12 +46,21 @@ class SalesDeliveryController extends BaseController
             return view('errors/html/error_404', ['message' => 'Only approved, reserved, or partially delivered SO can be delivered.']);
         }
 
+        $warehouses = $this->masterRows('warehouses');
+        $locations = $this->masterRows('locations');
+        $warehouseId = $this->oldOrDefaultId('warehouse_id', $warehouses);
+        $locationId = $this->oldOrDefaultId('location_id', $locations);
+        $lines = (new SalesOrderLineModel())->where('sales_order_id', $soId)->where('qty_outstanding >', 0)->orderBy('line_no', 'ASC')->findAll();
+
         return view('sales/deliveries/form', [
             'title' => 'Create Delivery Order',
             'so' => $so,
-            'lines' => (new SalesOrderLineModel())->where('sales_order_id', $soId)->where('qty_outstanding >', 0)->orderBy('line_no', 'ASC')->findAll(),
-            'warehouses' => $this->masterRows('warehouses'),
-            'locations' => $this->masterRows('locations'),
+            'lines' => $lines,
+            'warehouses' => $warehouses,
+            'locations' => $locations,
+            'selectedWarehouseId' => $warehouseId,
+            'selectedLocationId' => $locationId,
+            'stockByItem' => $this->stockByItemCode($lines, $tenant, $warehouseId, $locationId),
         ]);
     }
 
@@ -85,8 +94,8 @@ class SalesDeliveryController extends BaseController
                 'customer_id' => $so['customer_id'] ?? null,
                 'customer_code' => $so['customer_code'] ?? $so['customer'] ?? null,
                 'customer_name' => $so['customer_name'] ?? null,
-                'warehouse_id' => $this->nullableInt($this->request->getPost('warehouse_id')),
-                'location_id' => $this->nullableInt($this->request->getPost('location_id')),
+                'warehouse_id' => $this->nullableInt($this->request->getPost('warehouse_id')) ?? $this->defaultMasterId('warehouses'),
+                'location_id' => $this->nullableInt($this->request->getPost('location_id')) ?? $this->defaultMasterId('locations'),
                 'notes' => trim((string) $this->request->getPost('notes')),
             ], $lines, auth()->id());
         } catch (RuntimeException $e) {
@@ -162,6 +171,67 @@ class SalesDeliveryController extends BaseController
             $builder->where('site_id', $tenant->activeSiteId());
         }
         return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get()->getResultArray();
+    }
+
+    private function oldOrDefaultId(string $field, array $rows): ?int
+    {
+        $old = $this->nullableInt(old($field));
+        if ($old !== null) {
+            return $old;
+        }
+
+        return isset($rows[0]['id']) ? (int) $rows[0]['id'] : null;
+    }
+
+    private function defaultMasterId(string $table): ?int
+    {
+        $rows = $this->masterRows($table);
+
+        return isset($rows[0]['id']) ? (int) $rows[0]['id'] : null;
+    }
+
+    private function stockByItemCode(array $lines, TenantContext $tenant, ?int $warehouseId, ?int $locationId): array
+    {
+        $codes = [];
+        foreach ($lines as $line) {
+            $code = trim((string) ($line['item_code'] ?? ''));
+            if ($code !== '') {
+                $codes[] = $code;
+            }
+        }
+        $codes = array_values(array_unique($codes));
+        if ($codes === []) {
+            return [];
+        }
+
+        $db = Database::connect();
+        if (! $db->tableExists('inventory_stock_balances')) {
+            return [];
+        }
+
+        $builder = $db->table('inventory_stock_balances')
+            ->select('item_code, qty_on_hand, qty_reserved, qty_available')
+            ->whereIn('item_code', $codes);
+
+        if ($tenant->activeCompanyId() !== null) {
+            $builder->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $builder->where('site_id', $tenant->activeSiteId());
+        }
+        $warehouseId === null ? $builder->where('warehouse_id', null) : $builder->where('warehouse_id', $warehouseId);
+        $locationId === null ? $builder->where('location_id', null) : $builder->where('location_id', $locationId);
+
+        $stock = [];
+        foreach ($builder->get()->getResultArray() as $row) {
+            $stock[(string) $row['item_code']] = [
+                'on_hand' => (float) ($row['qty_on_hand'] ?? 0),
+                'reserved' => (float) ($row['qty_reserved'] ?? 0),
+                'available' => (float) ($row['qty_available'] ?? 0),
+            ];
+        }
+
+        return $stock;
     }
 
     private function nullableInt(mixed $value): ?int
