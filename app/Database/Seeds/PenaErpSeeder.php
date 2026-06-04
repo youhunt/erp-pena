@@ -179,7 +179,7 @@ class PenaErpSeeder extends Seeder
             ['BOM', 'production/boms', 'production.view'],
             ['Work Center', 'production/work-centers', 'production.view'],
             ['Routing', 'production/routings', 'production.view'],
-            ['Work Order', $this->placeholderRoute('Work Order'), 'production.view'],
+            ['Work Order', 'production/work-orders', 'production.view'],
             ['Allocate Work Order', $this->placeholderRoute('Allocate Work Order'), 'production.view'],
             ['Work Order In', $this->placeholderRoute('Work Order In'), 'production.view'],
             ['Work Order Out', $this->placeholderRoute('Work Order Out'), 'production.view'],

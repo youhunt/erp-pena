@@ -79,6 +79,10 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('routings/new', 'Production\ProductionMasterController::newRouting');
         $routes->post('routings', 'Production\ProductionMasterController::storeRouting');
         $routes->get('routings/(:num)', 'Production\ProductionMasterController::showRouting/$1');
+        $routes->get('work-orders', 'Production\WorkOrderController::index');
+        $routes->get('work-orders/new', 'Production\WorkOrderController::create');
+        $routes->post('work-orders', 'Production\WorkOrderController::store');
+        $routes->get('work-orders/(:num)', 'Production\WorkOrderController::show/$1');
     });
 
     $routes->group('setup', static function (RouteCollection $routes): void {
