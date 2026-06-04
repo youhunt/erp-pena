@@ -36,6 +36,9 @@
                     <?php if ($status === 'submitted'): ?>
                         <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/approve') ?>"><?= csrf_field() ?><button class="btn btn-success" onclick="return confirm('Approve this PO?')">Approve</button></form>
                     <?php endif ?>
+                    <?php if (in_array($status, ['approved','partial_received'], true)): ?>
+                        <a href="<?= site_url('purchase/orders/' . $order['id'] . '/receive') ?>" class="btn btn-primary"><i class="bx bx-package me-1"></i> Receive</a>
+                    <?php endif ?>
                     <?php if (in_array($status, ['approved','partial_received','received'], true)): ?>
                         <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/close') ?>"><?= csrf_field() ?><button class="btn btn-dark" onclick="return confirm('Close this PO?')">Close</button></form>
                     <?php endif ?>
@@ -59,15 +62,7 @@
                     <table class="table table-nowrap align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th>#</th>
-                                <th>Item</th>
-                                <th class="text-end">Ordered</th>
-                                <th class="text-end">Received</th>
-                                <th class="text-end">Outstanding</th>
-                                <th>UoM</th>
-                                <th class="text-end">Price</th>
-                                <th class="text-end">Total</th>
-                                <th>Status</th>
+                                <th>#</th><th>Item</th><th class="text-end">Ordered</th><th class="text-end">Received</th><th class="text-end">Outstanding</th><th>UoM</th><th class="text-end">Price</th><th class="text-end">Total</th><th>Status</th>
                             </tr>
                         </thead>
                         <tbody>
