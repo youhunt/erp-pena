@@ -46,6 +46,9 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('orders/(:num)/approve', 'Purchase\PurchaseOrderController::approve/$1');
         $routes->post('orders/(:num)/close', 'Purchase\PurchaseOrderController::close/$1');
         $routes->post('orders/(:num)/cancel', 'Purchase\PurchaseOrderController::cancel/$1');
+        $routes->get('orders/(:num)/receive', 'Purchase\PurchaseReceiptController::createFromPo/$1');
+        $routes->post('orders/(:num)/receive', 'Purchase\PurchaseReceiptController::storeFromPo/$1');
+        $routes->get('receipts/(:num)', 'Purchase\PurchaseReceiptController::show/$1');
     });
 
     $routes->group('setup', static function (RouteCollection $routes): void {
