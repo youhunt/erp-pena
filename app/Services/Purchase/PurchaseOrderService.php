@@ -16,15 +16,12 @@ class PurchaseOrderService
         if (empty($header['company_id'])) {
             throw new RuntimeException('Company is required.');
         }
-
         if (empty($header['po_no'])) {
             throw new RuntimeException('PO number is required.');
         }
-
         if (empty($header['po_date'])) {
             throw new RuntimeException('PO date is required.');
         }
-
         if ($lines === []) {
             throw new RuntimeException('At least one PO line is required.');
         }
@@ -36,9 +33,11 @@ class PurchaseOrderService
         try {
             $poModel = new PurchaseOrderModel();
             $lineModel = new PurchaseOrderLineModel();
+            $status = $header['status'] ?? 'draft';
 
             $poId = (int) $poModel->insert($header + $totals + [
-                'status' => $header['status'] ?? 'draft',
+                'status' => $status,
+                'document_status' => $status,
                 'created_by' => $userId,
                 'updated_by' => $userId,
             ], true);
@@ -58,11 +57,15 @@ class PurchaseOrderService
                     'item_code' => $line['item_code'] ?? null,
                     'item_name' => $line['item_name'] ?? null,
                     'qty' => $qty,
+                    'qty_ordered' => $qty,
+                    'qty_received' => 0,
+                    'qty_outstanding' => $qty,
                     'uom_code' => $line['uom_code'] ?? null,
                     'unit_price' => $unitPrice,
                     'discount_amount' => $discount,
                     'tax_amount' => $tax,
                     'line_total' => $lineTotal,
+                    'line_status' => 'open',
                 ]);
 
                 $lineNo += 10;
@@ -73,26 +76,50 @@ class PurchaseOrderService
             }
 
             $db->transCommit();
-
-            (new AuditLogService())->log('purchase.po', 'po.create', [
-                'company_id' => $header['company_id'] ?? null,
-                'site_id' => $header['site_id'] ?? null,
-                'user_id' => $userId,
-                'table_name' => 'purchase_orders',
-                'record_id' => $poId,
-                'record_code' => $header['po_no'] ?? null,
-                'description' => 'Purchase order created.',
-                'new_values' => [
-                    'header' => $header + $totals,
-                    'lines' => $lines,
-                ],
-            ]);
+            $this->audit('po.create', $poId, $header, $lines, $userId, 'Purchase order created.');
 
             return $poId;
         } catch (Throwable $exception) {
             $db->transRollback();
             throw new RuntimeException($exception->getMessage());
         }
+    }
+
+    public function submit(int $poId, ?int $userId = null): void
+    {
+        $this->transition($poId, ['draft'], 'submitted', ['submitted_at' => date('Y-m-d H:i:s'), 'submitted_by' => $userId], $userId, 'po.submit', 'Purchase order submitted.');
+    }
+
+    public function approve(int $poId, ?int $userId = null): void
+    {
+        $this->transition($poId, ['submitted'], 'approved', ['approved_at' => date('Y-m-d H:i:s'), 'approved_by' => $userId], $userId, 'po.approve', 'Purchase order approved.');
+    }
+
+    public function close(int $poId, ?int $userId = null): void
+    {
+        $this->transition($poId, ['approved', 'partial_received', 'received'], 'closed', ['closed_at' => date('Y-m-d H:i:s'), 'closed_by' => $userId], $userId, 'po.close', 'Purchase order closed.');
+    }
+
+    public function cancel(int $poId, string $reason = '', ?int $userId = null): void
+    {
+        $this->transition($poId, ['draft', 'submitted'], 'cancelled', ['cancelled_at' => date('Y-m-d H:i:s'), 'cancelled_by' => $userId, 'cancel_reason' => $reason], $userId, 'po.cancel', 'Purchase order cancelled.');
+    }
+
+    private function transition(int $poId, array $allowedFrom, string $toStatus, array $extra, ?int $userId, string $action, string $description): void
+    {
+        $model = new PurchaseOrderModel();
+        $po = $model->find($poId);
+        if ($po === null) {
+            throw new RuntimeException('Purchase order not found.');
+        }
+
+        $current = (string) ($po['document_status'] ?? $po['status'] ?? 'draft');
+        if (! in_array($current, $allowedFrom, true)) {
+            throw new RuntimeException('PO status ' . $current . ' cannot be changed to ' . $toStatus . '.');
+        }
+
+        $model->update($poId, $extra + ['status' => $toStatus, 'document_status' => $toStatus, 'updated_by' => $userId]);
+        $this->audit($action, $poId, $po, ['to_status' => $toStatus] + $extra, $userId, $description);
     }
 
     public function calculateTotals(array $lines): array
@@ -102,11 +129,10 @@ class PurchaseOrderService
         $tax = 0.0;
 
         foreach ($lines as $line) {
-            $qty = (float) ($line['qty'] ?? 0);
+            $qty = (float) ($line['qty'] ?? $line['qty_ordered'] ?? 0);
             $unitPrice = (float) ($line['unit_price'] ?? 0);
             $lineDiscount = (float) ($line['discount_amount'] ?? 0);
             $lineTax = (float) ($line['tax_amount'] ?? 0);
-
             $subtotal += $qty * $unitPrice;
             $discount += $lineDiscount;
             $tax += $lineTax;
@@ -118,5 +144,19 @@ class PurchaseOrderService
             'tax_amount' => $tax,
             'total_amount' => $subtotal - $discount + $tax,
         ];
+    }
+
+    private function audit(string $action, int $poId, array $header, array $payload, ?int $userId, string $description): void
+    {
+        (new AuditLogService())->log('purchase.po', $action, [
+            'company_id' => $header['company_id'] ?? null,
+            'site_id' => $header['site_id'] ?? null,
+            'user_id' => $userId,
+            'table_name' => 'purchase_orders',
+            'record_id' => $poId,
+            'record_code' => $header['po_no'] ?? null,
+            'description' => $description,
+            'new_values' => $payload,
+        ]);
     }
 }
