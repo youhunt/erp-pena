@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,6 +11,7 @@
     <link rel="stylesheet" href="<?= base_url('assets/skote/css/app.min.css') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/pena/app.css') ?>">
 </head>
+
 <body>
     <div class="account-pages my-5 pt-sm-5">
         <div class="container">
@@ -35,7 +37,7 @@
                                 <a href="<?= site_url('/') ?>" class="auth-logo-light">
                                     <div class="avatar-md profile-user-wid mb-4">
                                         <span class="avatar-title rounded-circle bg-light">
-                                            <img src="<?= base_url('assets/skote/images/logo-light.svg') ?>" alt="PENA ERP" class="rounded-circle" height="34">
+                                            <img src="<?= base_url('assets/skote/images/logo-sm-light.png') ?>" alt="PENA ERP" class="rounded-circle" height="34">
                                         </span>
                                     </div>
                                 </a>
@@ -43,7 +45,7 @@
                                 <a href="<?= site_url('/') ?>" class="auth-logo-dark">
                                     <div class="avatar-md profile-user-wid mb-4">
                                         <span class="avatar-title rounded-circle bg-light">
-                                            <img src="<?= base_url('assets/skote/images/logo.svg') ?>" alt="PENA ERP" class="rounded-circle" height="34">
+                                            <img src="<?= base_url('assets/skote/images/logo-sm-dark.png') ?>" alt="PENA ERP" class="rounded-circle" height="34">
                                         </span>
                                     </div>
                                 </a>
@@ -82,8 +84,7 @@
                                             autocomplete="email"
                                             placeholder="Enter email address"
                                             value="<?= old('email') ?>"
-                                            required
-                                        >
+                                            required>
                                     </div>
 
                                     <div class="mb-3">
@@ -98,8 +99,7 @@
                                                 autocomplete="current-password"
                                                 placeholder="Enter password"
                                                 aria-label="<?= esc(lang('Auth.password')) ?>"
-                                                required
-                                            >
+                                                required>
                                             <button class="btn btn-light" type="button" id="password-addon" aria-label="Show password">
                                                 <i class="mdi mdi-eye-outline"></i>
                                             </button>
@@ -154,7 +154,7 @@
     <script src="<?= base_url('assets/skote/libs/node-waves/waves.min.js') ?>"></script>
     <script src="<?= base_url('assets/skote/js/app.js') ?>"></script>
     <script>
-        document.getElementById('password-addon')?.addEventListener('click', function () {
+        document.getElementById('password-addon')?.addEventListener('click', function() {
             const input = document.getElementById('password');
             if (!input) {
                 return;
@@ -164,4 +164,5 @@
         });
     </script>
 </body>
+
 </html>
