@@ -393,6 +393,35 @@ class WorkOrderService
         }
     }
 
+    public function issueAndReceive(int $workOrderId, ?float $receiveQty = null, ?int $userId = null): void
+    {
+        $workOrder = (new ProductionWorkOrderModel())->find($workOrderId);
+        if ($workOrder === null) {
+            throw new RuntimeException('Work order not found.');
+        }
+
+        $status = (string) ($workOrder['status'] ?? 'draft');
+        if (! in_array($status, ['allocated', 'partial_issued', 'material_issued', 'partial_finished'], true)) {
+            throw new RuntimeException('Only allocated, issued, or partially finished work order can be processed as In Out. Current status: ' . $status);
+        }
+
+        if (in_array($status, ['allocated', 'partial_issued'], true)) {
+            $this->issueMaterials($workOrderId, $userId);
+        }
+
+        $this->receiveFinishedGoods($workOrderId, $receiveQty, $userId);
+
+        (new AuditLogService())->log('production.wo', 'wo.issue_receive', [
+            'company_id' => $workOrder['company_id'] ?? null,
+            'site_id' => $workOrder['site_id'] ?? null,
+            'user_id' => $userId,
+            'table_name' => 'production_work_orders',
+            'record_id' => $workOrderId,
+            'record_code' => $workOrder['wo_no'] ?? null,
+            'description' => 'Work order material issue and finished good receipt processed together.',
+        ]);
+    }
+
     private function refreshAllocationStatus(int $workOrderId, ?int $userId): void
     {
         $components = (new ProductionWorkOrderComponentModel())->where('production_work_order_id', $workOrderId)->findAll();

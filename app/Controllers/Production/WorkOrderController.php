@@ -151,6 +151,24 @@ class WorkOrderController extends BaseController
         return redirect()->to('/production/work-orders/' . $id)->with('message', 'Work order finished good received.');
     }
 
+    public function issueReceive(int $id)
+    {
+        if (! $this->validate([
+            'receive_qty' => 'permit_empty|decimal',
+        ])) {
+            return redirect()->back()->with('error', implode(' ', $this->validator->getErrors()));
+        }
+
+        $qty = $this->request->getPost('receive_qty');
+        try {
+            (new WorkOrderService())->issueAndReceive($id, $qty === null || $qty === '' ? null : (float) $qty, auth()->id());
+        } catch (RuntimeException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->to('/production/work-orders/' . $id)->with('message', 'Work order material issued and finished good received.');
+    }
+
     private function masterRows(string $table): array
     {
         $tenant = new TenantContext(session());
