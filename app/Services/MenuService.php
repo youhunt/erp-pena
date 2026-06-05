@@ -17,7 +17,9 @@ class MenuService
     {
         $items = $this->menus
             ->where('is_active', 1)
+            ->orderBy('parent_id', 'ASC')
             ->orderBy('sort_order', 'ASC')
+            ->orderBy('label', 'ASC')
             ->findAll();
 
         $user = function_exists('auth') ? auth()->user() : null;
@@ -35,7 +37,7 @@ class MenuService
                 return true;
             }
 
-            return $user->can($item['permission']);
+            return method_exists($user, 'can') && $user->can($item['permission']);
         }));
     }
 

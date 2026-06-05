@@ -3,21 +3,33 @@
 namespace App\Database\Seeds;
 
 use CodeIgniter\Database\Seeder;
+use Config\ErpMenu;
 
 class ProductionMenuSeeder extends Seeder
 {
     public function run(): void
     {
         $now = date('Y-m-d H:i:s');
+        $menu = new ErpMenu();
         $productionId = $this->menuItem(null, 'Production', '#', 'bx-factory', null, 80, $now);
-        $this->menuItem($productionId, 'BOM', 'production/boms', null, 'production.view', 10, $now);
-        $this->menuItem($productionId, 'Work Center', 'production/work-centers', null, 'production.view', 20, $now);
-        $this->menuItem($productionId, 'Routing', 'production/routings', null, 'production.view', 30, $now);
-        $this->menuItem($productionId, 'Work Order', 'production/work-orders', null, 'production.view', 40, $now);
-        $this->menuItem($productionId, 'Allocate Work Order', 'production/work-orders', null, 'production.view', 50, $now);
-        $this->menuItem($productionId, 'Work Order In', 'production/work-orders', null, 'production.view', 60, $now);
-        $this->menuItem($productionId, 'Work Order Out', 'production/work-orders', null, 'production.view', 70, $now);
-        $this->menuItem($productionId, 'Work Order In Out', 'production/work-orders', null, 'production.view', 80, $now);
+        $sort = 10;
+
+        foreach ($menu->childrenOf('Production') as $item) {
+            if (! isset($item['sort_order'])) {
+                $item['sort_order'] = $sort;
+            }
+
+            $this->menuItem(
+                $productionId,
+                (string) $item['label'],
+                (string) ($item['route'] ?? '#'),
+                null,
+                $item['permission'] ?? null,
+                (int) $item['sort_order'],
+                $now
+            );
+            $sort += 10;
+        }
 
         foreach (['modules/bom', 'modules/work-center', 'modules/routing', 'modules/work-order', 'modules/allocate-work-order', 'modules/work-order-in', 'modules/work-order-out', 'modules/work-order-in-out'] as $route) {
             $this->db->table('menu_items')->where('route', $route)->update(['is_active' => 0, 'updated_at' => $now]);
