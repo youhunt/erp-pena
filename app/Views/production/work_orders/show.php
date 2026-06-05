@@ -17,7 +17,15 @@
                     <button class="btn btn-warning" onclick="return confirm('Issue allocated material to production?')"><i class="bx bx-log-out-circle me-1"></i> Issue Material Out</button>
                 </form>
             <?php endif ?>
-            <?php $statusColor = in_array($workOrder['status'] ?? '', ['allocated', 'material_issued'], true) ? 'success' : (($workOrder['status'] ?? '') === 'partial_issued' ? 'warning' : 'secondary'); ?>
+            <?php if (in_array($workOrder['status'] ?? 'draft', ['material_issued', 'partial_finished'], true)): ?>
+                <?php $remainingFinishedQty = max(0, (float) ($workOrder['std_qty_finished'] ?? 0) - (float) ($workOrder['act_qty_finished'] ?? 0)); ?>
+                <form class="d-flex gap-2" method="post" action="<?= site_url('production/work-orders/' . $workOrder['id'] . '/receive-finished') ?>">
+                    <?= csrf_field() ?>
+                    <input class="form-control form-control-sm" style="width: 130px" type="number" name="receive_qty" min="0.000001" step="0.000001" value="<?= esc(number_format($remainingFinishedQty, 6, '.', '')) ?>">
+                    <button class="btn btn-success" onclick="return confirm('Receive finished good to inventory?')"><i class="bx bx-package me-1"></i> Receive Finished Good</button>
+                </form>
+            <?php endif ?>
+            <?php $statusColor = in_array($workOrder['status'] ?? '', ['allocated', 'material_issued', 'finished'], true) ? 'success' : (in_array($workOrder['status'] ?? '', ['partial_issued', 'partial_finished'], true) ? 'warning' : 'secondary'); ?>
             <span class="badge bg-<?= $statusColor ?>"><?= esc($workOrder['status']) ?></span>
         </div>
     </div>

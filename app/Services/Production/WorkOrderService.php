@@ -311,6 +311,88 @@ class WorkOrderService
         }
     }
 
+    public function receiveFinishedGoods(int $workOrderId, ?float $qty = null, ?int $userId = null): void
+    {
+        $woModel = new ProductionWorkOrderModel();
+        $workOrder = $woModel->find($workOrderId);
+        if ($workOrder === null) {
+            throw new RuntimeException('Work order not found.');
+        }
+
+        $status = (string) ($workOrder['status'] ?? 'draft');
+        if (! in_array($status, ['material_issued', 'partial_finished'], true)) {
+            throw new RuntimeException('Only material issued or partially finished work order can be received. Current status: ' . $status);
+        }
+
+        $standardQty = (float) ($workOrder['std_qty_finished'] ?? $workOrder['wo_qty'] ?? 0);
+        $actualQty = (float) ($workOrder['act_qty_finished'] ?? 0);
+        $remainingQty = max(0.0, $standardQty - $actualQty);
+        $receiveQty = $qty === null ? $remainingQty : (float) $qty;
+
+        if ($receiveQty <= 0) {
+            throw new RuntimeException('Finished good receive quantity must be greater than zero.');
+        }
+        if ($receiveQty > $remainingQty) {
+            throw new RuntimeException(sprintf(
+                'Finished good receive quantity exceeds remaining quantity. Remaining: %s.',
+                number_format($remainingQty, 6)
+            ));
+        }
+
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            $item = $this->itemByCode((string) $workOrder['parent_item_code']);
+            $warehouseId = $this->warehouseIdByCode((string) ($workOrder['warehouse_code'] ?? ''), (int) $workOrder['company_id'], $workOrder['site_id'] ?? null);
+            $locationId = $this->defaultLocationId((int) $workOrder['company_id'], $workOrder['site_id'] ?? null);
+
+            (new InventoryStockService())->stockIn([
+                'company_id' => $workOrder['company_id'],
+                'site_id' => $workOrder['site_id'] ?? null,
+                'warehouse_id' => $warehouseId,
+                'location_id' => $locationId,
+                'item_id' => $workOrder['parent_item_id'] ?? $item['id'] ?? null,
+                'item_code' => $workOrder['parent_item_code'],
+                'item_name' => $workOrder['parent_item_name'] ?? $item['item_name'] ?? $item['name'] ?? null,
+                'uom_code' => $item['stockuom'] ?? $item['stock_uom'] ?? 'PCS',
+                'qty' => $receiveQty,
+                'unit_cost' => (float) ($item['standard_cost'] ?? $item['item_price'] ?? 0),
+                'movement_type' => 'production_receipt',
+                'reference_type' => 'production_work_order',
+                'reference_id' => $workOrderId,
+                'reference_no' => $workOrder['wo_no'] ?? null,
+                'notes' => 'Work order finished good receipt.',
+            ], $userId);
+
+            $newActualQty = $actualQty + $receiveQty;
+            $woModel->update($workOrderId, [
+                'act_qty_finished' => $newActualQty,
+                'status' => $newActualQty >= $standardQty ? 'finished' : 'partial_finished',
+                'updated_by' => $userId,
+            ]);
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to receive work order finished good.');
+            }
+            $db->transCommit();
+
+            (new AuditLogService())->log('production.wo', 'wo.receive_finished', [
+                'company_id' => $workOrder['company_id'] ?? null,
+                'site_id' => $workOrder['site_id'] ?? null,
+                'user_id' => $userId,
+                'table_name' => 'production_work_orders',
+                'record_id' => $workOrderId,
+                'record_code' => $workOrder['wo_no'] ?? null,
+                'description' => 'Work order finished good received to inventory.',
+                'new_values' => ['received_qty' => $receiveQty, 'act_qty_finished' => $newActualQty],
+            ]);
+        } catch (RuntimeException $e) {
+            $db->transRollback();
+            throw $e;
+        }
+    }
+
     private function refreshAllocationStatus(int $workOrderId, ?int $userId): void
     {
         $components = (new ProductionWorkOrderComponentModel())->where('production_work_order_id', $workOrderId)->findAll();
@@ -362,6 +444,23 @@ class WorkOrderService
         $row = $builder->get()->getRowArray();
 
         return isset($row['id']) ? (int) $row['id'] : null;
+    }
+
+    private function itemByCode(string $code): ?array
+    {
+        if ($code === '') {
+            return null;
+        }
+
+        $db = Database::connect();
+        if (! $db->tableExists('items')) {
+            return null;
+        }
+
+        $builder = $db->table('items');
+        $db->fieldExists('item_code', 'items') ? $builder->where('item_code', $code) : $builder->where('code', $code);
+
+        return $builder->get()->getRowArray();
     }
 
     private function defaultLocationId(int $companyId, mixed $siteId): ?int
