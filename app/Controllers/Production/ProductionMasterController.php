@@ -8,6 +8,8 @@ use App\Models\ProductionBomModel;
 use App\Models\ProductionRoutingLineModel;
 use App\Models\ProductionRoutingModel;
 use App\Models\ProductionWorkCenterModel;
+use App\Models\WorkCenterCostModel;
+use App\Models\WorkCenterMachineModel;
 use App\Services\AuditLogService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
@@ -90,6 +92,22 @@ class ProductionMasterController extends BaseController
         ]);
     }
 
+    public function showWorkCenter(int $id): string
+    {
+        $tenant = new TenantContext(session());
+        $workCenter = $this->scopeModel(new ProductionWorkCenterModel(), $tenant)->find($id);
+        if ($workCenter === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        return view('production/work_centers/show', [
+            'title' => 'Work Center Detail',
+            'workCenter' => $workCenter,
+            'machines' => (new WorkCenterMachineModel())->where('work_center_id', $id)->orderBy('no', 'ASC')->findAll(),
+            'costs' => (new WorkCenterCostModel())->where('work_center_id', $id)->orderBy('costtype', 'ASC')->findAll(),
+        ]);
+    }
+
     public function storeWorkCenter()
     {
         if (! $this->validate([
@@ -147,9 +165,11 @@ class ProductionMasterController extends BaseController
             'updated_by' => auth()->id(),
         ], true);
 
+        $this->saveWorkCenterChildren($id, $companyId, $tenant, $where);
+
         $this->audit('production.work_center', 'work_center.create', 'production_work_centers', $id, $where['work_center_code']);
 
-        return redirect()->to('/production/work-centers')->with('message', 'Work center saved.');
+        return redirect()->to('/production/work-centers/' . $id)->with('message', 'Work center saved.');
     }
 
     public function routings(): string
@@ -312,6 +332,128 @@ class ProductionMasterController extends BaseController
             $db->transRollback();
             throw $e;
         }
+    }
+
+    private function saveWorkCenterChildren(int $workCenterId, int $companyId, TenantContext $tenant, array $where): void
+    {
+        $user = (string) (auth()->user()?->username ?? auth()->user()?->email ?? auth()->id() ?? 'system');
+
+        $machineRows = $this->postedWorkCenterMachines();
+        if ($machineRows === []) {
+            $machineRows[] = [
+                'no' => 10,
+                'machine' => trim((string) $this->request->getPost('machine_code')),
+                'notes1' => trim((string) $this->request->getPost('notes')),
+                'speed' => (float) $this->request->getPost('speed'),
+                'capacity' => (float) ($this->request->getPost('capacity_percent') ?: 100),
+                'length' => (float) $this->request->getPost('max_length'),
+                'luom' => trim((string) $this->request->getPost('length_uom')),
+                'width' => (float) $this->request->getPost('max_width'),
+                'wuom' => trim((string) $this->request->getPost('width_uom')),
+                'height' => (float) $this->request->getPost('max_height'),
+                'huom' => trim((string) $this->request->getPost('height_uom')),
+                'volume' => (float) $this->request->getPost('max_volume'),
+                'vuom' => trim((string) $this->request->getPost('volume_uom')),
+                'qtylabor' => (float) $this->request->getPost('qty_labor'),
+                'workhour' => (float) $this->request->getPost('working_hour'),
+            ];
+        }
+
+        $machineModel = new WorkCenterMachineModel();
+        foreach ($machineRows as $row) {
+            if (($row['machine'] ?? '') === '') {
+                continue;
+            }
+            $machineModel->insert($row + [
+                'company_id' => $companyId,
+                'site_id' => $tenant->activeSiteId(),
+                'work_center_id' => $workCenterId,
+                'site' => $where['site_code'],
+                'dept' => $where['department_code'],
+                'warehouse' => $where['warehouse_code'],
+                'work_center' => $where['work_center_code'],
+                'created_by' => $user,
+                'updated_by' => $user,
+                'active' => 1,
+            ]);
+        }
+
+        $costRows = $this->postedWorkCenterCosts();
+        if ($costRows === [] && trim((string) $this->request->getPost('cost_type')) !== '') {
+            $costRows[] = [
+                'costtype' => trim((string) $this->request->getPost('cost_type')),
+                'costamount' => (float) $this->request->getPost('cost_amount'),
+                'costuom' => trim((string) $this->request->getPost('cost_uom')),
+                'notes2' => '',
+            ];
+        }
+
+        $costModel = new WorkCenterCostModel();
+        foreach ($costRows as $row) {
+            if (($row['costtype'] ?? '') === '') {
+                continue;
+            }
+            $costModel->insert($row + [
+                'company_id' => $companyId,
+                'site_id' => $tenant->activeSiteId(),
+                'work_center_id' => $workCenterId,
+                'work_center' => $where['work_center_code'],
+                'created_by' => $user,
+                'updated_by' => $user,
+                'active' => 1,
+            ]);
+        }
+    }
+
+    private function postedWorkCenterMachines(): array
+    {
+        $machines = (array) $this->request->getPost('machine');
+        $rows = [];
+        foreach ($machines as $index => $machine) {
+            $machine = trim((string) $machine);
+            if ($machine === '') {
+                continue;
+            }
+            $rows[] = [
+                'no' => (int) (((array) $this->request->getPost('machine_no'))[$index] ?? (($index + 1) * 10)),
+                'machine' => $machine,
+                'notes1' => trim((string) (((array) $this->request->getPost('machine_notes'))[$index] ?? '')),
+                'speed' => (float) (((array) $this->request->getPost('machine_speed'))[$index] ?? 0),
+                'capacity' => (float) (((array) $this->request->getPost('machine_capacity'))[$index] ?? 100),
+                'length' => (float) (((array) $this->request->getPost('machine_length'))[$index] ?? 0),
+                'luom' => trim((string) (((array) $this->request->getPost('machine_luom'))[$index] ?? '')),
+                'width' => (float) (((array) $this->request->getPost('machine_width'))[$index] ?? 0),
+                'wuom' => trim((string) (((array) $this->request->getPost('machine_wuom'))[$index] ?? '')),
+                'height' => (float) (((array) $this->request->getPost('machine_height'))[$index] ?? 0),
+                'huom' => trim((string) (((array) $this->request->getPost('machine_huom'))[$index] ?? '')),
+                'volume' => (float) (((array) $this->request->getPost('machine_volume'))[$index] ?? 0),
+                'vuom' => trim((string) (((array) $this->request->getPost('machine_vuom'))[$index] ?? '')),
+                'qtylabor' => (float) (((array) $this->request->getPost('machine_qtylabor'))[$index] ?? 0),
+                'workhour' => (float) (((array) $this->request->getPost('machine_workhour'))[$index] ?? 0),
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function postedWorkCenterCosts(): array
+    {
+        $types = (array) $this->request->getPost('costtype');
+        $rows = [];
+        foreach ($types as $index => $type) {
+            $type = trim((string) $type);
+            if ($type === '') {
+                continue;
+            }
+            $rows[] = [
+                'costtype' => $type,
+                'costamount' => (float) (((array) $this->request->getPost('costamount'))[$index] ?? 0),
+                'costuom' => trim((string) (((array) $this->request->getPost('costuom'))[$index] ?? '')),
+                'notes2' => trim((string) (((array) $this->request->getPost('cost_notes'))[$index] ?? '')),
+            ];
+        }
+
+        return $rows;
     }
 
     private function postedBomLines(): array

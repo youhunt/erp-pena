@@ -49,7 +49,7 @@ Acuan utama: `pena_erp_data_dictionary_filled.xlsx`.
 | Phase 3 - Partner, Item, Tax, Commercial Master | Partial | Customer, supplier, item, UoM, VAT, item VAT, schema item/customer/supplier diselaraskan dengan Excel |
 | Phase 4 - Inventory Core | Partial | Stock balance, stock movement, stock adjustment, inventory stock service |
 | Phase 5 - Purchase Core | Partial | Purchase Order, Purchase Receipt, Purchase Invoice/AP Payable baseline, controller, service, views, schema ensure |
-| Phase 6 - Sales Core | Partial | Sales Order, Delivery Order, Sales Invoice/AR Receivable baseline, controller, service, views, schema ensure |
+| Phase 6 - Sales Core | Partial | Sales Order, Allocation Order, Delivery Order, Sales Invoice/AR Receivable baseline, controller, service, views, schema ensure |
 | Phase 7 - Finance Backbone | Pending | Baru menu dan permission dasar, belum ada GL transaction engine |
 | Phase 8 - AP dan AR | Partial | Sales Invoice/AR Receivable/AR Receipt dan Purchase Invoice/AP Payable/AP Payment baseline sudah ada; aging dan period close belum selesai |
 | Phase 9 - Costing | Pending | Baru rencana/menu placeholder, belum ada item cost engine |
@@ -356,12 +356,13 @@ Yang sudah dikerjakan:
 - SalesOrderController, SalesOrderService, dan views index/form/show tersedia.
 - Menu Sales Order sudah diarahkan ke modul nyata.
 - Delivery Order core tersedia.
+- Allocation Order baseline tersedia dan menghasilkan `allocationorder`/`allocationline`.
 - Sales Invoice dari Delivery Order sudah tersedia.
 - AR Receivable otomatis dibuka saat Sales Invoice diposting.
 
 Sisa pekerjaan:
-- Allocation Order belum lengkap.
-- Stock allocation dan stock issue belum end-to-end.
+- Allocation Order masih baseline; partial allocation per line/manual split warehouse-location perlu diperdalam.
+- Stock issue perlu dipastikan end-to-end untuk warehouse/location/batch yang lebih rinci.
 - Approval SO dan status lifecycle perlu dipoles.
 - Aging, GL posting, dan A/R period close belum selesai.
 
@@ -529,10 +530,12 @@ Done jika:
 - Labor dan overhead bisa masuk costing.
 
 Yang sudah dikerjakan:
-- Menu Planning dan Production tersedia sebagai placeholder.
+- BOM, Work Center, Routing, dan Work Order baseline tersedia.
+- Work Center Machine dan Work Center Cost child table tersedia sesuai workbook.
 
 Sisa pekerjaan:
-- Belum ada BOM, Work Center, Routing, MRP, MPS, dan Work Order engine.
+- Planning MRP/MPS belum tersedia.
+- Work Order labor, period close, dan costing produksi belum selesai.
 
 ## Phase 11 - POS dan Fixed Asset
 

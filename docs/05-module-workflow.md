@@ -11,10 +11,11 @@
 1. Maintain customer master and terms.
 2. Create sales order.
 3. Approve order when approval workflow applies.
-4. Allocate stock and create delivery order.
-5. Generate sales invoice from delivery order.
-6. Open AR receivable for customer collection.
-7. Post customer receipt to reduce AR outstanding.
+4. Create allocation order and allocation lines to reserve stock.
+5. Create delivery order from allocated/reserved stock.
+6. Generate sales invoice from delivery order.
+7. Open AR receivable for customer collection.
+8. Post customer receipt to reduce AR outstanding.
 
 ## Purchase
 
@@ -42,8 +43,9 @@
 ## Production
 
 1. Define BOM, work center, and routing.
-2. Create work order.
-3. Issue materials and receive finished goods.
+2. Maintain work center machine and cost detail.
+3. Create work order.
+4. Issue materials and receive finished goods.
 
 ## POS
 

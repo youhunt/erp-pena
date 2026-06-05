@@ -39,6 +39,10 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('orders/(:num)/approve', 'Sales\SalesOrderController::approve/$1');
         $routes->post('orders/(:num)/reserve', 'Sales\SalesOrderController::reserve/$1');
         $routes->post('orders/(:num)/cancel', 'Sales\SalesOrderController::cancel/$1');
+        $routes->get('orders/(:num)/allocate', 'Sales\AllocationController::createFromSo/$1');
+        $routes->post('orders/(:num)/allocate', 'Sales\AllocationController::storeFromSo/$1');
+        $routes->get('allocations', 'Sales\AllocationController::index');
+        $routes->get('allocations/(:num)', 'Sales\AllocationController::show/$1');
         $routes->get('orders/(:num)/deliver', 'Sales\SalesDeliveryController::createFromSo/$1');
         $routes->post('orders/(:num)/deliver', 'Sales\SalesDeliveryController::storeFromSo/$1');
         $routes->get('deliveries', 'Sales\SalesDeliveryController::index');
@@ -90,6 +94,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('work-centers', 'Production\ProductionMasterController::workCenters');
         $routes->get('work-centers/new', 'Production\ProductionMasterController::newWorkCenter');
         $routes->post('work-centers', 'Production\ProductionMasterController::storeWorkCenter');
+        $routes->get('work-centers/(:num)', 'Production\ProductionMasterController::showWorkCenter/$1');
         $routes->get('routings', 'Production\ProductionMasterController::routings');
         $routes->get('routings/new', 'Production\ProductionMasterController::newRouting');
         $routes->post('routings', 'Production\ProductionMasterController::storeRouting');

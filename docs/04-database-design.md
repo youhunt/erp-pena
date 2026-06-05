@@ -67,6 +67,7 @@ These gaps are covered by added foundation tables.
 - `customers`: customer master from Sales Customer Master
 - `suppliers`: supplier master from Purchase Supplier Master
 - `sales_orders` and `sales_order_lines`: normalized Sales Order
+- `allocationorder` and `allocationline`: stock allocation document from Sales Order based on workbook naming
 - `sales_deliveries` and `sales_delivery_lines`: delivery document generated from Sales Order
 - `sales_invoices` and `sales_invoice_lines`: customer invoice generated from Delivery Order
 - `purchase_orders` and `purchase_order_lines`: normalized Purchase Order
@@ -77,6 +78,12 @@ These gaps are covered by added foundation tables.
 
 - `items`: item master
 - `inventory_movements` and `inventory_movement_lines`: inventory in/out and adjustment foundation
+
+### Production
+
+- `production_work_centers`: work center header
+- `work_center_machine`: machine/capacity child records for each work center
+- `work_center_cost`: cost child records for each work center
 
 ### Finance
 

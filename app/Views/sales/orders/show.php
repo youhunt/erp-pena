@@ -38,7 +38,7 @@
                         <form method="post" action="<?= site_url('sales/orders/' . $order['id'] . '/approve') ?>"><?= csrf_field() ?><button class="btn btn-success" onclick="return confirm('Approve this SO?')">Approve</button></form>
                     <?php endif ?>
                     <?php if (in_array($status, ['approved','partial_reserved'], true)): ?>
-                        <form method="post" action="<?= site_url('sales/orders/' . $order['id'] . '/reserve') ?>"><?= csrf_field() ?><button class="btn btn-primary" onclick="return confirm('Reserve stock for this SO?')"><i class="bx bx-lock-alt me-1"></i> Reserve Stock</button></form>
+                        <a href="<?= site_url('sales/orders/' . $order['id'] . '/allocate') ?>" class="btn btn-primary"><i class="bx bx-lock-alt me-1"></i> Create Allocation</a>
                     <?php endif ?>
                     <?php if (in_array($status, ['approved','reserved','partial_delivered'], true)): ?>
                         <a href="<?= site_url('sales/orders/' . $order['id'] . '/deliver') ?>" class="btn btn-success"><i class="bx bx-send me-1"></i> Create DO</a>

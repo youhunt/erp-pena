@@ -10,7 +10,7 @@
         <thead class="table-light"><tr><th>Work Center</th><th>Site</th><th>Department</th><th>Warehouse</th><th>Machine</th><th class="text-end">Capacity %</th><th class="text-end">Cost</th></tr></thead>
         <tbody>
         <?php foreach ($rows as $row): ?><tr>
-            <td><div class="fw-semibold"><?= esc($row['work_center_code']) ?></div><small class="text-muted"><?= esc($row['description'] ?? '-') ?></small></td>
+            <td><div class="fw-semibold"><a href="<?= site_url('production/work-centers/' . $row['id']) ?>"><?= esc($row['work_center_code']) ?></a></div><small class="text-muted"><?= esc($row['description'] ?? '-') ?></small></td>
             <td><?= esc($row['site_code']) ?></td><td><?= esc($row['department_code']) ?></td><td><?= esc($row['warehouse_code']) ?></td>
             <td><?= esc($row['machine_code']) ?></td>
             <td class="text-end"><?= esc(number_format((float) $row['capacity_percent'], 3)) ?></td>
