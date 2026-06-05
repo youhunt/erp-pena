@@ -191,10 +191,10 @@ class PenaErpSeeder extends Seeder
         $this->menuGroup('Accounts Payable', 'bx-receipt', 90, [
             ['Accounts Payable', $this->placeholderRoute('Accounts Payable'), 'finance.ap.view'],
             ['Manual A/P Invoice', $this->placeholderRoute('Manual A/P Invoice'), 'finance.ap.view'],
-            ['Purchase Invoice', $this->placeholderRoute('Purchase Invoice'), 'finance.ap.view'],
+            ['Purchase Invoice', 'ap/purchase-invoices', 'finance.ap.view'],
             ['Inventory Purchase Invoice', $this->placeholderRoute('Inventory Purchase Invoice'), 'finance.ap.view'],
             ['Advanced A/P Invoice', $this->placeholderRoute('Advanced A/P Invoice'), 'finance.ap.view'],
-            ['Payment Invoice', $this->placeholderRoute('Payment Invoice'), 'finance.ap.view'],
+            ['Payment Invoice', 'ap/payments', 'finance.ap.view'],
             ['A/P Period Close', $this->placeholderRoute('A/P Period Close'), 'finance.ap.view'],
         ], $now);
 
@@ -205,7 +205,7 @@ class PenaErpSeeder extends Seeder
             ['Sales Invoice', 'ar/sales-invoices', 'finance.ar.view'],
             ['Inventory Sales Invoice', $this->placeholderRoute('Inventory Sales Invoice'), 'finance.ar.view'],
             ['Advanced A/R Receipt', $this->placeholderRoute('Advanced A/R Receipt'), 'finance.ar.view'],
-            ['Payment Receipt', $this->placeholderRoute('Payment Receipt'), 'finance.ar.view'],
+            ['Payment Receipt', 'ar/receipts', 'finance.ar.view'],
             ['A/R Period Close', $this->placeholderRoute('A/R Period Close'), 'finance.ar.view'],
         ], $now);
 

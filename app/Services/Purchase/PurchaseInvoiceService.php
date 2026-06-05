@@ -1,0 +1,180 @@
+<?php
+
+namespace App\Services\Purchase;
+
+use App\Models\ApPayableModel;
+use App\Models\PurchaseInvoiceLineModel;
+use App\Models\PurchaseInvoiceModel;
+use App\Models\PurchaseOrderLineModel;
+use App\Models\PurchaseReceiptLineModel;
+use App\Models\PurchaseReceiptModel;
+use App\Services\AuditLogService;
+use Config\Database;
+use RuntimeException;
+use Throwable;
+
+class PurchaseInvoiceService
+{
+    public function postFromReceipt(array $header, ?int $userId = null): int
+    {
+        if (empty($header['company_id']) || empty($header['purchase_receipt_id']) || empty($header['invoice_no'])) {
+            throw new RuntimeException('Company, receipt, and invoice number are required.');
+        }
+
+        $receiptModel = new PurchaseReceiptModel();
+        $receipt = $receiptModel->find((int) $header['purchase_receipt_id']);
+        if ($receipt === null) {
+            throw new RuntimeException('Purchase receipt not found.');
+        }
+        if ((string) ($receipt['status'] ?? '') === 'invoiced') {
+            throw new RuntimeException('Purchase receipt already invoiced.');
+        }
+
+        $invoiceModel = new PurchaseInvoiceModel();
+        $existing = $invoiceModel
+            ->where('purchase_receipt_id', (int) $header['purchase_receipt_id'])
+            ->where('deleted_at', null)
+            ->first();
+        if ($existing !== null) {
+            throw new RuntimeException('Purchase receipt already has invoice ' . ($existing['invoice_no'] ?? '#'. $existing['id']) . '.');
+        }
+
+        $receiptLines = (new PurchaseReceiptLineModel())
+            ->where('purchase_receipt_id', (int) $header['purchase_receipt_id'])
+            ->orderBy('line_no', 'ASC')
+            ->findAll();
+        if ($receiptLines === []) {
+            throw new RuntimeException('Purchase receipt has no lines.');
+        }
+
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            $invoiceLineModel = new PurchaseInvoiceLineModel();
+            $payableModel = new ApPayableModel();
+            $poLineModel = new PurchaseOrderLineModel();
+
+            $lines = [];
+            $subtotal = 0.0;
+            $discount = 0.0;
+            $tax = 0.0;
+
+            foreach ($receiptLines as $receiptLine) {
+                $poLine = ! empty($receiptLine['purchase_order_line_id'])
+                    ? $poLineModel->find((int) $receiptLine['purchase_order_line_id'])
+                    : null;
+                $qty = (float) ($receiptLine['qty_received'] ?? 0);
+                if ($qty <= 0) {
+                    continue;
+                }
+
+                $unitCost = (float) ($receiptLine['unit_cost'] ?? 0);
+                $orderedQty = $poLine !== null ? (float) ($poLine['qty_ordered'] ?? $poLine['qty'] ?? 0) : $qty;
+                $ratio = $orderedQty > 0 ? $qty / $orderedQty : 1.0;
+                $lineDiscount = round((float) ($poLine['discount_amount'] ?? 0) * $ratio, 6);
+                $lineTax = round((float) ($poLine['tax_amount'] ?? 0) * $ratio, 6);
+                $lineSubtotal = round($qty * $unitCost, 6);
+                $lineTotal = round($lineSubtotal - $lineDiscount + $lineTax, 6);
+
+                $subtotal += $lineSubtotal;
+                $discount += $lineDiscount;
+                $tax += $lineTax;
+                $lines[] = [
+                    'purchase_order_id' => $receiptLine['purchase_order_id'] ?? $receipt['purchase_order_id'] ?? null,
+                    'purchase_order_line_id' => $receiptLine['purchase_order_line_id'] ?? null,
+                    'purchase_receipt_id' => $receipt['id'],
+                    'purchase_receipt_line_id' => $receiptLine['id'],
+                    'line_no' => $receiptLine['line_no'],
+                    'item_id' => $receiptLine['item_id'] ?? null,
+                    'item_code' => $receiptLine['item_code'] ?? null,
+                    'item_name' => $receiptLine['item_name'] ?? null,
+                    'qty_invoiced' => $qty,
+                    'uom_code' => $receiptLine['uom_code'] ?? 'PCS',
+                    'unit_cost' => $unitCost,
+                    'discount_amount' => $lineDiscount,
+                    'tax_amount' => $lineTax,
+                    'line_total' => $lineTotal,
+                ];
+            }
+
+            if ($lines === []) {
+                throw new RuntimeException('No receipt qty can be invoiced.');
+            }
+
+            $total = round($subtotal - $discount + $tax, 6);
+            $invoiceDate = (string) ($header['invoice_date'] ?? date('Y-m-d'));
+            $dueDate = $header['due_date'] ?? $invoiceDate;
+
+            $invoiceId = (int) $invoiceModel->insert($header + [
+                'invoice_date' => $invoiceDate,
+                'due_date' => $dueDate,
+                'purchase_order_id' => $receipt['purchase_order_id'] ?? null,
+                'purchase_receipt_id' => $receipt['id'],
+                'po_no' => $receipt['po_no'] ?? null,
+                'receipt_no' => $receipt['receipt_no'] ?? null,
+                'supplier_id' => $receipt['supplier_id'] ?? null,
+                'supplier_code' => $receipt['supplier_code'] ?? null,
+                'supplier_name' => $receipt['supplier_name'] ?? null,
+                'status' => 'open',
+                'subtotal_amount' => $subtotal,
+                'discount_amount' => $discount,
+                'tax_amount' => $tax,
+                'total_amount' => $total,
+                'paid_amount' => 0,
+                'outstanding_amount' => $total,
+                'posted_at' => date('Y-m-d H:i:s'),
+                'posted_by' => $userId,
+                'created_by' => $userId,
+                'updated_by' => $userId,
+            ], true);
+
+            foreach ($lines as $line) {
+                $invoiceLineModel->insert($line + ['purchase_invoice_id' => $invoiceId]);
+            }
+
+            $payableModel->insert([
+                'company_id' => $header['company_id'],
+                'site_id' => $header['site_id'] ?? null,
+                'purchase_invoice_id' => $invoiceId,
+                'invoice_no' => $header['invoice_no'],
+                'invoice_date' => $invoiceDate,
+                'due_date' => $dueDate,
+                'supplier_id' => $receipt['supplier_id'] ?? null,
+                'supplier_code' => $receipt['supplier_code'] ?? null,
+                'supplier_name' => $receipt['supplier_name'] ?? null,
+                'currency_code' => $header['currency_code'] ?? 'IDR',
+                'invoice_amount' => $total,
+                'paid_amount' => 0,
+                'outstanding_amount' => $total,
+                'status' => 'open',
+            ]);
+
+            $receiptModel->update((int) $receipt['id'], [
+                'status' => 'invoiced',
+                'updated_by' => $userId,
+            ]);
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to post purchase invoice.');
+            }
+            $db->transCommit();
+
+            (new AuditLogService())->log('finance.ap', 'purchase_invoice.post', [
+                'company_id' => $header['company_id'] ?? null,
+                'site_id' => $header['site_id'] ?? null,
+                'user_id' => $userId,
+                'table_name' => 'purchase_invoices',
+                'record_id' => $invoiceId,
+                'record_code' => $header['invoice_no'],
+                'description' => 'Purchase invoice posted and AP payable opened.',
+                'new_values' => ['header' => $header, 'lines' => $lines, 'total' => $total],
+            ]);
+
+            return $invoiceId;
+        } catch (Throwable $e) {
+            $db->transRollback();
+            throw new RuntimeException($e->getMessage());
+        }
+    }
+}

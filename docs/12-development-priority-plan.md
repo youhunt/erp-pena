@@ -48,10 +48,10 @@ Acuan utama: `pena_erp_data_dictionary_filled.xlsx`.
 | Phase 2 - Setup Master Core | Partial | CRUD generic setup master, wilayah sync, import/export view, menu setup, beberapa schema tambahan |
 | Phase 3 - Partner, Item, Tax, Commercial Master | Partial | Customer, supplier, item, UoM, VAT, item VAT, schema item/customer/supplier diselaraskan dengan Excel |
 | Phase 4 - Inventory Core | Partial | Stock balance, stock movement, stock adjustment, inventory stock service |
-| Phase 5 - Purchase Core | Partial | Purchase Order header/line, controller, service, views, schema ensure |
-| Phase 6 - Sales Core | Partial | Sales Order header/line, controller, service, views, schema ensure |
-| Phase 7 - Finance Backbone | Pending | Baru menu placeholder dan permission dasar, belum ada GL transaction engine |
-| Phase 8 - AP dan AR | Pending | Baru menu placeholder, belum ada AP/AR ledger dan payment/receipt |
+| Phase 5 - Purchase Core | Partial | Purchase Order, Purchase Receipt, Purchase Invoice/AP Payable baseline, controller, service, views, schema ensure |
+| Phase 6 - Sales Core | Partial | Sales Order, Delivery Order, Sales Invoice/AR Receivable baseline, controller, service, views, schema ensure |
+| Phase 7 - Finance Backbone | Pending | Baru menu dan permission dasar, belum ada GL transaction engine |
+| Phase 8 - AP dan AR | Partial | Sales Invoice/AR Receivable/AR Receipt dan Purchase Invoice/AP Payable/AP Payment baseline sudah ada; aging dan period close belum selesai |
 | Phase 9 - Costing | Pending | Baru rencana/menu placeholder, belum ada item cost engine |
 | Phase 10 - Planning dan Production | Pending | Baru menu placeholder, belum ada BOM/MRP/work order engine |
 | Phase 11 - POS dan Fixed Asset | Pending | Baru menu placeholder, belum ada transaksi POS/asset |
@@ -311,12 +311,15 @@ Yang sudah dikerjakan:
 - PurchaseOrderModel dan PurchaseOrderLineModel tersedia.
 - PurchaseOrderController, PurchaseOrderService, dan views index/form/show tersedia.
 - Menu Purchase Order sudah diarahkan ke modul nyata.
+- Purchase Receipt core tersedia sebagai transaksi penerimaan barang.
+- Purchase Invoice dari Purchase Receipt sudah tersedia.
+- AP Payable otomatis dibuka saat Purchase Invoice diposting.
 
 Sisa pekerjaan:
-- Purchase receipt belum lengkap.
-- Purchase intransit, cost purchase receipt, dan invoice belum ada sebagai workflow penuh.
+- Purchase intransit dan cost purchase receipt belum ada sebagai workflow penuh.
 - Approval PO dan status lifecycle perlu dipoles.
-- Posting ke stock/AP/GL belum end-to-end.
+- Posting ke GL belum end-to-end.
+- Aging, GL posting, dan A/P period close belum selesai.
 
 ## Phase 6 - Sales Core
 
@@ -352,18 +355,21 @@ Yang sudah dikerjakan:
 - SalesOrderModel dan SalesOrderLineModel tersedia.
 - SalesOrderController, SalesOrderService, dan views index/form/show tersedia.
 - Menu Sales Order sudah diarahkan ke modul nyata.
+- Delivery Order core tersedia.
+- Sales Invoice dari Delivery Order sudah tersedia.
+- AR Receivable otomatis dibuka saat Sales Invoice diposting.
 
 Sisa pekerjaan:
-- Allocation Order dan Delivery Order belum lengkap.
-- Sales invoice belum lengkap.
+- Allocation Order belum lengkap.
 - Stock allocation dan stock issue belum end-to-end.
 - Approval SO dan status lifecycle perlu dipoles.
+- Aging, GL posting, dan A/R period close belum selesai.
 
 ## Phase 7 - Finance Backbone
 
 Tujuan: ERP mulai punya akuntansi yang bisa dipertanggungjawabkan.
 
-Status: Pending.
+Status: Partial.
 
 Scope:
 - Chart of Account.
@@ -443,12 +449,16 @@ Done jika:
 - Period close AP/AR lock dokumen.
 
 Yang sudah dikerjakan:
-- Menu AP/AR tersedia sebagai placeholder.
-- Sales Invoice dan Purchase Invoice sudah masuk roadmap dan menu.
+- Sales Invoice baseline tersedia dan menghasilkan `ar_receivables`.
+- Purchase Invoice baseline tersedia dan menghasilkan `ap_payables`.
+- Payment Invoice baseline tersedia melalui `ap_payments`.
+- Payment Receipt baseline tersedia melalui `ar_receipts`.
+- Menu Sales Invoice dan Purchase Invoice sudah diarahkan ke modul nyata.
 
 Sisa pekerjaan:
-- Belum ada invoice ledger, aging, payment, receipt, dan posting AP/AR.
-- Belum ada link dari PO/SO ke invoice yang final.
+- Aging AP/AR belum tersedia.
+- Posting AP/AR ke GL belum tersedia.
+- Manual invoice, proforma invoice, advance invoice/receipt, dan period close belum tersedia.
 
 ## Phase 9 - Costing
 
@@ -653,7 +663,7 @@ Sisa pekerjaan:
 | 4 | Inventory Ledger | Partial | Stock movement dan stock balance valid |
 | 5 | Purchase Order + Receipt | Partial | Procure-to-stock minimum berjalan |
 | 6 | Sales Order + Delivery Order | Partial | Order-to-delivery minimum berjalan |
-| 7 | Invoice + AP/AR Basic | Pending | Outstanding payable/receivable berjalan |
+| 7 | Invoice + AP/AR Basic | Partial | Outstanding payable/receivable baseline berjalan |
 | 8 | GL Posting Basic | Pending | Posting journal dari transaksi inti |
 | 9 | AI/OCR Review Basic | Partial | Upload, OCR/AI result, review, convert draft |
 | 10 | Dashboard + Polish | Partial | Monitoring dan usability |

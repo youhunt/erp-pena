@@ -1,0 +1,21 @@
+<?php
+
+namespace App\Models;
+
+use CodeIgniter\Model;
+
+class ArReceiptModel extends Model
+{
+    protected $table = 'ar_receipts';
+    protected $primaryKey = 'id';
+    protected $returnType = 'array';
+    protected $useSoftDeletes = true;
+    protected $useTimestamps = true;
+    protected $allowedFields = [
+        'company_id', 'site_id', 'receipt_no', 'receipt_date', 'ar_receivable_id',
+        'sales_invoice_id', 'invoice_no', 'customer_id', 'customer_code',
+        'customer_name', 'currency_code', 'receipt_amount', 'receipt_method',
+        'cash_bank_code', 'reference_no', 'notes', 'posted_at', 'posted_by',
+        'created_by', 'updated_by',
+    ];
+}

@@ -7,7 +7,7 @@
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
                     <div>
-                        <h4 class="card-title mb-1">Sales Invoice</h4>
+                        <h4 class="card-title mb-1">Purchase Invoice</h4>
                         <p class="text-muted mb-0"><?= esc($invoice['invoice_no']) ?></p>
                     </div>
                     <span class="badge bg-warning"><?= esc($invoice['status']) ?></span>
@@ -17,16 +17,16 @@
                         <tr><th>Invoice No</th><td><?= esc($invoice['invoice_no']) ?></td></tr>
                         <tr><th>Date</th><td><?= esc($invoice['invoice_date']) ?></td></tr>
                         <tr><th>Due Date</th><td><?= esc($invoice['due_date'] ?? '-') ?></td></tr>
-                        <tr><th>SO No</th><td><a href="<?= site_url('sales/orders/' . $invoice['sales_order_id']) ?>"><?= esc($invoice['so_no'] ?? '-') ?></a></td></tr>
-                        <tr><th>DO No</th><td><a href="<?= site_url('sales/deliveries/' . $invoice['sales_delivery_id']) ?>"><?= esc($invoice['delivery_no'] ?? '-') ?></a></td></tr>
-                        <tr><th>Customer</th><td><?= esc(($invoice['customer_code'] ?? '-') . ' ' . ($invoice['customer_name'] ?? '')) ?></td></tr>
-                        <tr><th>Outstanding</th><td class="fw-semibold"><?= esc(number_format((float) ($receivable['outstanding_amount'] ?? $invoice['outstanding_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr><th>PO No</th><td><a href="<?= site_url('purchase/orders/' . $invoice['purchase_order_id']) ?>"><?= esc($invoice['po_no'] ?? '-') ?></a></td></tr>
+                        <tr><th>Receipt No</th><td><a href="<?= site_url('purchase/receipts/' . $invoice['purchase_receipt_id']) ?>"><?= esc($invoice['receipt_no'] ?? '-') ?></a></td></tr>
+                        <tr><th>Supplier</th><td><?= esc(($invoice['supplier_code'] ?? '-') . ' ' . ($invoice['supplier_name'] ?? '')) ?></td></tr>
+                        <tr><th>Outstanding</th><td class="fw-semibold"><?= esc(number_format((float) ($payable['outstanding_amount'] ?? $invoice['outstanding_amount'] ?? 0), 2)) ?></td></tr>
                     </tbody>
                 </table>
                 <div class="mt-3 d-flex flex-wrap gap-2">
-                    <a href="<?= site_url('ar/sales-invoices') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back</a>
-                    <?php if ((float) ($receivable['outstanding_amount'] ?? $invoice['outstanding_amount'] ?? 0) > 0): ?>
-                        <a href="<?= site_url('ar/sales-invoices/' . $invoice['id'] . '/receipt') ?>" class="btn btn-primary"><i class="bx bx-money-withdraw me-1"></i> Post Receipt</a>
+                    <a href="<?= site_url('ap/purchase-invoices') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back</a>
+                    <?php if ((float) ($payable['outstanding_amount'] ?? $invoice['outstanding_amount'] ?? 0) > 0): ?>
+                        <a href="<?= site_url('ap/purchase-invoices/' . $invoice['id'] . '/payment') ?>" class="btn btn-primary"><i class="bx bx-money me-1"></i> Post Payment</a>
                     <?php endif ?>
                 </div>
             </div>
@@ -38,7 +38,7 @@
                 <h4 class="card-title mb-3">Invoice Lines</h4>
                 <div class="table-responsive">
                     <table class="table table-nowrap align-middle mb-0">
-                        <thead class="table-light"><tr><th>#</th><th>Item</th><th class="text-end">Qty</th><th>UoM</th><th class="text-end">Price</th><th class="text-end">Total</th></tr></thead>
+                        <thead class="table-light"><tr><th>#</th><th>Item</th><th class="text-end">Qty</th><th>UoM</th><th class="text-end">Cost</th><th class="text-end">Total</th></tr></thead>
                         <tbody>
                         <?php foreach ($lines as $line): ?>
                             <tr>
@@ -46,7 +46,7 @@
                                 <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
                                 <td class="text-end"><?= esc(number_format((float) $line['qty_invoiced'], 4)) ?></td>
                                 <td><?= esc($line['uom_code'] ?? '-') ?></td>
-                                <td class="text-end"><?= esc(number_format((float) $line['unit_price'], 2)) ?></td>
+                                <td class="text-end"><?= esc(number_format((float) $line['unit_cost'], 2)) ?></td>
                                 <td class="text-end fw-semibold"><?= esc(number_format((float) $line['line_total'], 2)) ?></td>
                             </tr>
                         <?php endforeach ?>

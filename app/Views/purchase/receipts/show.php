@@ -21,7 +21,12 @@
                         <tr><th>Posted</th><td><?= esc($receipt['posted_at'] ?? '-') ?></td></tr>
                     </tbody>
                 </table>
-                <div class="mt-3"><a href="<?= site_url('purchase/orders/' . $receipt['purchase_order_id']) ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to PO</a></div>
+                <div class="mt-3 d-flex flex-wrap gap-2">
+                    <a href="<?= site_url('purchase/orders/' . $receipt['purchase_order_id']) ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to PO</a>
+                    <?php if (($receipt['status'] ?? '') !== 'invoiced'): ?>
+                        <a href="<?= site_url('purchase/receipts/' . $receipt['id'] . '/invoice') ?>" class="btn btn-primary"><i class="bx bx-receipt me-1"></i> Create AP Invoice</a>
+                    <?php endif ?>
+                </div>
             </div>
         </div>
     </div>

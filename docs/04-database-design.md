@@ -67,7 +67,11 @@ These gaps are covered by added foundation tables.
 - `customers`: customer master from Sales Customer Master
 - `suppliers`: supplier master from Purchase Supplier Master
 - `sales_orders` and `sales_order_lines`: normalized Sales Order
+- `sales_deliveries` and `sales_delivery_lines`: delivery document generated from Sales Order
+- `sales_invoices` and `sales_invoice_lines`: customer invoice generated from Delivery Order
 - `purchase_orders` and `purchase_order_lines`: normalized Purchase Order
+- `purchase_receipts` and `purchase_receipt_lines`: goods receipt generated from Purchase Order
+- `purchase_invoices` and `purchase_invoice_lines`: vendor invoice generated from Purchase Receipt
 
 ### Inventory
 
@@ -76,7 +80,11 @@ These gaps are covered by added foundation tables.
 
 ### Finance
 
-- `invoices` and `invoice_lines`: sales/manual invoice foundation
+- `ar_receivables`: customer outstanding generated from Sales Invoice
+- `ap_payables`: supplier outstanding generated from Purchase Invoice
+- `ar_receipts`: customer payment receipt that reduces A/R outstanding
+- `ap_payments`: supplier payment that reduces A/P outstanding
+- `invoices` and `invoice_lines`: legacy/manual invoice foundation retained until finance consolidation
 
 ### Workflow and Audit
 

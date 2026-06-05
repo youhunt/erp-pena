@@ -50,6 +50,10 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->group('ar', static function (RouteCollection $routes): void {
         $routes->get('sales-invoices', 'AccountsReceivable\SalesInvoiceController::index');
         $routes->get('sales-invoices/(:num)', 'AccountsReceivable\SalesInvoiceController::show/$1');
+        $routes->get('sales-invoices/(:num)/receipt', 'AccountsReceivable\ReceiptController::createFromInvoice/$1');
+        $routes->post('sales-invoices/(:num)/receipt', 'AccountsReceivable\ReceiptController::storeFromInvoice/$1');
+        $routes->get('receipts', 'AccountsReceivable\ReceiptController::index');
+        $routes->get('receipts/(:num)', 'AccountsReceivable\ReceiptController::show/$1');
     });
 
     $routes->group('purchase', static function (RouteCollection $routes): void {
@@ -65,6 +69,17 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('orders/(:num)/receive', 'Purchase\PurchaseReceiptController::storeFromPo/$1');
         $routes->get('receipts', 'Purchase\PurchaseReceiptController::index');
         $routes->get('receipts/(:num)', 'Purchase\PurchaseReceiptController::show/$1');
+        $routes->get('receipts/(:num)/invoice', 'AccountsPayable\PurchaseInvoiceController::createFromReceipt/$1');
+        $routes->post('receipts/(:num)/invoice', 'AccountsPayable\PurchaseInvoiceController::storeFromReceipt/$1');
+    });
+
+    $routes->group('ap', static function (RouteCollection $routes): void {
+        $routes->get('purchase-invoices', 'AccountsPayable\PurchaseInvoiceController::index');
+        $routes->get('purchase-invoices/(:num)', 'AccountsPayable\PurchaseInvoiceController::show/$1');
+        $routes->get('purchase-invoices/(:num)/payment', 'AccountsPayable\PaymentController::createFromInvoice/$1');
+        $routes->post('purchase-invoices/(:num)/payment', 'AccountsPayable\PaymentController::storeFromInvoice/$1');
+        $routes->get('payments', 'AccountsPayable\PaymentController::index');
+        $routes->get('payments/(:num)', 'AccountsPayable\PaymentController::show/$1');
     });
 
     $routes->group('production', static function (RouteCollection $routes): void {

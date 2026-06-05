@@ -11,8 +11,10 @@
 1. Maintain customer master and terms.
 2. Create sales order.
 3. Approve order when approval workflow applies.
-4. Allocate stock and create delivery order in later stages.
-5. Generate sales invoice.
+4. Allocate stock and create delivery order.
+5. Generate sales invoice from delivery order.
+6. Open AR receivable for customer collection.
+7. Post customer receipt to reduce AR outstanding.
 
 ## Purchase
 
@@ -20,7 +22,9 @@
 2. Create purchase order.
 3. Approve purchase order.
 4. Receive goods.
-5. Match vendor invoice in later stages.
+5. Create purchase invoice from receipt.
+6. Open AP payable for supplier payment.
+7. Post supplier payment to reduce AP outstanding.
 
 ## Inventory
 
@@ -33,6 +37,7 @@
 1. Define chart of accounts and GL books in later module expansion.
 2. Post journals and recurring journals.
 3. Link sales invoice, vendor invoice, and cash bank transactions to GL.
+4. AP payment and AR receipt are baseline settlement points before final auto-journal integration.
 
 ## Production
 
@@ -48,4 +53,4 @@
 
 ## Current Implementation Boundary
 
-This stage creates the foundation tables and first pages only. Full CRUD, approvals, stock ledger, accounting posting, and transaction conversion will be expanded in the next development stages.
+This stage has moved beyond foundation tables into transaction core. Purchase Order, Purchase Receipt, Purchase Invoice/AP Payable/AP Payment, Sales Order, Delivery Order, Sales Invoice/AR Receivable/AR Receipt, inventory stock core, and production work order core are now available as baseline flows. Remaining work is approval enforcement, stock-card reporting, journal generation, document PDF print, and period close.
