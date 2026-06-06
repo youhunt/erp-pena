@@ -113,7 +113,7 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Rate Master', $this->placeholderRoute('Rate Master'), 'cashbank.view'),
                 $this->leaf('Cash Entry', 'cash-bank/cash-entries', 'cashbank.view'),
                 $this->leaf('Bank Entry', 'cash-bank/bank-entries', 'cashbank.view'),
-                $this->leaf('Bank Reconcile', $this->placeholderRoute('Bank Reconcile'), 'cashbank.view'),
+                $this->leaf('Bank Reconcile', 'cash-bank/reconciliations', 'cashbank.view'),
             ]),
             $this->group('GL', 'bx-book', 130, [
                 $this->leaf('GL Book', $this->placeholderRoute('GL Book'), 'finance.gl.view'),

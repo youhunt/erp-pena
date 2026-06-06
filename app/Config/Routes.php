@@ -114,6 +114,10 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('bank-entries/new', 'Finance\CashBankController::newEntry/bank');
         $routes->post('bank-entries', 'Finance\CashBankController::storeEntry/bank');
         $routes->get('bank-entries/(:num)', 'Finance\CashBankController::showEntry/bank/$1');
+        $routes->get('reconciliations', 'Finance\CashBankController::reconciliations');
+        $routes->get('reconciliations/new', 'Finance\CashBankController::newReconciliation');
+        $routes->post('reconciliations', 'Finance\CashBankController::storeReconciliation');
+        $routes->get('reconciliations/(:num)', 'Finance\CashBankController::showReconciliation/$1');
     });
 
     $routes->group('production', static function (RouteCollection $routes): void {

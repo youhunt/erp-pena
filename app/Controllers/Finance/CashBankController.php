@@ -3,9 +3,11 @@
 namespace App\Controllers\Finance;
 
 use App\Controllers\BaseController;
+use App\Models\BankReconciliationModel;
 use App\Models\CashBankAccountModel;
 use App\Models\CashBankEntryModel;
 use App\Models\ChartAccountModel;
+use App\Services\Finance\BankReconciliationService;
 use App\Services\Finance\CashBankService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
@@ -110,6 +112,88 @@ class CashBankController extends BaseController
         ]);
     }
 
+    public function reconciliations(): string
+    {
+        $tenant = new TenantContext(session());
+        $model = new BankReconciliationModel();
+        $this->scope($model, $tenant);
+
+        return view('finance/cash_bank/reconciliations/index', [
+            'title' => 'Bank Reconcile',
+            'reconciliations' => $model->orderBy('statement_date', 'DESC')->orderBy('id', 'DESC')->findAll(100),
+        ]);
+    }
+
+    public function newReconciliation(): string
+    {
+        $tenant = new TenantContext(session());
+        $selectedCode = trim((string) ($this->request->getGet('cash_bank_code') ?: ''));
+        $accounts = $this->cashBankAccounts('bank');
+
+        if ($selectedCode === '' && $accounts !== []) {
+            $selectedCode = (string) $accounts[0]['cash_bank_code'];
+        }
+
+        return view('finance/cash_bank/reconciliations/form', [
+            'title' => 'Create Bank Reconcile',
+            'accounts' => $accounts,
+            'selectedCode' => $selectedCode,
+            'entries' => $selectedCode !== '' ? $this->unreconciledBankEntries($tenant, $selectedCode) : [],
+        ]);
+    }
+
+    public function storeReconciliation()
+    {
+        $tenant = new TenantContext(session());
+        $companyId = $tenant->activeCompanyId();
+        if ($companyId === null || $companyId < 1) {
+            return redirect()->back()->withInput()->with('error', 'Active company is required.');
+        }
+
+        if (! $this->validate([
+            'reconcile_no' => 'required|max_length[60]',
+            'statement_date' => 'required|valid_date[Y-m-d]',
+            'cash_bank_code' => 'required|max_length[60]',
+            'statement_balance' => 'required|numeric',
+        ])) {
+            return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
+        }
+
+        try {
+            $reconciliationId = (new BankReconciliationService())->post([
+                'company_id' => $companyId,
+                'site_id' => $tenant->activeSiteId(),
+                'reconcile_no' => trim((string) $this->request->getPost('reconcile_no')),
+                'statement_date' => (string) $this->request->getPost('statement_date'),
+                'statement_ref' => trim((string) $this->request->getPost('statement_ref')),
+                'cash_bank_code' => trim((string) $this->request->getPost('cash_bank_code')),
+                'statement_balance' => (float) $this->request->getPost('statement_balance'),
+                'notes' => trim((string) $this->request->getPost('notes')),
+            ], (array) $this->request->getPost('entry_ids'), auth()->id());
+        } catch (RuntimeException $exception) {
+            return redirect()->back()->withInput()->with('error', $exception->getMessage());
+        }
+
+        return redirect()->to('/cash-bank/reconciliations/' . $reconciliationId)->with('message', 'Bank reconciliation posted.');
+    }
+
+    public function showReconciliation(int $id): string
+    {
+        $tenant = new TenantContext(session());
+        $model = new BankReconciliationModel();
+        $this->scope($model, $tenant);
+        $reconciliation = $model->find($id);
+        if ($reconciliation === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        return view('finance/cash_bank/reconciliations/show', [
+            'title' => 'Bank Reconcile Detail',
+            'reconciliation' => $reconciliation,
+            'entries' => (new CashBankEntryModel())->where('bank_reconciliation_id', $id)->orderBy('entry_date', 'ASC')->findAll(),
+        ]);
+    }
+
     private function cashBankAccounts(string $type): array
     {
         $tenant = new TenantContext(session());
@@ -128,6 +212,20 @@ class CashBankController extends BaseController
         }
 
         return $model->where('is_active', 1)->where('is_postable', 1)->orderBy('account_no', 'ASC')->findAll(300);
+    }
+
+    private function unreconciledBankEntries(TenantContext $tenant, string $cashBankCode): array
+    {
+        $model = new CashBankEntryModel();
+        $this->scope($model, $tenant);
+
+        return $model
+            ->where('cash_bank_code', $cashBankCode)
+            ->whereIn('entry_type', ['bank_in', 'bank_out'])
+            ->where('bank_reconciliation_id', null)
+            ->orderBy('entry_date', 'ASC')
+            ->orderBy('id', 'ASC')
+            ->findAll(200);
     }
 
     private function scope($model, TenantContext $tenant): void
