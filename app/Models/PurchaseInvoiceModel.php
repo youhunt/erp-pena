@@ -15,7 +15,7 @@ class PurchaseInvoiceModel extends Model
         'company_id', 'site_id', 'company', 'site', 'invoice_no', 'invoice_date', 'due_date',
         'purchase_order_id', 'purchase_receipt_id', 'po_no', 'receipt_no',
         'supplier_id', 'supplier_code', 'supplier_name', 'currency_code', 'status',
-        'subtotal_amount', 'discount_amount', 'tax_amount', 'total_amount',
+        'source_type', 'gl_entry_id', 'subtotal_amount', 'discount_amount', 'tax_amount', 'total_amount',
         'paid_amount', 'outstanding_amount', 'notes', 'posted_at', 'posted_by',
         'created_by', 'updated_by',
     ];

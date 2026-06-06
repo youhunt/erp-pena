@@ -84,7 +84,7 @@ class ErpMenu extends BaseConfig
             ]),
             $this->group('Accounts Payable', 'bx-receipt', 90, [
                 $this->leaf('Accounts Payable', $this->placeholderRoute('Accounts Payable'), 'finance.ap.view'),
-                $this->leaf('Manual A/P Invoice', $this->placeholderRoute('Manual A/P Invoice'), 'finance.ap.view'),
+                $this->leaf('Manual A/P Invoice', 'ap/manual-invoices/new', 'finance.ap.manage'),
                 $this->leaf('Purchase Invoice', 'ap/purchase-invoices', 'finance.ap.view'),
                 $this->leaf('Inventory Purchase Invoice', $this->placeholderRoute('Inventory Purchase Invoice'), 'finance.ap.view'),
                 $this->leaf('Advanced A/P Invoice', $this->placeholderRoute('Advanced A/P Invoice'), 'finance.ap.view'),
@@ -93,7 +93,7 @@ class ErpMenu extends BaseConfig
             ]),
             $this->group('Accounts Receivable', 'bx-credit-card', 100, [
                 $this->leaf('Accounts Receivable', $this->placeholderRoute('Accounts Receivable'), 'finance.ar.view'),
-                $this->leaf('Manual A/R Invoice', $this->placeholderRoute('Manual A/R Invoice'), 'finance.ar.view'),
+                $this->leaf('Manual A/R Invoice', 'ar/manual-invoices/new', 'finance.ar.manage'),
                 $this->leaf('Proforma Invoice', $this->placeholderRoute('Proforma Invoice'), 'finance.ar.view'),
                 $this->leaf('Sales Invoice', 'ar/sales-invoices', 'finance.ar.view'),
                 $this->leaf('Inventory Sales Invoice', $this->placeholderRoute('Inventory Sales Invoice'), 'finance.ar.view'),

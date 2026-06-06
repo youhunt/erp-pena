@@ -10,12 +10,128 @@ use App\Models\SalesInvoiceModel;
 use App\Models\SalesOrderLineModel;
 use App\Models\SalesOrderModel;
 use App\Services\AuditLogService;
+use App\Services\Finance\GeneralLedgerService;
 use Config\Database;
 use RuntimeException;
 use Throwable;
 
 class SalesInvoiceService
 {
+    public function postManual(array $header, array $rawLines, ?int $userId = null): int
+    {
+        if (empty($header['company_id']) || empty($header['invoice_no']) || empty($header['customer_code'])) {
+            throw new RuntimeException('Company, invoice number, and customer are required.');
+        }
+
+        $lines = $this->normalizeManualLines($rawLines);
+        if ($lines === []) {
+            throw new RuntimeException('Manual A/R invoice requires at least one line.');
+        }
+
+        $subtotal = round(array_sum(array_column($lines, 'line_subtotal')), 6);
+        $discount = round(array_sum(array_column($lines, 'discount_amount')), 6);
+        $tax = round(array_sum(array_column($lines, 'tax_amount')), 6);
+        $total = round(array_sum(array_column($lines, 'line_total')), 6);
+        if ($total <= 0) {
+            throw new RuntimeException('Manual A/R invoice total must be greater than zero.');
+        }
+
+        $invoiceModel = new SalesInvoiceModel();
+        $existing = $invoiceModel
+            ->where('company_id', (int) $header['company_id'])
+            ->where('invoice_no', (string) $header['invoice_no'])
+            ->where('deleted_at', null)
+            ->first();
+        if ($existing !== null) {
+            throw new RuntimeException('Sales invoice number already exists.');
+        }
+
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            $invoiceDate = (string) ($header['invoice_date'] ?? date('Y-m-d'));
+            $dueDate = $header['due_date'] ?? $invoiceDate;
+            $invoiceId = (int) $invoiceModel->insert($header + [
+                'invoice_date' => $invoiceDate,
+                'due_date' => $dueDate,
+                'source_type' => 'manual',
+                'status' => 'open',
+                'subtotal_amount' => $subtotal,
+                'discount_amount' => $discount,
+                'tax_amount' => $tax,
+                'total_amount' => $total,
+                'paid_amount' => 0,
+                'outstanding_amount' => $total,
+                'posted_at' => date('Y-m-d H:i:s'),
+                'posted_by' => $userId,
+                'created_by' => $userId,
+                'updated_by' => $userId,
+            ], true);
+
+            $lineModel = new SalesInvoiceLineModel();
+            foreach ($lines as $line) {
+                unset($line['line_subtotal']);
+                $lineModel->insert($line + ['sales_invoice_id' => $invoiceId]);
+            }
+
+            (new ArReceivableModel())->insert([
+                'company_id' => $header['company_id'],
+                'site_id' => $header['site_id'] ?? null,
+                'sales_invoice_id' => $invoiceId,
+                'invoice_no' => $header['invoice_no'],
+                'invoice_date' => $invoiceDate,
+                'due_date' => $dueDate,
+                'customer_id' => $header['customer_id'] ?? null,
+                'customer_code' => $header['customer_code'] ?? null,
+                'customer_name' => $header['customer_name'] ?? null,
+                'currency_code' => $header['currency_code'] ?? 'IDR',
+                'invoice_amount' => $total,
+                'paid_amount' => 0,
+                'outstanding_amount' => $total,
+                'status' => 'open',
+            ]);
+
+            $glEntryId = (new GeneralLedgerService())->post([
+                'company_id' => $header['company_id'],
+                'site_id' => $header['site_id'] ?? null,
+                'journal_no' => 'GL-' . $header['invoice_no'],
+                'journal_date' => $invoiceDate,
+                'source_module' => 'ar',
+                'source_type' => 'manual_ar_invoice',
+                'source_id' => $invoiceId,
+                'source_no' => $header['invoice_no'],
+                'description' => 'Manual A/R invoice ' . $header['invoice_no'],
+                'currency_code' => $header['currency_code'] ?? 'IDR',
+            ], [
+                ['account_no' => '1200', 'description' => 'Accounts Receivable', 'debit' => $total, 'credit' => 0],
+                ['account_no' => '4100', 'description' => 'Sales Revenue', 'debit' => 0, 'credit' => $total],
+            ], $userId);
+            $invoiceModel->update($invoiceId, ['gl_entry_id' => $glEntryId]);
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to post manual A/R invoice.');
+            }
+            $db->transCommit();
+
+            (new AuditLogService())->log('finance.ar', 'manual_ar_invoice.post', [
+                'company_id' => $header['company_id'] ?? null,
+                'site_id' => $header['site_id'] ?? null,
+                'user_id' => $userId,
+                'table_name' => 'sales_invoices',
+                'record_id' => $invoiceId,
+                'record_code' => $header['invoice_no'],
+                'description' => 'Manual A/R invoice posted, receivable opened, and GL posted.',
+                'new_values' => ['header' => $header, 'lines' => $lines, 'total' => $total, 'gl_entry_id' => $glEntryId],
+            ]);
+
+            return $invoiceId;
+        } catch (Throwable $e) {
+            $db->transRollback();
+            throw new RuntimeException($e->getMessage());
+        }
+    }
+
     public function postFromDelivery(array $header, ?int $userId = null): int
     {
         if (empty($header['company_id']) || empty($header['sales_delivery_id']) || empty($header['invoice_no'])) {
@@ -178,6 +294,46 @@ class SalesInvoiceService
             $db->transRollback();
             throw new RuntimeException($e->getMessage());
         }
+    }
+
+    private function normalizeManualLines(array $rawLines): array
+    {
+        $lines = [];
+        $lineNo = 10;
+
+        foreach ($rawLines as $rawLine) {
+            $description = trim((string) ($rawLine['item_name'] ?? $rawLine['description'] ?? ''));
+            $qty = round((float) ($rawLine['qty'] ?? 0), 4);
+            $unitPrice = round((float) ($rawLine['unit_price'] ?? 0), 6);
+            if ($description === '' || $qty <= 0 || $unitPrice < 0) {
+                continue;
+            }
+
+            $lineSubtotal = round($qty * $unitPrice, 6);
+            $discount = round((float) ($rawLine['discount_amount'] ?? 0), 6);
+            $tax = round((float) ($rawLine['tax_amount'] ?? 0), 6);
+            $lineTotal = round($lineSubtotal - $discount + $tax, 6);
+            if ($lineTotal <= 0) {
+                continue;
+            }
+
+            $lines[] = [
+                'line_no' => $lineNo,
+                'item_id' => ! empty($rawLine['item_id']) ? (int) $rawLine['item_id'] : null,
+                'item_code' => trim((string) ($rawLine['item_code'] ?? '')),
+                'item_name' => $description,
+                'qty_invoiced' => $qty,
+                'uom_code' => trim((string) ($rawLine['uom_code'] ?? 'PCS')),
+                'unit_price' => $unitPrice,
+                'discount_amount' => $discount,
+                'tax_amount' => $tax,
+                'line_subtotal' => $lineSubtotal,
+                'line_total' => $lineTotal,
+            ];
+            $lineNo += 10;
+        }
+
+        return $lines;
     }
 
     private function refreshSoStatus(int $soId, ?int $userId = null): void

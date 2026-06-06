@@ -4,10 +4,12 @@ namespace App\Controllers\AccountsPayable;
 
 use App\Controllers\BaseController;
 use App\Models\ApPayableModel;
+use App\Models\ItemModel;
 use App\Models\PurchaseInvoiceLineModel;
 use App\Models\PurchaseInvoiceModel;
 use App\Models\PurchaseReceiptLineModel;
 use App\Models\PurchaseReceiptModel;
+use App\Models\SupplierModel;
 use App\Services\Purchase\PurchaseInvoiceService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
@@ -49,6 +51,61 @@ class PurchaseInvoiceController extends BaseController
             'receipt' => $receipt,
             'lines' => (new PurchaseReceiptLineModel())->where('purchase_receipt_id', $receiptId)->orderBy('line_no', 'ASC')->findAll(),
         ]);
+    }
+
+    public function newManual(): string
+    {
+        $tenant = new TenantContext(session());
+
+        return view('accounts_payable/purchase_invoices/manual_form', [
+            'title' => 'Manual A/P Invoice',
+            'suppliers' => $this->suppliers($tenant),
+            'items' => $this->items($tenant),
+        ]);
+    }
+
+    public function storeManual()
+    {
+        $tenant = new TenantContext(session());
+        $companyId = $tenant->activeCompanyId();
+        if ($companyId === null) {
+            return redirect()->back()->withInput()->with('error', 'Active company is required.');
+        }
+
+        if (! $this->validate([
+            'invoice_no' => 'required|max_length[60]',
+            'invoice_date' => 'required|valid_date[Y-m-d]',
+            'due_date' => 'permit_empty|valid_date[Y-m-d]',
+            'supplier_id' => 'required|is_natural_no_zero',
+        ])) {
+            return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
+        }
+
+        $supplier = (new SupplierModel())->where('company_id', $companyId)->find((int) $this->request->getPost('supplier_id'));
+        if ($supplier === null) {
+            return redirect()->back()->withInput()->with('error', 'Supplier not found for active company.');
+        }
+
+        try {
+            $invoiceId = (new PurchaseInvoiceService())->postManual([
+                'company_id' => $companyId,
+                'site_id' => $tenant->activeSiteId(),
+                'company' => session('active_company_code'),
+                'site' => session('active_site_code'),
+                'invoice_no' => trim((string) $this->request->getPost('invoice_no')),
+                'invoice_date' => (string) $this->request->getPost('invoice_date'),
+                'due_date' => (string) ($this->request->getPost('due_date') ?: $this->request->getPost('invoice_date')),
+                'supplier_id' => $supplier['id'],
+                'supplier_code' => $supplier['code'] ?? $supplier['supplier'] ?? null,
+                'supplier_name' => $supplier['name'] ?? $supplier['supplierna'] ?? null,
+                'currency_code' => trim((string) ($this->request->getPost('currency_code') ?: ($supplier['currency_code'] ?? 'IDR'))),
+                'notes' => trim((string) $this->request->getPost('notes')),
+            ], $this->manualLines('unit_cost'), auth()->id());
+        } catch (RuntimeException $e) {
+            return redirect()->back()->withInput()->with('error', $e->getMessage());
+        }
+
+        return redirect()->to('/ap/purchase-invoices/' . $invoiceId)->with('message', 'Manual A/P invoice posted.');
     }
 
     public function storeFromReceipt(int $receiptId)
@@ -119,5 +176,59 @@ class PurchaseInvoiceController extends BaseController
             $model->where('site_id', $tenant->activeSiteId());
         }
         return $model->find($receiptId);
+    }
+
+    private function suppliers(TenantContext $tenant): array
+    {
+        $model = new SupplierModel();
+        if ($tenant->activeCompanyId() !== null) {
+            $model->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $model->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->groupEnd();
+        }
+
+        return $model->where('is_active', 1)->orderBy('name', 'ASC')->findAll(200);
+    }
+
+    private function items(TenantContext $tenant): array
+    {
+        $model = new ItemModel();
+        if ($tenant->activeCompanyId() !== null) {
+            $model->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $model->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->groupEnd();
+        }
+
+        return $model->where('is_active', 1)->orderBy('name', 'ASC')->findAll(200);
+    }
+
+    private function manualLines(string $amountField): array
+    {
+        $lines = [];
+        $itemIds = (array) $this->request->getPost('line_item_id');
+        $itemCodes = (array) $this->request->getPost('line_item_code');
+        $itemNames = (array) $this->request->getPost('line_item_name');
+        $qtys = (array) $this->request->getPost('line_qty');
+        $uoms = (array) $this->request->getPost('line_uom_code');
+        $amounts = (array) $this->request->getPost('line_unit_amount');
+        $discounts = (array) $this->request->getPost('line_discount_amount');
+        $taxes = (array) $this->request->getPost('line_tax_amount');
+
+        foreach ($itemNames as $index => $itemName) {
+            $lines[] = [
+                'item_id' => $itemIds[$index] ?? null,
+                'item_code' => $itemCodes[$index] ?? null,
+                'item_name' => $itemName,
+                'qty' => $qtys[$index] ?? 0,
+                'uom_code' => $uoms[$index] ?? 'PCS',
+                $amountField => $amounts[$index] ?? 0,
+                'discount_amount' => $discounts[$index] ?? 0,
+                'tax_amount' => $taxes[$index] ?? 0,
+            ];
+        }
+
+        return $lines;
     }
 }

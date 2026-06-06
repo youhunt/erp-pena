@@ -85,13 +85,13 @@ class PermissionGuardFilter implements FilterInterface
         }
 
         if (str_starts_with($path, 'ap/')) {
-            return $method === 'GET' && ! str_contains($path, '/payment')
+            return $method === 'GET' && ! str_contains($path, '/payment') && ! str_contains($path, '/new')
                 ? 'finance.ap.view'
                 : 'finance.ap.manage';
         }
 
         if (str_starts_with($path, 'ar/')) {
-            return $method === 'GET' && ! str_contains($path, '/receipt')
+            return $method === 'GET' && ! str_contains($path, '/receipt') && ! str_contains($path, '/new')
                 ? 'finance.ar.view'
                 : 'finance.ar.manage';
         }

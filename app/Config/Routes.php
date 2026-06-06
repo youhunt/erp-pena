@@ -58,6 +58,8 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     });
 
     $routes->group('ar', static function (RouteCollection $routes): void {
+        $routes->get('manual-invoices/new', 'AccountsReceivable\SalesInvoiceController::newManual');
+        $routes->post('manual-invoices', 'AccountsReceivable\SalesInvoiceController::storeManual');
         $routes->get('sales-invoices', 'AccountsReceivable\SalesInvoiceController::index');
         $routes->get('sales-invoices/(:num)', 'AccountsReceivable\SalesInvoiceController::show/$1');
         $routes->get('sales-invoices/(:num)/receipt', 'AccountsReceivable\ReceiptController::createFromInvoice/$1');
@@ -84,6 +86,8 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     });
 
     $routes->group('ap', static function (RouteCollection $routes): void {
+        $routes->get('manual-invoices/new', 'AccountsPayable\PurchaseInvoiceController::newManual');
+        $routes->post('manual-invoices', 'AccountsPayable\PurchaseInvoiceController::storeManual');
         $routes->get('purchase-invoices', 'AccountsPayable\PurchaseInvoiceController::index');
         $routes->get('purchase-invoices/(:num)', 'AccountsPayable\PurchaseInvoiceController::show/$1');
         $routes->get('purchase-invoices/(:num)/payment', 'AccountsPayable\PaymentController::createFromInvoice/$1');

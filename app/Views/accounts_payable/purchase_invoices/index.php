@@ -8,9 +8,14 @@
                 <h4 class="card-title mb-1">Purchase Invoices</h4>
                 <p class="text-muted mb-0">Posted supplier invoices and open A/P balances from purchase receipts.</p>
             </div>
-            <a href="<?= site_url('purchase/receipts') ?>" class="btn btn-primary">
-                <i class="bx bx-receipt me-1"></i> Open Receipts
-            </a>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="<?= site_url('ap/manual-invoices/new') ?>" class="btn btn-primary">
+                    <i class="bx bx-plus me-1"></i> Manual A/P Invoice
+                </a>
+                <a href="<?= site_url('purchase/receipts') ?>" class="btn btn-light">
+                    <i class="bx bx-receipt me-1"></i> Open Receipts
+                </a>
+            </div>
         </div>
 
         <div class="table-responsive">
@@ -38,7 +43,7 @@
                             <div><?= esc($invoice['supplier_name'] ?? '-') ?></div>
                             <small class="text-muted"><?= esc($invoice['supplier_code'] ?? '-') ?></small>
                         </td>
-                        <td><a href="<?= site_url('purchase/receipts/' . $invoice['purchase_receipt_id']) ?>"><?= esc($invoice['receipt_no'] ?? '-') ?></a></td>
+                        <td><?= ! empty($invoice['purchase_receipt_id']) ? '<a href="' . site_url('purchase/receipts/' . $invoice['purchase_receipt_id']) . '">' . esc($invoice['receipt_no'] ?? '-') . '</a>' : '<span class="text-muted">manual</span>' ?></td>
                         <td class="text-end"><?= esc(number_format((float) ($invoice['total_amount'] ?? 0), 2)) ?></td>
                         <td class="text-end fw-semibold"><?= esc(number_format((float) ($invoice['outstanding_amount'] ?? 0), 2)) ?></td>
                         <td><span class="badge bg-<?= ($invoice['status'] ?? '') === 'open' ? 'warning' : 'success' ?>"><?= esc($invoice['status'] ?? '-') ?></span></td>

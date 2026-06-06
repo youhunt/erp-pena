@@ -8,9 +8,14 @@
                 <h4 class="card-title mb-1">Sales Invoices</h4>
                 <p class="text-muted mb-0">Posted invoices and open A/R balances from delivery orders.</p>
             </div>
-            <a href="<?= site_url('sales/deliveries') ?>" class="btn btn-primary">
-                <i class="bx bx-send me-1"></i> Open Delivery Orders
-            </a>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="<?= site_url('ar/manual-invoices/new') ?>" class="btn btn-primary">
+                    <i class="bx bx-plus me-1"></i> Manual A/R Invoice
+                </a>
+                <a href="<?= site_url('sales/deliveries') ?>" class="btn btn-light">
+                    <i class="bx bx-send me-1"></i> Open Delivery Orders
+                </a>
+            </div>
         </div>
 
         <div class="table-responsive">
@@ -38,7 +43,7 @@
                             <div><?= esc($invoice['customer_name'] ?? '-') ?></div>
                             <small class="text-muted"><?= esc($invoice['customer_code'] ?? '-') ?></small>
                         </td>
-                        <td><a href="<?= site_url('sales/deliveries/' . $invoice['sales_delivery_id']) ?>"><?= esc($invoice['delivery_no'] ?? '-') ?></a></td>
+                        <td><?= ! empty($invoice['sales_delivery_id']) ? '<a href="' . site_url('sales/deliveries/' . $invoice['sales_delivery_id']) . '">' . esc($invoice['delivery_no'] ?? '-') . '</a>' : '<span class="text-muted">manual</span>' ?></td>
                         <td class="text-end"><?= esc(number_format((float) ($invoice['total_amount'] ?? 0), 2)) ?></td>
                         <td class="text-end fw-semibold"><?= esc(number_format((float) ($invoice['outstanding_amount'] ?? 0), 2)) ?></td>
                         <td><span class="badge bg-<?= ($invoice['status'] ?? '') === 'open' ? 'warning' : 'success' ?>"><?= esc($invoice['status'] ?? '-') ?></span></td>

@@ -17,8 +17,10 @@
                         <tr><th>Invoice No</th><td><?= esc($invoice['invoice_no']) ?></td></tr>
                         <tr><th>Date</th><td><?= esc($invoice['invoice_date']) ?></td></tr>
                         <tr><th>Due Date</th><td><?= esc($invoice['due_date'] ?? '-') ?></td></tr>
-                        <tr><th>SO No</th><td><a href="<?= site_url('sales/orders/' . $invoice['sales_order_id']) ?>"><?= esc($invoice['so_no'] ?? '-') ?></a></td></tr>
-                        <tr><th>DO No</th><td><a href="<?= site_url('sales/deliveries/' . $invoice['sales_delivery_id']) ?>"><?= esc($invoice['delivery_no'] ?? '-') ?></a></td></tr>
+                        <tr><th>Source</th><td><?= esc($invoice['source_type'] ?? (! empty($invoice['sales_delivery_id']) ? 'delivery' : 'system')) ?></td></tr>
+                        <tr><th>SO No</th><td><?= ! empty($invoice['sales_order_id']) ? '<a href="' . site_url('sales/orders/' . $invoice['sales_order_id']) . '">' . esc($invoice['so_no'] ?? '-') . '</a>' : '-' ?></td></tr>
+                        <tr><th>DO No</th><td><?= ! empty($invoice['sales_delivery_id']) ? '<a href="' . site_url('sales/deliveries/' . $invoice['sales_delivery_id']) . '">' . esc($invoice['delivery_no'] ?? '-') . '</a>' : '-' ?></td></tr>
+                        <tr><th>GL Entry</th><td><?= ! empty($invoice['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $invoice['gl_entry_id']) . '">#' . esc($invoice['gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Customer</th><td><?= esc(($invoice['customer_code'] ?? '-') . ' ' . ($invoice['customer_name'] ?? '')) ?></td></tr>
                         <tr><th>Outstanding</th><td class="fw-semibold"><?= esc(number_format((float) ($receivable['outstanding_amount'] ?? $invoice['outstanding_amount'] ?? 0), 2)) ?></td></tr>
                     </tbody>
