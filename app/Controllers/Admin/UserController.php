@@ -10,6 +10,7 @@ use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\Shield\Entities\User;
 use Config\AuthGroups;
 use Config\Database;
+use Config\ErpMenu;
 
 class UserController extends BaseController
 {
@@ -24,6 +25,22 @@ class UserController extends BaseController
             'title' => 'User Management',
             'users' => array_map(static function ($user) use ($db): array {
                 $groups = $db->table('auth_groups_users')->select('group')->where('user_id', $user->id)->get()->getResultArray();
+                $companies = $db->table('user_company_access uca')
+                    ->select('c.code')
+                    ->join('companies c', 'c.id = uca.company_id')
+                    ->where('uca.user_id', $user->id)
+                    ->orderBy('uca.is_default', 'DESC')
+                    ->orderBy('c.code', 'ASC')
+                    ->get()
+                    ->getResultArray();
+                $sites = $db->table('user_site_access usa')
+                    ->select('s.code')
+                    ->join('sites s', 's.id = usa.site_id')
+                    ->where('usa.user_id', $user->id)
+                    ->orderBy('usa.is_default', 'DESC')
+                    ->orderBy('s.code', 'ASC')
+                    ->get()
+                    ->getResultArray();
 
                 return [
                     'id' => (int) $user->id,
@@ -31,6 +48,8 @@ class UserController extends BaseController
                     'email' => $user->email,
                     'active' => (int) ($user->active ?? 0),
                     'groups' => implode(', ', array_column($groups, 'group')),
+                    'companies' => implode(', ', array_column($companies, 'code')),
+                    'sites' => implode(', ', array_column($sites, 'code')),
                 ];
             }, $users),
         ]);
@@ -70,10 +89,16 @@ class UserController extends BaseController
 
         $groups = (array) $this->request->getPost('groups');
         $this->syncGroups($user, $groups);
-        $this->syncCompanyAccess((int) $user->id, (array) $this->request->getPost('company_ids'), (int) $this->request->getPost('default_company_id'));
-        $this->syncSiteAccess((int) $user->id, (array) $this->request->getPost('site_ids'), (int) $this->request->getPost('default_company_id'), (int) $this->request->getPost('default_site_id'));
+        $companyIds = (array) $this->request->getPost('company_ids');
+        $defaultCompanyId = (int) $this->request->getPost('default_company_id');
+        if ($defaultCompanyId > 0) {
+            $companyIds[] = $defaultCompanyId;
+        }
+        $this->syncCompanyAccess((int) $user->id, $companyIds, $defaultCompanyId);
+        $this->syncSiteAccess((int) $user->id, (array) $this->request->getPost('site_ids'), $companyIds, (int) $this->request->getPost('default_site_id'));
+        $this->syncDirectPermissions($user, (array) $this->request->getPost('permissions'));
 
-        $this->audit('users.create', (int) $user->id, $user->email, ['groups' => $groups]);
+        $this->audit('users.create', (int) $user->id, $user->email, ['groups' => $groups, 'permissions' => (array) $this->request->getPost('permissions')]);
 
         return redirect()->to(site_url('admin/users'))->with('message', 'User created.');
     }
@@ -128,10 +153,16 @@ class UserController extends BaseController
         $users->save($user);
 
         $this->syncGroups($user, $groups);
-        $this->syncCompanyAccess($id, (array) $this->request->getPost('company_ids'), (int) $this->request->getPost('default_company_id'));
-        $this->syncSiteAccess($id, (array) $this->request->getPost('site_ids'), (int) $this->request->getPost('default_company_id'), (int) $this->request->getPost('default_site_id'));
+        $companyIds = (array) $this->request->getPost('company_ids');
+        $defaultCompanyId = (int) $this->request->getPost('default_company_id');
+        if ($defaultCompanyId > 0) {
+            $companyIds[] = $defaultCompanyId;
+        }
+        $this->syncCompanyAccess($id, $companyIds, $defaultCompanyId);
+        $this->syncSiteAccess($id, (array) $this->request->getPost('site_ids'), $companyIds, (int) $this->request->getPost('default_site_id'));
+        $this->syncDirectPermissions($user, (array) $this->request->getPost('permissions'));
 
-        $this->audit('users.update', $id, $user->email, ['groups' => $groups]);
+        $this->audit('users.update', $id, $user->email, ['groups' => $groups, 'permissions' => (array) $this->request->getPost('permissions')]);
 
         return redirect()->to(site_url('admin/users'))->with('message', 'User updated.');
     }
@@ -182,14 +213,21 @@ class UserController extends BaseController
         $siteAccess = $userId > 0
             ? $db->table('user_site_access')->where('user_id', $userId)->get()->getResultArray()
             : [];
+        $selectedPermissions = $userId > 0
+            ? array_column($db->table('auth_permissions_users')->select('permission')->where('user_id', $userId)->get()->getResultArray(), 'permission')
+            : [];
 
         return [
             'title' => $title,
             'user' => $user,
             'groups' => $authGroups->groups,
+            'permissionMatrix' => $authGroups->matrix,
+            'permissions' => $authGroups->permissions,
+            'menuAccess' => $this->menuAccessItems(),
             'selectedGroups' => $selectedGroups,
+            'selectedPermissions' => $selectedPermissions,
             'companies' => (new CompanyModel())->orderBy('code', 'ASC')->findAll(),
-            'sites' => (new SiteModel())->orderBy('code', 'ASC')->findAll(),
+            'sites' => (new SiteModel())->orderBy('company_id', 'ASC')->orderBy('code', 'ASC')->findAll(),
             'selectedCompanyIds' => array_map('intval', array_column($companyAccess, 'company_id')),
             'selectedSiteIds' => array_map('intval', array_column($siteAccess, 'site_id')),
             'defaultCompanyId' => (int) ($this->firstDefault($companyAccess, 'company_id') ?? 0),
@@ -235,11 +273,12 @@ class UserController extends BaseController
         }
     }
 
-    private function syncSiteAccess(int $userId, array $siteIds, int $defaultCompanyId, int $defaultSiteId): void
+    private function syncSiteAccess(int $userId, array $siteIds, array $companyIds, int $defaultSiteId): void
     {
         $db = Database::connect();
         $db->table('user_site_access')->where('user_id', $userId)->delete();
 
+        $companyIds = array_values(array_unique(array_map('intval', $companyIds)));
         $siteIds = array_values(array_unique(array_map('intval', $siteIds)));
         if ($defaultSiteId > 0 && ! in_array($defaultSiteId, $siteIds, true)) {
             $siteIds[] = $defaultSiteId;
@@ -255,8 +294,8 @@ class UserController extends BaseController
                 continue;
             }
 
-            $companyId = (int) ($site['company_id'] ?? $defaultCompanyId);
-            if ($defaultCompanyId > 0 && $companyId !== $defaultCompanyId) {
+            $companyId = (int) ($site['company_id'] ?? 0);
+            if ($companyIds !== [] && ! in_array($companyId, $companyIds, true)) {
                 continue;
             }
 
@@ -269,6 +308,14 @@ class UserController extends BaseController
                 'updated_at' => date('Y-m-d H:i:s'),
             ]);
         }
+    }
+
+    private function syncDirectPermissions(User $user, array $permissions): void
+    {
+        $allowedPermissions = array_keys(config(AuthGroups::class)->permissions);
+        $permissions = array_values(array_intersect(array_filter(array_map('strval', $permissions)), $allowedPermissions));
+
+        $user->syncPermissions(...$permissions);
     }
 
     private function emailIsAvailable(string $email, int $currentUserId): bool
@@ -331,6 +378,32 @@ class UserController extends BaseController
         }
 
         return isset($rows[0][$field]) ? (int) $rows[0][$field] : null;
+    }
+
+    /**
+     * @return list<array{module:string,label:string,route:string,permission:string}>
+     */
+    private function menuAccessItems(): array
+    {
+        $items = [];
+        foreach (config(ErpMenu::class)->items() as $menu) {
+            $module = (string) ($menu['label'] ?? 'Menu');
+            foreach (($menu['children'] ?? [$menu]) as $child) {
+                $permission = (string) ($child['permission'] ?? '');
+                if ($permission === '') {
+                    continue;
+                }
+
+                $items[] = [
+                    'module' => $module,
+                    'label' => (string) ($child['label'] ?? $module),
+                    'route' => (string) ($child['route'] ?? '#'),
+                    'permission' => $permission,
+                ];
+            }
+        }
+
+        return $items;
     }
 
     private function authorize(string $permission): void

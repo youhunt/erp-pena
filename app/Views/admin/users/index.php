@@ -49,6 +49,8 @@
                         <th>Username</th>
                         <th>Email</th>
                         <th>Roles</th>
+                        <th>Companies</th>
+                        <th>Sites</th>
                         <th>Status</th>
                         <th class="text-end">Action</th>
                     </tr>
@@ -60,6 +62,8 @@
                         <td class="fw-semibold"><?= esc($row['username']) ?></td>
                         <td><?= esc($row['email']) ?></td>
                         <td><?= esc($row['groups'] ?: '-') ?></td>
+                        <td class="text-muted"><?= esc($row['companies'] ?: '-') ?></td>
+                        <td class="text-muted"><?= esc($row['sites'] ?: '-') ?></td>
                         <td>
                             <span class="badge bg-<?= $status === 'active' ? 'success' : 'secondary' ?>">
                                 <?= $status === 'active' ? 'Active' : 'Inactive' ?>
@@ -80,12 +84,12 @@
                 <?php endforeach ?>
 
                 <tr id="userEmptyRow" class="d-none">
-                    <td colspan="5" class="text-center text-muted py-4">No matching users found.</td>
+                    <td colspan="7" class="text-center text-muted py-4">No matching users found.</td>
                 </tr>
 
                 <?php if ($users === []): ?>
                     <tr>
-                        <td colspan="5" class="text-center text-muted py-4">No users found.</td>
+                        <td colspan="7" class="text-center text-muted py-4">No users found.</td>
                     </tr>
                 <?php endif ?>
                 </tbody>
