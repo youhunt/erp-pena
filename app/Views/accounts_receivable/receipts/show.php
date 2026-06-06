@@ -19,6 +19,9 @@
                     <tr><th>Customer</th><td><?= esc(($receipt['customer_code'] ?? '-') . ' ' . ($receipt['customer_name'] ?? '')) ?></td></tr>
                     <tr><th>Method</th><td><?= esc($receipt['receipt_method'] ?? '-') ?></td></tr>
                     <tr><th>Cash/Bank</th><td><?= esc($receipt['cash_bank_code'] ?? '-') ?></td></tr>
+                    <?php $cashBankRoute = ($receipt['receipt_method'] ?? '') === 'cash' ? 'cash-bank/cash-entries/' : 'cash-bank/bank-entries/'; ?>
+                    <tr><th>Cash/Bank Entry</th><td><?= ! empty($receipt['cash_bank_entry_id']) ? '<a href="' . site_url($cashBankRoute . $receipt['cash_bank_entry_id']) . '">#' . esc($receipt['cash_bank_entry_id']) . '</a>' : '-' ?></td></tr>
+                    <tr><th>GL Entry</th><td><?= ! empty($receipt['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $receipt['gl_entry_id']) . '">#' . esc($receipt['gl_entry_id']) . '</a>' : '-' ?></td></tr>
                     <tr><th>Reference</th><td><?= esc($receipt['reference_no'] ?? '-') ?></td></tr>
                     <tr><th>Amount</th><td class="fw-semibold"><?= esc(number_format((float) $receipt['receipt_amount'], 2)) ?></td></tr>
                     <tr><th>Posted</th><td><?= esc($receipt['posted_at'] ?? '-') ?></td></tr>

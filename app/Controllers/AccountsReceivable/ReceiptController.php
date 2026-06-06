@@ -5,6 +5,7 @@ namespace App\Controllers\AccountsReceivable;
 use App\Controllers\BaseController;
 use App\Models\ArReceivableModel;
 use App\Models\ArReceiptModel;
+use App\Models\CashBankAccountModel;
 use App\Services\Finance\SettlementService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
@@ -35,6 +36,7 @@ class ReceiptController extends BaseController
         return view('accounts_receivable/receipts/form', [
             'title' => 'Post A/R Receipt',
             'receivable' => $receivable,
+            'cashBankAccounts' => $this->cashBankAccounts($tenant),
         ]);
     }
 
@@ -51,6 +53,7 @@ class ReceiptController extends BaseController
             'receipt_date' => 'required|valid_date[Y-m-d]',
             'receipt_amount' => 'required|numeric|greater_than[0]',
             'receipt_method' => 'required|max_length[40]',
+            'cash_bank_code' => 'required|max_length[80]',
         ])) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
@@ -106,5 +109,24 @@ class ReceiptController extends BaseController
         if ($tenant->activeSiteId() !== null) {
             $model->where('site_id', $tenant->activeSiteId());
         }
+    }
+
+    private function cashBankAccounts(TenantContext $tenant): array
+    {
+        $model = new CashBankAccountModel();
+        if ($tenant->activeCompanyId() !== null) {
+            $model->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $model->groupStart()
+                ->where('site_id', $tenant->activeSiteId())
+                ->orWhere('site_id', null)
+                ->groupEnd();
+        }
+
+        return $model->where('is_active', 1)
+            ->orderBy('account_type', 'ASC')
+            ->orderBy('cash_bank_code', 'ASC')
+            ->findAll();
     }
 }

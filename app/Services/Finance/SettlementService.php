@@ -6,6 +6,8 @@ use App\Models\ApPayableModel;
 use App\Models\ApPaymentModel;
 use App\Models\ArReceivableModel;
 use App\Models\ArReceiptModel;
+use App\Models\CashBankAccountModel;
+use App\Models\CashBankEntryModel;
 use App\Models\PurchaseInvoiceModel;
 use App\Models\SalesInvoiceModel;
 use App\Services\AuditLogService;
@@ -35,12 +37,16 @@ class SettlementService
         if ($amount > $outstanding) {
             throw new RuntimeException('Payment amount cannot exceed outstanding amount.');
         }
+        if (trim((string) ($data['cash_bank_code'] ?? '')) === '') {
+            throw new RuntimeException('Cash/Bank account is required for A/P payment.');
+        }
 
         $db = Database::connect();
         $db->transBegin();
 
         try {
-            $paymentId = (int) (new ApPaymentModel())->insert($data + [
+            $paymentModel = new ApPaymentModel();
+            $paymentId = (int) $paymentModel->insert($data + [
                 'purchase_invoice_id' => $payable['purchase_invoice_id'],
                 'invoice_no' => $payable['invoice_no'],
                 'supplier_id' => $payable['supplier_id'] ?? null,
@@ -53,6 +59,25 @@ class SettlementService
                 'created_by' => $userId,
                 'updated_by' => $userId,
             ], true);
+
+            $cashBankEntryId = (new CashBankService())->post([
+                'company_id' => $data['company_id'],
+                'site_id' => $data['site_id'] ?? null,
+                'entry_no' => 'CB-' . ($data['payment_no'] ?? date('Ymd-His')),
+                'entry_date' => $data['payment_date'] ?? date('Y-m-d'),
+                'entry_type' => $this->cashBankEntryType((int) $data['company_id'], (string) $data['cash_bank_code'], 'out'),
+                'cash_bank_code' => $data['cash_bank_code'],
+                'currency_code' => $payable['currency_code'] ?? 'IDR',
+                'amount' => $amount,
+                'counter_account_no' => '2100',
+                'reference_no' => $data['reference_no'] ?? $data['payment_no'] ?? null,
+                'description' => 'A/P payment ' . ($data['payment_no'] ?? '') . ' for invoice ' . ($payable['invoice_no'] ?? ''),
+            ], $userId);
+            $cashBankEntry = (new CashBankEntryModel())->find($cashBankEntryId);
+            $paymentModel->update($paymentId, [
+                'cash_bank_entry_id' => $cashBankEntryId,
+                'gl_entry_id' => $cashBankEntry['gl_entry_id'] ?? null,
+            ]);
 
             $newPaid = round((float) ($payable['paid_amount'] ?? 0) + $amount, 6);
             $newOutstanding = round(max(0, $outstanding - $amount), 6);
@@ -82,8 +107,8 @@ class SettlementService
                 'table_name' => 'ap_payments',
                 'record_id' => $paymentId,
                 'record_code' => $data['payment_no'],
-                'description' => 'A/P payment posted and supplier payable settled.',
-                'new_values' => ['payment' => $data, 'amount' => $amount, 'outstanding' => $newOutstanding],
+                'description' => 'A/P payment posted, cash/bank updated, and supplier payable settled.',
+                'new_values' => ['payment' => $data, 'amount' => $amount, 'outstanding' => $newOutstanding, 'cash_bank_entry_id' => $cashBankEntryId, 'gl_entry_id' => $cashBankEntry['gl_entry_id'] ?? null],
             ]);
 
             return $paymentId;
@@ -113,12 +138,16 @@ class SettlementService
         if ($amount > $outstanding) {
             throw new RuntimeException('Receipt amount cannot exceed outstanding amount.');
         }
+        if (trim((string) ($data['cash_bank_code'] ?? '')) === '') {
+            throw new RuntimeException('Cash/Bank account is required for A/R receipt.');
+        }
 
         $db = Database::connect();
         $db->transBegin();
 
         try {
-            $receiptId = (int) (new ArReceiptModel())->insert($data + [
+            $receiptModel = new ArReceiptModel();
+            $receiptId = (int) $receiptModel->insert($data + [
                 'sales_invoice_id' => $receivable['sales_invoice_id'],
                 'invoice_no' => $receivable['invoice_no'],
                 'customer_id' => $receivable['customer_id'] ?? null,
@@ -131,6 +160,25 @@ class SettlementService
                 'created_by' => $userId,
                 'updated_by' => $userId,
             ], true);
+
+            $cashBankEntryId = (new CashBankService())->post([
+                'company_id' => $data['company_id'],
+                'site_id' => $data['site_id'] ?? null,
+                'entry_no' => 'CB-' . ($data['receipt_no'] ?? date('Ymd-His')),
+                'entry_date' => $data['receipt_date'] ?? date('Y-m-d'),
+                'entry_type' => $this->cashBankEntryType((int) $data['company_id'], (string) $data['cash_bank_code'], 'in'),
+                'cash_bank_code' => $data['cash_bank_code'],
+                'currency_code' => $receivable['currency_code'] ?? 'IDR',
+                'amount' => $amount,
+                'counter_account_no' => '1200',
+                'reference_no' => $data['reference_no'] ?? $data['receipt_no'] ?? null,
+                'description' => 'A/R receipt ' . ($data['receipt_no'] ?? '') . ' for invoice ' . ($receivable['invoice_no'] ?? ''),
+            ], $userId);
+            $cashBankEntry = (new CashBankEntryModel())->find($cashBankEntryId);
+            $receiptModel->update($receiptId, [
+                'cash_bank_entry_id' => $cashBankEntryId,
+                'gl_entry_id' => $cashBankEntry['gl_entry_id'] ?? null,
+            ]);
 
             $newPaid = round((float) ($receivable['paid_amount'] ?? 0) + $amount, 6);
             $newOutstanding = round(max(0, $outstanding - $amount), 6);
@@ -160,8 +208,8 @@ class SettlementService
                 'table_name' => 'ar_receipts',
                 'record_id' => $receiptId,
                 'record_code' => $data['receipt_no'],
-                'description' => 'A/R receipt posted and customer receivable settled.',
-                'new_values' => ['receipt' => $data, 'amount' => $amount, 'outstanding' => $newOutstanding],
+                'description' => 'A/R receipt posted, cash/bank updated, and customer receivable settled.',
+                'new_values' => ['receipt' => $data, 'amount' => $amount, 'outstanding' => $newOutstanding, 'cash_bank_entry_id' => $cashBankEntryId, 'gl_entry_id' => $cashBankEntry['gl_entry_id'] ?? null],
             ]);
 
             return $receiptId;
@@ -169,5 +217,22 @@ class SettlementService
             $db->transRollback();
             throw new RuntimeException($e->getMessage());
         }
+    }
+
+    private function cashBankEntryType(int $companyId, string $cashBankCode, string $direction): string
+    {
+        $account = (new CashBankAccountModel())
+            ->where('company_id', $companyId)
+            ->where('cash_bank_code', $cashBankCode)
+            ->where('is_active', 1)
+            ->first();
+
+        if ($account === null) {
+            throw new RuntimeException('Cash/Bank account not found or inactive.');
+        }
+
+        $accountType = (string) ($account['account_type'] ?? 'bank');
+
+        return ($accountType === 'cash' ? 'cash' : 'bank') . '_' . $direction;
     }
 }

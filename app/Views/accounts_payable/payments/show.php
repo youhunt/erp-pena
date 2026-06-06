@@ -19,6 +19,9 @@
                     <tr><th>Supplier</th><td><?= esc(($payment['supplier_code'] ?? '-') . ' ' . ($payment['supplier_name'] ?? '')) ?></td></tr>
                     <tr><th>Method</th><td><?= esc($payment['payment_method'] ?? '-') ?></td></tr>
                     <tr><th>Cash/Bank</th><td><?= esc($payment['cash_bank_code'] ?? '-') ?></td></tr>
+                    <?php $cashBankRoute = ($payment['payment_method'] ?? '') === 'cash' ? 'cash-bank/cash-entries/' : 'cash-bank/bank-entries/'; ?>
+                    <tr><th>Cash/Bank Entry</th><td><?= ! empty($payment['cash_bank_entry_id']) ? '<a href="' . site_url($cashBankRoute . $payment['cash_bank_entry_id']) . '">#' . esc($payment['cash_bank_entry_id']) . '</a>' : '-' ?></td></tr>
+                    <tr><th>GL Entry</th><td><?= ! empty($payment['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $payment['gl_entry_id']) . '">#' . esc($payment['gl_entry_id']) . '</a>' : '-' ?></td></tr>
                     <tr><th>Reference</th><td><?= esc($payment['reference_no'] ?? '-') ?></td></tr>
                     <tr><th>Amount</th><td class="fw-semibold"><?= esc(number_format((float) $payment['payment_amount'], 2)) ?></td></tr>
                     <tr><th>Posted</th><td><?= esc($payment['posted_at'] ?? '-') ?></td></tr>

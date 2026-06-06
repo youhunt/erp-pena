@@ -24,7 +24,7 @@
                     <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
                         <div>
                             <h4 class="card-title mb-1">Post Customer Receipt</h4>
-                            <p class="text-muted mb-0">This will reduce A/R outstanding. GL posting will be added in finance backbone phase.</p>
+                            <p class="text-muted mb-0">This will reduce A/R outstanding, update cash/bank balance, and post GL when account setup is available.</p>
                         </div>
                         <a href="<?= site_url('ar/sales-invoices/' . $receivable['sales_invoice_id']) ?>" class="btn btn-light">Back</a>
                     </div>
@@ -51,7 +51,14 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Cash/Bank Code</label>
-                            <input type="text" name="cash_bank_code" class="form-control" value="<?= esc(old('cash_bank_code')) ?>" placeholder="BANK-IDR">
+                            <select name="cash_bank_code" class="form-select" required>
+                                <option value="">Choose cash/bank</option>
+                                <?php foreach ($cashBankAccounts ?? [] as $account): ?>
+                                    <option value="<?= esc($account['cash_bank_code']) ?>" <?= old('cash_bank_code', 'BANK-IDR') === $account['cash_bank_code'] ? 'selected' : '' ?>>
+                                        <?= esc($account['cash_bank_code'] . ' - ' . $account['cash_bank_name'] . ' (' . number_format((float) $account['current_balance'], 2) . ')') ?>
+                                    </option>
+                                <?php endforeach ?>
+                            </select>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Reference No</label>
