@@ -92,6 +92,14 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('payments/(:num)', 'AccountsPayable\PaymentController::show/$1');
     });
 
+    $routes->group('gl', static function (RouteCollection $routes): void {
+        $routes->get('chart-of-accounts', 'Finance\GeneralLedgerController::chartAccounts');
+        $routes->get('entries', 'Finance\GeneralLedgerController::entries');
+        $routes->get('entries/new', 'Finance\GeneralLedgerController::newEntry');
+        $routes->post('entries', 'Finance\GeneralLedgerController::storeEntry');
+        $routes->get('entries/(:num)', 'Finance\GeneralLedgerController::showEntry/$1');
+    });
+
     $routes->group('production', static function (RouteCollection $routes): void {
         $routes->get('boms', 'Production\ProductionMasterController::boms');
         $routes->get('boms/new', 'Production\ProductionMasterController::newBom');

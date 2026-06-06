@@ -96,6 +96,12 @@ class PermissionGuardFilter implements FilterInterface
                 : 'finance.ar.manage';
         }
 
+        if (str_starts_with($path, 'gl/')) {
+            return $method === 'GET' && ! str_contains($path, '/new')
+                ? 'finance.gl.view'
+                : 'finance.gl.post';
+        }
+
         if ($path === 'ai-documents' || str_starts_with($path, 'ai-documents/')) {
             return $this->aiDocumentPermission($path, $method);
         }
