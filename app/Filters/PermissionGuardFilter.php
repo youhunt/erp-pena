@@ -69,7 +69,11 @@ class PermissionGuardFilter implements FilterInterface
         }
 
         if (str_starts_with($path, 'inventory/')) {
-            return str_contains($path, 'stock-adjustment') || $method !== 'GET'
+            return str_contains($path, 'stock-adjustment')
+                || str_contains($path, 'in-out')
+                || str_contains($path, 'transfers')
+                || str_contains($path, 'stock-opname')
+                || $method !== 'GET'
                 ? 'inventory.movement.post'
                 : 'inventory.stock.view';
         }

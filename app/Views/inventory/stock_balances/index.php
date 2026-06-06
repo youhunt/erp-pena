@@ -24,6 +24,9 @@
                 <p class="text-muted mb-0">Current stock on hand, reserved, available, average cost, and stock value.</p>
             </div>
             <div class="d-flex gap-2">
+                <a href="<?= site_url('inventory/in-out') ?>" class="btn btn-outline-primary"><i class="bx bx-log-in-circle me-1"></i> In Out</a>
+                <a href="<?= site_url('inventory/transfers') ?>" class="btn btn-outline-primary"><i class="bx bx-transfer me-1"></i> Transfer</a>
+                <a href="<?= site_url('inventory/stock-opname') ?>" class="btn btn-outline-primary"><i class="bx bx-check-square me-1"></i> Opname</a>
                 <a href="<?= site_url('inventory/stock-adjustment') ?>" class="btn btn-primary"><i class="bx bx-plus me-1"></i> Stock Adjustment</a>
             </div>
         </div>

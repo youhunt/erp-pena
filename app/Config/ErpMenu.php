@@ -59,9 +59,9 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Item Master', 'setup/items', 'inventory.item.view'),
                 $this->leaf('Item UoM Conversion', $this->placeholderRoute('Item UoM Conversion'), 'inventory.item.view'),
                 $this->leaf('Batch Master', $this->placeholderRoute('Batch Master'), 'inventory.item.view'),
-                $this->leaf('Inventory In Out', $this->placeholderRoute('Inventory In Out'), 'inventory.stock.view'),
-                $this->leaf('Inventory Transfer', $this->placeholderRoute('Inventory Transfer'), 'inventory.stock.view'),
-                $this->leaf('Inventory Stock Opname', $this->placeholderRoute('Inventory Stock Opname'), 'inventory.stock.view'),
+                $this->leaf('Inventory In Out', 'inventory/in-out', 'inventory.movement.post'),
+                $this->leaf('Inventory Transfer', 'inventory/transfers', 'inventory.movement.post'),
+                $this->leaf('Inventory Stock Opname', 'inventory/stock-opname', 'inventory.movement.post'),
                 $this->leaf('Inventory Period Close', $this->placeholderRoute('Inventory Period Close'), 'inventory.stock.view'),
             ]),
             $this->group('Planning', 'bx-calendar', 70, [

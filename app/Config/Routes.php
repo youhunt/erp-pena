@@ -26,6 +26,12 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
 
     $routes->group('inventory', static function (RouteCollection $routes): void {
         $routes->get('stock-balances', 'Inventory\StockBalanceController::index');
+        $routes->get('in-out', 'Inventory\InventoryMovementController::inOut');
+        $routes->post('in-out', 'Inventory\InventoryMovementController::storeInOut');
+        $routes->get('transfers', 'Inventory\InventoryMovementController::transfer');
+        $routes->post('transfers', 'Inventory\InventoryMovementController::storeTransfer');
+        $routes->get('stock-opname', 'Inventory\InventoryMovementController::stockOpname');
+        $routes->post('stock-opname', 'Inventory\InventoryMovementController::storeStockOpname');
         $routes->get('stock-adjustment', 'Inventory\StockAdjustmentController::create');
         $routes->post('stock-adjustment', 'Inventory\StockAdjustmentController::store');
     });
