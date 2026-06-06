@@ -11,6 +11,24 @@ class MultiCompanySimulationSeeder extends Seeder
     private string $now;
 
     /**
+     * Direct permissions managed by this simulation seeder.
+     *
+     * @var list<string>
+     */
+    private array $managedDirectPermissions = [
+        'users.view',
+        'sales.order.approve',
+        'purchase.po.approve',
+        'inventory.movement.post',
+        'production.manage',
+        'finance.gl.post',
+        'finance.ap.manage',
+        'finance.ar.manage',
+        'ai.document.review',
+        'ai.document.convert',
+    ];
+
+    /**
      * @var list<array{code:string,name:string,legal:string,currency:string,sites:list<array{code:string,name:string}>}>
      */
     private array $companies = [
@@ -373,23 +391,26 @@ class MultiCompanySimulationSeeder extends Seeder
     private function seedUsersAndAccess(): void
     {
         $users = [
-            ['admin@pena-erp.local', 'admin', 'superadmin', 'Admin123!', 'all'],
-            ['company-admin@pena-erp.local', 'company_admin_demo', 'company_admin', 'Admin123!', ['SIM-A', 'SIM-B', 'SIM-C', 'SIM-D']],
-            ['sales-alpha@pena-erp.local', 'sales_alpha', 'sales', 'Admin123!', ['SIM-A']],
-            ['purchase-beta@pena-erp.local', 'purchase_beta', 'purchase', 'Admin123!', ['SIM-B']],
-            ['inventory-cakra@pena-erp.local', 'inventory_cakra', 'inventory', 'Admin123!', ['SIM-C']],
-            ['production-beta@pena-erp.local', 'production_beta', 'production', 'Admin123!', ['SIM-B']],
-            ['finance-group@pena-erp.local', 'finance_group', 'finance', 'Admin123!', ['SIM-A', 'SIM-B', 'SIM-C', 'SIM-D']],
-            ['viewer-delta@pena-erp.local', 'viewer_delta', 'viewer', 'Admin123!', ['SIM-D']],
+            ['admin@pena-erp.local', 'admin', 'superadmin', 'Admin123!', 'all', []],
+            ['company-admin@pena-erp.local', 'company_admin_demo', 'company_admin', 'Admin123!', ['SIM-A', 'SIM-B', 'SIM-C', 'SIM-D'], []],
+            ['sales-alpha@pena-erp.local', 'sales_alpha', 'sales', 'Admin123!', ['SIM-A'], ['ai.document.convert']],
+            ['purchase-beta@pena-erp.local', 'purchase_beta', 'purchase', 'Admin123!', ['SIM-B'], ['inventory.movement.post']],
+            ['inventory-cakra@pena-erp.local', 'inventory_cakra', 'inventory', 'Admin123!', ['SIM-C'], ['purchase.po.approve']],
+            ['production-beta@pena-erp.local', 'production_beta', 'production', 'Admin123!', ['SIM-B'], ['inventory.movement.post']],
+            ['finance-group@pena-erp.local', 'finance_group', 'finance', 'Admin123!', ['SIM-A', 'SIM-B', 'SIM-C', 'SIM-D'], ['users.view']],
+            ['viewer-delta@pena-erp.local', 'viewer_delta', 'viewer', 'Admin123!', ['SIM-D'], ['ai.document.review']],
         ];
 
-        foreach ($users as [$email, $username, $group, $password, $companyScope]) {
+        foreach ($users as [$email, $username, $group, $password, $companyScope, $directPermissions]) {
             $userId = $this->seedUser($email, $username, $group, $password);
             $companyCodes = $companyScope === 'all'
                 ? array_map(static fn (array $company): string => $company['code'], $this->companies)
                 : $companyScope;
 
             $this->assignAccess((int) $userId, $companyCodes);
+            if ($directPermissions !== []) {
+                $this->syncDirectPermissions((int) $userId, $directPermissions);
+            }
         }
     }
 
@@ -485,6 +506,31 @@ class MultiCompanySimulationSeeder extends Seeder
         $user->addGroup($group);
 
         return (int) $user->id;
+    }
+
+    /**
+     * @param list<string> $permissions
+     */
+    private function syncDirectPermissions(int $userId, array $permissions): void
+    {
+        if (! $this->db->tableExists('auth_permissions_users')) {
+            return;
+        }
+
+        $permissions = array_values(array_intersect(array_unique($permissions), $this->managedDirectPermissions));
+
+        $this->db->table('auth_permissions_users')
+            ->where('user_id', $userId)
+            ->whereIn('permission', $this->managedDirectPermissions)
+            ->delete();
+
+        foreach ($permissions as $permission) {
+            $this->db->table('auth_permissions_users')->insert([
+                'user_id' => $userId,
+                'permission' => $permission,
+                'created_at' => $this->now,
+            ]);
+        }
     }
 
     private function upsert(string $table, array $where, array $data): int
