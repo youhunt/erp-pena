@@ -3,6 +3,7 @@
 namespace Config;
 
 use App\Filters\TenantBootstrapFilter;
+use App\Filters\PermissionGuardFilter;
 use CodeIgniter\Config\Filters as BaseFilters;
 use CodeIgniter\Filters\Cors;
 use CodeIgniter\Filters\CSRF;
@@ -27,6 +28,7 @@ class Filters extends BaseFilters
         'pagecache'     => PageCache::class,
         'performance'   => PerformanceMetrics::class,
         'tenant'        => TenantBootstrapFilter::class,
+        'permission'    => PermissionGuardFilter::class,
     ];
 
     public array $required = [
@@ -53,14 +55,39 @@ class Filters extends BaseFilters
             'before' => [
                 'dashboard',
                 'tenant/*',
+                'modules/*',
                 'setup/*',
                 'admin/*',
                 'sales/*',
                 'purchase/*',
                 'inventory/*',
+                'production/*',
+                'ap/*',
+                'ar/*',
                 'audit-logs',
                 'audit-logs/*',
+                'ai-documents',
                 'ai-documents/*',
+                'ai-ocr/*',
+            ],
+        ],
+        'permission' => [
+            'before' => [
+                'dashboard',
+                'modules/*',
+                'setup/*',
+                'admin/*',
+                'sales/*',
+                'purchase/*',
+                'inventory/*',
+                'production/*',
+                'ap/*',
+                'ar/*',
+                'audit-logs',
+                'audit-logs/*',
+                'ai-documents',
+                'ai-documents/*',
+                'ai-ocr/*',
             ],
         ],
     ];
