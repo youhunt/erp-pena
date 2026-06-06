@@ -107,12 +107,12 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Calculate Cost', $this->placeholderRoute('Calculate Cost'), 'costing.view'),
             ]),
             $this->group('Cash Bank', 'bx-wallet', 120, [
-                $this->leaf('Cash Bank ID', $this->placeholderRoute('Cash Bank ID'), 'cashbank.view'),
+                $this->leaf('Cash Bank ID', 'cash-bank/accounts', 'cashbank.view'),
                 $this->leaf('Currency', $this->placeholderRoute('Currency'), 'cashbank.view'),
                 $this->leaf('Employee ID', $this->placeholderRoute('Employee ID'), 'cashbank.view'),
                 $this->leaf('Rate Master', $this->placeholderRoute('Rate Master'), 'cashbank.view'),
-                $this->leaf('Cash Entry', $this->placeholderRoute('Cash Entry'), 'cashbank.view'),
-                $this->leaf('Bank Entry', $this->placeholderRoute('Bank Entry'), 'cashbank.view'),
+                $this->leaf('Cash Entry', 'cash-bank/cash-entries', 'cashbank.view'),
+                $this->leaf('Bank Entry', 'cash-bank/bank-entries', 'cashbank.view'),
                 $this->leaf('Bank Reconcile', $this->placeholderRoute('Bank Reconcile'), 'cashbank.view'),
             ]),
             $this->group('GL', 'bx-book', 130, [

@@ -102,6 +102,12 @@ class PermissionGuardFilter implements FilterInterface
                 : 'finance.gl.post';
         }
 
+        if (str_starts_with($path, 'cash-bank/')) {
+            return $method === 'GET' && ! str_contains($path, '/new')
+                ? 'cashbank.view'
+                : 'cashbank.manage';
+        }
+
         if ($path === 'ai-documents' || str_starts_with($path, 'ai-documents/')) {
             return $this->aiDocumentPermission($path, $method);
         }
