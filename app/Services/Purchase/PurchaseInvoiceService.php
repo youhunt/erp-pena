@@ -10,6 +10,7 @@ use App\Models\PurchaseReceiptLineModel;
 use App\Models\PurchaseReceiptModel;
 use App\Services\AuditLogService;
 use App\Services\Finance\GeneralLedgerService;
+use App\Services\Finance\PeriodCloseService;
 use Config\Database;
 use RuntimeException;
 use Throwable;
@@ -21,6 +22,7 @@ class PurchaseInvoiceService
         if (empty($header['company_id']) || empty($header['invoice_no']) || empty($header['supplier_code'])) {
             throw new RuntimeException('Company, invoice number, and supplier are required.');
         }
+        (new PeriodCloseService())->assertOpen('ap', (int) $header['company_id'], (string) ($header['invoice_date'] ?? date('Y-m-d')), ! empty($header['site_id']) ? (int) $header['site_id'] : null);
 
         $lines = $this->normalizeManualLines($rawLines);
         if ($lines === []) {
@@ -136,6 +138,7 @@ class PurchaseInvoiceService
         if (empty($header['company_id']) || empty($header['purchase_receipt_id']) || empty($header['invoice_no'])) {
             throw new RuntimeException('Company, receipt, and invoice number are required.');
         }
+        (new PeriodCloseService())->assertOpen('ap', (int) $header['company_id'], (string) ($header['invoice_date'] ?? date('Y-m-d')), ! empty($header['site_id']) ? (int) $header['site_id'] : null);
 
         $receiptModel = new PurchaseReceiptModel();
         $receipt = $receiptModel->find((int) $header['purchase_receipt_id']);

@@ -22,6 +22,7 @@ class GeneralLedgerService
         if ($companyId < 1) {
             throw new RuntimeException('Company is required for GL entry.');
         }
+        (new PeriodCloseService())->assertOpen('gl', $companyId, (string) ($header['journal_date'] ?? date('Y-m-d')), ! empty($header['site_id']) ? (int) $header['site_id'] : null);
 
         $lines = $this->normalizeLines($companyId, $lines);
         if (count($lines) < 2) {

@@ -11,6 +11,7 @@ use App\Models\SalesOrderLineModel;
 use App\Models\SalesOrderModel;
 use App\Services\AuditLogService;
 use App\Services\Finance\GeneralLedgerService;
+use App\Services\Finance\PeriodCloseService;
 use Config\Database;
 use RuntimeException;
 use Throwable;
@@ -22,6 +23,7 @@ class SalesInvoiceService
         if (empty($header['company_id']) || empty($header['invoice_no']) || empty($header['customer_code'])) {
             throw new RuntimeException('Company, invoice number, and customer are required.');
         }
+        (new PeriodCloseService())->assertOpen('ar', (int) $header['company_id'], (string) ($header['invoice_date'] ?? date('Y-m-d')), ! empty($header['site_id']) ? (int) $header['site_id'] : null);
 
         $lines = $this->normalizeManualLines($rawLines);
         if ($lines === []) {
@@ -137,6 +139,7 @@ class SalesInvoiceService
         if (empty($header['company_id']) || empty($header['sales_delivery_id']) || empty($header['invoice_no'])) {
             throw new RuntimeException('Company, delivery, and invoice number are required.');
         }
+        (new PeriodCloseService())->assertOpen('ar', (int) $header['company_id'], (string) ($header['invoice_date'] ?? date('Y-m-d')), ! empty($header['site_id']) ? (int) $header['site_id'] : null);
 
         $deliveryModel = new SalesDeliveryModel();
         $delivery = $deliveryModel->find((int) $header['sales_delivery_id']);

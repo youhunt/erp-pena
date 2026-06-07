@@ -29,6 +29,7 @@ class CashBankService
         if ($amount <= 0) {
             throw new RuntimeException('Amount must be greater than zero.');
         }
+        (new PeriodCloseService())->assertOpen('cashbank', $companyId, (string) ($data['entry_date'] ?? date('Y-m-d')), ! empty($data['site_id']) ? (int) $data['site_id'] : null);
 
         $accountModel = new CashBankAccountModel();
         $account = $accountModel

@@ -42,7 +42,7 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Sales Order', 'sales/orders', 'sales.order.view'),
                 $this->leaf('Allocation Order', 'sales/allocations', 'sales.order.view'),
                 $this->leaf('Delivery Order', 'sales/deliveries', 'sales.order.view'),
-                $this->leaf('Sales Period Close', $this->placeholderRoute('Sales Period Close'), 'sales.order.view'),
+                $this->leaf('Sales Period Close', 'period-close/sales', 'sales.order.view'),
             ]),
             $this->group('Purchase', 'bx-shopping-bag', 50, [
                 $this->leaf('Supplier Master', 'setup/suppliers', 'purchase.supplier.view'),
@@ -53,7 +53,7 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Purchase Intransit', $this->placeholderRoute('Purchase Intransit'), 'purchase.po.view'),
                 $this->leaf('Inventory Purchase Receipt', $this->placeholderRoute('Inventory Purchase Receipt'), 'purchase.po.view'),
                 $this->leaf('Cost Purchase Receipt', $this->placeholderRoute('Cost Purchase Receipt'), 'purchase.po.view'),
-                $this->leaf('Purchase Period Close', $this->placeholderRoute('Purchase Period Close'), 'purchase.po.view'),
+                $this->leaf('Purchase Period Close', 'period-close/purchase', 'purchase.po.view'),
             ]),
             $this->group('Inventory', 'bx-package', 60, [
                 $this->leaf('Item Master', 'setup/items', 'inventory.item.view'),
@@ -62,7 +62,7 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Inventory In Out', 'inventory/in-out', 'inventory.movement.post'),
                 $this->leaf('Inventory Transfer', 'inventory/transfers', 'inventory.movement.post'),
                 $this->leaf('Inventory Stock Opname', 'inventory/stock-opname', 'inventory.movement.post'),
-                $this->leaf('Inventory Period Close', $this->placeholderRoute('Inventory Period Close'), 'inventory.stock.view'),
+                $this->leaf('Inventory Period Close', 'period-close/inventory', 'inventory.stock.view'),
             ]),
             $this->group('Planning', 'bx-calendar', 70, [
                 $this->leaf('Forecast', $this->placeholderRoute('Forecast'), 'planning.view'),
@@ -80,7 +80,7 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Work Order Out', 'production/work-orders', 'production.view'),
                 $this->leaf('Work Order In Out', 'production/work-orders', 'production.view'),
                 $this->leaf('Work Order Labor', $this->placeholderRoute('Work Order Labor'), 'production.view'),
-                $this->leaf('Production Period Close', $this->placeholderRoute('Production Period Close'), 'production.view'),
+                $this->leaf('Production Period Close', 'period-close/production', 'production.view'),
             ]),
             $this->group('Accounts Payable', 'bx-receipt', 90, [
                 $this->leaf('Accounts Payable', $this->placeholderRoute('Accounts Payable'), 'finance.ap.view'),
@@ -89,7 +89,7 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Inventory Purchase Invoice', $this->placeholderRoute('Inventory Purchase Invoice'), 'finance.ap.view'),
                 $this->leaf('Advanced A/P Invoice', $this->placeholderRoute('Advanced A/P Invoice'), 'finance.ap.view'),
                 $this->leaf('Payment Invoice', 'ap/payments', 'finance.ap.view'),
-                $this->leaf('A/P Period Close', $this->placeholderRoute('A/P Period Close'), 'finance.ap.view'),
+                $this->leaf('A/P Period Close', 'period-close/ap', 'finance.ap.view'),
             ]),
             $this->group('Accounts Receivable', 'bx-credit-card', 100, [
                 $this->leaf('Accounts Receivable', $this->placeholderRoute('Accounts Receivable'), 'finance.ar.view'),
@@ -99,7 +99,7 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Inventory Sales Invoice', $this->placeholderRoute('Inventory Sales Invoice'), 'finance.ar.view'),
                 $this->leaf('Advanced A/R Receipt', $this->placeholderRoute('Advanced A/R Receipt'), 'finance.ar.view'),
                 $this->leaf('Payment Receipt', 'ar/receipts', 'finance.ar.view'),
-                $this->leaf('A/R Period Close', $this->placeholderRoute('A/R Period Close'), 'finance.ar.view'),
+                $this->leaf('A/R Period Close', 'period-close/ar', 'finance.ar.view'),
             ]),
             $this->group('Costing', 'bx-calculator', 110, [
                 $this->leaf('Cost Type', $this->placeholderRoute('Cost Type'), 'costing.view'),
@@ -123,7 +123,7 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Recurring', $this->placeholderRoute('Recurring'), 'finance.gl.view'),
                 $this->leaf('GL Entry', 'gl/entries', 'finance.gl.view'),
                 $this->leaf('Recurring Posting', $this->placeholderRoute('Recurring Posting'), 'finance.gl.view'),
-                $this->leaf('GL Period Close', $this->placeholderRoute('GL Period Close'), 'finance.gl.view'),
+                $this->leaf('GL Period Close', 'period-close/gl', 'finance.gl.view'),
             ]),
             $this->group('FA', 'bx-building-house', 140, [
                 $this->leaf('Asset ID', $this->placeholderRoute('Asset ID'), 'fixedasset.view'),

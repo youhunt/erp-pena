@@ -25,6 +25,7 @@ class BankReconciliationService
         if ($entryIds === []) {
             throw new RuntimeException('Choose at least one bank entry to reconcile.');
         }
+        (new PeriodCloseService())->assertOpen('cashbank', $companyId, $statementDate, ! empty($data['site_id']) ? (int) $data['site_id'] : null);
 
         $account = (new CashBankAccountModel())
             ->where('company_id', $companyId)

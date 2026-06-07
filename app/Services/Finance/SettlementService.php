@@ -40,6 +40,7 @@ class SettlementService
         if (trim((string) ($data['cash_bank_code'] ?? '')) === '') {
             throw new RuntimeException('Cash/Bank account is required for A/P payment.');
         }
+        (new PeriodCloseService())->assertOpen('ap', (int) $data['company_id'], (string) ($data['payment_date'] ?? date('Y-m-d')), ! empty($data['site_id']) ? (int) $data['site_id'] : null);
 
         $db = Database::connect();
         $db->transBegin();
@@ -141,6 +142,7 @@ class SettlementService
         if (trim((string) ($data['cash_bank_code'] ?? '')) === '') {
             throw new RuntimeException('Cash/Bank account is required for A/R receipt.');
         }
+        (new PeriodCloseService())->assertOpen('ar', (int) $data['company_id'], (string) ($data['receipt_date'] ?? date('Y-m-d')), ! empty($data['site_id']) ? (int) $data['site_id'] : null);
 
         $db = Database::connect();
         $db->transBegin();

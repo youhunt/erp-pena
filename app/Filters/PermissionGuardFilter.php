@@ -102,6 +102,10 @@ class PermissionGuardFilter implements FilterInterface
                 : 'finance.gl.post';
         }
 
+        if ($path === 'period-close' || str_starts_with($path, 'period-close/')) {
+            return $this->periodClosePermission($path, $method);
+        }
+
         if (str_starts_with($path, 'cash-bank/')) {
             return $method === 'GET' && ! str_contains($path, '/new')
                 ? 'cashbank.view'
@@ -179,6 +183,30 @@ class PermissionGuardFilter implements FilterInterface
         }
 
         return 'ai.document.review';
+    }
+
+    private function periodClosePermission(string $path, string $method): string
+    {
+        if ($method !== 'GET') {
+            return 'finance.gl.post';
+        }
+
+        $segments = explode('/', $path);
+        $module = $segments[1] ?? null;
+        if ($module === 'new') {
+            $module = $segments[2] ?? null;
+        }
+
+        return match ($module) {
+            'sales' => 'sales.order.view',
+            'purchase' => 'purchase.po.view',
+            'inventory' => 'inventory.stock.view',
+            'production' => 'production.view',
+            'ap' => 'finance.ap.view',
+            'ar' => 'finance.ar.view',
+            'cashbank' => 'cashbank.view',
+            default => 'finance.gl.view',
+        };
     }
 
     private function placeholderPermission(string $slug): ?string

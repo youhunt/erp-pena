@@ -104,6 +104,14 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('entries/(:num)', 'Finance\GeneralLedgerController::showEntry/$1');
     });
 
+    $routes->get('period-close', 'Finance\PeriodCloseController::index');
+    $routes->get('period-close/new', 'Finance\PeriodCloseController::create');
+    $routes->get('period-close/new/(:segment)', 'Finance\PeriodCloseController::create/$1');
+    $routes->post('period-close', 'Finance\PeriodCloseController::store');
+    $routes->get('period-close/(:num)', 'Finance\PeriodCloseController::show/$1');
+    $routes->post('period-close/(:num)/reopen', 'Finance\PeriodCloseController::reopen/$1');
+    $routes->get('period-close/(:segment)', 'Finance\PeriodCloseController::index/$1');
+
     $routes->group('cash-bank', static function (RouteCollection $routes): void {
         $routes->get('accounts', 'Finance\CashBankController::accounts');
         $routes->get('cash-entries', 'Finance\CashBankController::entries/cash');
