@@ -98,6 +98,8 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
 
     $routes->group('gl', static function (RouteCollection $routes): void {
         $routes->get('chart-of-accounts', 'Finance\GeneralLedgerController::chartAccounts');
+        $routes->get('posting-profiles', 'Finance\GeneralLedgerController::postingProfiles');
+        $routes->post('posting-profiles', 'Finance\GeneralLedgerController::updatePostingProfiles');
         $routes->get('entries', 'Finance\GeneralLedgerController::entries');
         $routes->get('entries/new', 'Finance\GeneralLedgerController::newEntry');
         $routes->post('entries', 'Finance\GeneralLedgerController::storeEntry');

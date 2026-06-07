@@ -70,7 +70,7 @@ class SettlementService
                 'cash_bank_code' => $data['cash_bank_code'],
                 'currency_code' => $payable['currency_code'] ?? 'IDR',
                 'amount' => $amount,
-                'counter_account_no' => '2100',
+                'counter_account_no' => (new PostingProfileService())->account((int) $data['company_id'], 'ap', 'payable', '2100'),
                 'reference_no' => $data['reference_no'] ?? $data['payment_no'] ?? null,
                 'description' => 'A/P payment ' . ($data['payment_no'] ?? '') . ' for invoice ' . ($payable['invoice_no'] ?? ''),
             ], $userId);
@@ -172,7 +172,7 @@ class SettlementService
                 'cash_bank_code' => $data['cash_bank_code'],
                 'currency_code' => $receivable['currency_code'] ?? 'IDR',
                 'amount' => $amount,
-                'counter_account_no' => '1200',
+                'counter_account_no' => (new PostingProfileService())->account((int) $data['company_id'], 'ar', 'receivable', '1200'),
                 'reference_no' => $data['reference_no'] ?? $data['receipt_no'] ?? null,
                 'description' => 'A/R receipt ' . ($data['receipt_no'] ?? '') . ' for invoice ' . ($receivable['invoice_no'] ?? ''),
             ], $userId);

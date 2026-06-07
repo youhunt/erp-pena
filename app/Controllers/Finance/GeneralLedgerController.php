@@ -7,6 +7,7 @@ use App\Models\ChartAccountModel;
 use App\Models\GlBookModel;
 use App\Models\GlEntryLineModel;
 use App\Models\GlEntryModel;
+use App\Models\GlPostingProfileModel;
 use App\Services\Finance\GeneralLedgerService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
@@ -43,6 +44,45 @@ class GeneralLedgerController extends BaseController
             'title' => 'GL Entries',
             'entries' => $entries->orderBy('journal_date', 'DESC')->orderBy('id', 'DESC')->findAll(100),
         ]);
+    }
+
+    public function postingProfiles(): string
+    {
+        $tenant = new TenantContext(session());
+        $model = new GlPostingProfileModel();
+        if ($tenant->activeCompanyId() !== null) {
+            $model->where('company_id', $tenant->activeCompanyId());
+        }
+
+        return view('finance/gl/posting_profiles/index', [
+            'title' => 'Posting Profile',
+            'profiles' => $model->orderBy('module_code', 'ASC')->orderBy('posting_key', 'ASC')->findAll(200),
+            'accounts' => $this->accounts(),
+        ]);
+    }
+
+    public function updatePostingProfiles()
+    {
+        $tenant = new TenantContext(session());
+        $companyId = $tenant->activeCompanyId();
+        if ($companyId === null || $companyId < 1) {
+            return redirect()->back()->with('error', 'Active company is required.');
+        }
+
+        $accountNos = (array) $this->request->getPost('account_no');
+        $model = new GlPostingProfileModel();
+        foreach ($accountNos as $profileId => $accountNo) {
+            $profile = $model->where('company_id', $companyId)->find((int) $profileId);
+            if ($profile === null) {
+                continue;
+            }
+            $model->update((int) $profile['id'], [
+                'account_no' => trim((string) $accountNo),
+                'updated_by' => auth()->id(),
+            ]);
+        }
+
+        return redirect()->to('/gl/posting-profiles')->with('message', 'Posting profiles updated.');
     }
 
     public function newEntry(): string

@@ -97,6 +97,10 @@ class PermissionGuardFilter implements FilterInterface
         }
 
         if (str_starts_with($path, 'gl/')) {
+            if ($path === 'gl/posting-profiles') {
+                return $method === 'GET' ? 'finance.gl.view' : 'finance.gl.post';
+            }
+
             return $method === 'GET' && ! str_contains($path, '/new')
                 ? 'finance.gl.view'
                 : 'finance.gl.post';

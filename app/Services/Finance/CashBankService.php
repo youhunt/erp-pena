@@ -75,6 +75,7 @@ class CashBankService
                 'updated_by' => $userId,
             ], true);
 
+            $cashBankGlAccount = trim((string) ($account['gl_account_no'] ?? ''));
             $glEntryId = $this->postGl($data + [
                 'company_id' => $companyId,
                 'site_id' => $data['site_id'] ?? null,
@@ -82,7 +83,7 @@ class CashBankService
                 'entry_date' => $data['entry_date'] ?? date('Y-m-d'),
                 'entry_type' => $entryType,
                 'amount' => $amount,
-                'cash_bank_gl_account_no' => $account['gl_account_no'] ?? null,
+                'cash_bank_gl_account_no' => $cashBankGlAccount !== '' ? $cashBankGlAccount : (new PostingProfileService())->account($companyId, 'cashbank', 'cash_bank', '1100'),
                 'cash_bank_name' => $account['cash_bank_name'] ?? $account['cash_bank_code'],
                 'currency_code' => $data['currency_code'] ?? $account['currency_code'] ?? 'IDR',
             ], $entryId, $userId);

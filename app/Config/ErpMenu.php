@@ -120,6 +120,7 @@ class ErpMenu extends BaseConfig
                 $this->leaf('GL Column', $this->placeholderRoute('GL Column'), 'finance.gl.view'),
                 $this->leaf('Account No.', $this->placeholderRoute('Account No'), 'finance.gl.view'),
                 $this->leaf('Chart of Account', 'gl/chart-of-accounts', 'finance.gl.view'),
+                $this->leaf('Posting Profile', 'gl/posting-profiles', 'finance.gl.view'),
                 $this->leaf('Recurring', $this->placeholderRoute('Recurring'), 'finance.gl.view'),
                 $this->leaf('GL Entry', 'gl/entries', 'finance.gl.view'),
                 $this->leaf('Recurring Posting', $this->placeholderRoute('Recurring Posting'), 'finance.gl.view'),

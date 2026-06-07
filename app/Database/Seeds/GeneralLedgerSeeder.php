@@ -39,6 +39,8 @@ class GeneralLedgerSeeder extends Seeder
                 ]);
             }
         }
+
+        $this->call(GlPostingProfileSeeder::class);
     }
 
     private function accounts(): array

@@ -12,6 +12,7 @@ use App\Models\SalesOrderModel;
 use App\Services\AuditLogService;
 use App\Services\Finance\GeneralLedgerService;
 use App\Services\Finance\PeriodCloseService;
+use App\Services\Finance\PostingProfileService;
 use Config\Database;
 use RuntimeException;
 use Throwable;
@@ -94,6 +95,7 @@ class SalesInvoiceService
                 'status' => 'open',
             ]);
 
+            $profile = new PostingProfileService();
             $glEntryId = (new GeneralLedgerService())->post([
                 'company_id' => $header['company_id'],
                 'site_id' => $header['site_id'] ?? null,
@@ -106,8 +108,8 @@ class SalesInvoiceService
                 'description' => 'Manual A/R invoice ' . $header['invoice_no'],
                 'currency_code' => $header['currency_code'] ?? 'IDR',
             ], [
-                ['account_no' => '1200', 'description' => 'Accounts Receivable', 'debit' => $total, 'credit' => 0],
-                ['account_no' => '4100', 'description' => 'Sales Revenue', 'debit' => 0, 'credit' => $total],
+                ['account_no' => $profile->account((int) $header['company_id'], 'ar', 'receivable', '1200'), 'description' => 'Accounts Receivable', 'debit' => $total, 'credit' => 0],
+                ['account_no' => $profile->account((int) $header['company_id'], 'ar', 'sales_revenue', '4100'), 'description' => 'Sales Revenue', 'debit' => 0, 'credit' => $total],
             ], $userId);
             $invoiceModel->update($invoiceId, ['gl_entry_id' => $glEntryId]);
 
