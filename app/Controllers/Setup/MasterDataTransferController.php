@@ -13,6 +13,19 @@ class MasterDataTransferController extends BaseController
 {
     private array $resources;
 
+    private array $relations = [
+        'warehouse_id' => ['alias' => 'warehouse_code', 'table' => 'warehouses', 'tenant' => true, 'site' => true],
+        'parent_id' => ['alias' => 'parent_code', 'table' => null, 'tenant' => false, 'site' => false],
+        'country_id' => ['alias' => 'country_code', 'table' => 'countries', 'tenant' => false, 'site' => false],
+        'province_id' => ['alias' => 'province_code', 'table' => 'provinces', 'tenant' => false, 'site' => false],
+        'city_id' => ['alias' => 'city_code', 'table' => 'cities', 'tenant' => false, 'site' => false],
+        'postal_code_id' => ['alias' => 'postal_code', 'table' => 'postal_codes', 'tenant' => false, 'site' => false],
+        'from_uom_id' => ['alias' => 'from_uom_code', 'table' => 'uoms', 'tenant' => true, 'site' => false],
+        'to_uom_id' => ['alias' => 'to_uom_code', 'table' => 'uoms', 'tenant' => true, 'site' => false],
+        'item_id' => ['alias' => 'item_code', 'table' => 'items', 'tenant' => true, 'site' => true],
+        'vat_rate_id' => ['alias' => 'vat_code', 'table' => 'vat_rates', 'tenant' => true, 'site' => false],
+    ];
+
     public function __construct()
     {
         $this->resources = [
@@ -43,19 +56,6 @@ class MasterDataTransferController extends BaseController
             'items' => ['title' => 'Items', 'table' => 'items', 'tenant' => true, 'site' => true, 'fields' => $this->itemFields(), 'view_permission' => 'inventory.item.view', 'manage_permission' => 'inventory.item.manage', 'unique' => ['item_code']],
         ];
     }
-
-    private array $relations = [
-        'warehouse_id' => ['alias' => 'warehouse_code', 'table' => 'warehouses', 'tenant' => true, 'site' => true],
-        'parent_id' => ['alias' => 'parent_code', 'table' => null, 'tenant' => false, 'site' => false],
-        'country_id' => ['alias' => 'country_code', 'table' => 'countries', 'tenant' => false, 'site' => false],
-        'province_id' => ['alias' => 'province_code', 'table' => 'provinces', 'tenant' => false, 'site' => false],
-        'city_id' => ['alias' => 'city_code', 'table' => 'cities', 'tenant' => false, 'site' => false],
-        'postal_code_id' => ['alias' => 'postal_code', 'table' => 'postal_codes', 'tenant' => false, 'site' => false],
-        'from_uom_id' => ['alias' => 'from_uom_code', 'table' => 'uoms', 'tenant' => true, 'site' => false],
-        'to_uom_id' => ['alias' => 'to_uom_code', 'table' => 'uoms', 'tenant' => true, 'site' => false],
-        'item_id' => ['alias' => 'item_code', 'table' => 'items', 'tenant' => true, 'site' => true],
-        'vat_rate_id' => ['alias' => 'vat_code', 'table' => 'vat_rates', 'tenant' => true, 'site' => false],
-    ];
 
     public function importForm(string $resource): string
     {
@@ -94,7 +94,7 @@ class MasterDataTransferController extends BaseController
     public function import(string $resource)
     {
         $config = $this->config($resource, 'manage');
-        if (! $this->hasRequiredTenant($config)) return redirect()->back()->with('error', 'Active company is required before importing this master data.');
+        if (! $this->hasRequiredTenant($config)) return redirect()->back()->with('error', $this->tenantRequirementMessage($config));
 
         $file = $this->request->getFile('csv_file');
         if ($file === null || ! $file->isValid()) return redirect()->back()->with('error', 'Please upload a valid CSV file.');
@@ -306,7 +306,20 @@ class MasterDataTransferController extends BaseController
         return $sample;
     }
 
-    private function hasRequiredTenant(array $config): bool { return ! $config['tenant'] || (new TenantContext(session()))->activeCompanyId() !== null; }
+    private function hasRequiredTenant(array $config): bool
+    {
+        $tenant = new TenantContext(session());
+        if ($config['tenant'] && $tenant->activeCompanyId() === null) return false;
+        if ($config['site'] && $tenant->activeSiteId() === null) return false;
+        return true;
+    }
+
+    private function tenantRequirementMessage(array $config): string
+    {
+        return $config['site']
+            ? 'Active company and active site are required before importing this master data.'
+            : 'Active company is required before importing this master data.';
+    }
 
     private function csvResponse(string $filename, array $rows)
     {
