@@ -20,6 +20,10 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('data-import/coa/import', 'System\DataImportController::coaImportForm');
         $routes->post('data-import/coa/import', 'System\DataImportController::coaImport');
         $routes->get('data-import/coa/export', 'System\DataImportController::coaExport');
+        $routes->get('data-import/opening-stock/template', 'System\DataImportController::openingStockTemplate');
+        $routes->get('data-import/opening-stock/import', 'System\DataImportController::openingStockImportForm');
+        $routes->post('data-import/opening-stock/import', 'System\DataImportController::openingStockImport');
+        $routes->get('data-import/opening-stock/export', 'System\DataImportController::openingStockExport');
     });
 
     $routes->group('admin', static function (RouteCollection $routes): void {
