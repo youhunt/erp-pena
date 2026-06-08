@@ -6,7 +6,7 @@
         <div class="card">
             <div class="card-body">
                 <h4 class="card-title mb-2"><?= esc($title) ?></h4>
-                <p class="text-muted">Upload CSV data for <?= esc($config['title']) ?>. Existing rows with the same code will be updated.</p>
+                <p class="text-muted">Upload CSV data for <?= esc($config['title']) ?>. Existing rows with the same business key are updated.</p>
 
                 <div class="alert alert-info">
                     <div class="fw-semibold mb-1">Required CSV headers</div>
@@ -41,11 +41,11 @@
             <div class="card-body">
                 <h5 class="card-title">Import Rules</h5>
                 <ul class="mb-0 ps-3">
-                    <li>CSV header must match the template.</li>
-                    <li>Rows with the same <code>code</code> are updated.</li>
+                    <li>CSV header must match the downloaded template.</li>
+                    <li>Rows with the same code/business key are updated.</li>
                     <li>Blank optional fields are saved as empty/null.</li>
-                    <li>Company/site columns are filled automatically from active company/site.</li>
-                    <li>Use IDs for relation fields such as <code>warehouse_id</code>, <code>item_id</code>, or <code>uom_id</code>.</li>
+                    <li>Company and site columns are filled automatically from the active company/site switcher.</li>
+                    <li>Use business codes for relation fields, for example <code>warehouse_code</code>, <code>item_code</code>, <code>from_uom_code</code>, <code>to_uom_code</code>, <code>vat_code</code>, <code>country_code</code>, <code>province_code</code>, <code>city_code</code>, or <code>postal_code</code>.</li>
                 </ul>
             </div>
         </div>
