@@ -14,6 +14,14 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->get('audit-logs', 'AuditLogController::index');
     $routes->get('audit-logs/(:num)', 'AuditLogController::show/$1');
 
+    $routes->group('system', static function (RouteCollection $routes): void {
+        $routes->get('data-import', 'System\DataImportController::index');
+        $routes->get('data-import/coa/template', 'System\DataImportController::coaTemplate');
+        $routes->get('data-import/coa/import', 'System\DataImportController::coaImportForm');
+        $routes->post('data-import/coa/import', 'System\DataImportController::coaImport');
+        $routes->get('data-import/coa/export', 'System\DataImportController::coaExport');
+    });
+
     $routes->group('admin', static function (RouteCollection $routes): void {
         $routes->get('users', 'Admin\UserController::index');
         $routes->get('users/new', 'Admin\UserController::create');
