@@ -13,7 +13,7 @@ use Throwable;
 
 class DataImportController extends BaseController
 {
-    private const MAX_CSV_UPLOAD_BYTES = 5242880;
+    private const MAX_IMPORT_UPLOAD_BYTES = 5242880;
 
     public function index(): string
     {
@@ -27,14 +27,14 @@ class DataImportController extends BaseController
 
     public function coaTemplate()
     {
-        return $this->csvResponse('coa-template.csv', [
+        return $this->xlsxResponse('coa-template.xlsx', [
             ['account_no', 'account_name', 'account_type', 'normal_balance', 'parent_account_no', 'is_postable', 'is_active'],
             ['1000', 'Cash and Bank', 'asset', 'debit', '', '0', '1'],
             ['1100', 'Cash on Hand', 'asset', 'debit', '1000', '1', '1'],
             ['2000', 'Accounts Payable', 'liability', 'credit', '', '1', '1'],
             ['4000', 'Sales Revenue', 'revenue', 'credit', '', '1', '1'],
             ['5000', 'Cost of Goods Sold', 'expense', 'debit', '', '1', '1'],
-        ]);
+        ], 'COA Template');
     }
 
     public function coaExport()
@@ -58,7 +58,7 @@ class DataImportController extends BaseController
             ];
         }
 
-        return $this->csvResponse('coa-export.csv', $rows);
+        return $this->xlsxResponse('coa-export.xlsx', $rows, 'COA Export');
     }
 
     public function coaImportForm(): string
@@ -81,13 +81,13 @@ class DataImportController extends BaseController
         }
 
         $file = $this->request->getFile('csv_file');
-        $uploadError = $this->validateCsvUpload($file);
+        $uploadError = $this->validateSpreadsheetUpload($file);
         if ($uploadError !== null) {
             return redirect()->back()->with('error', $uploadError);
         }
 
         try {
-            $result = $this->importCoaCsv($file->getTempName(), $companyId);
+            $result = $this->importCoaSpreadsheet($file->getTempName(), $companyId, $file->getClientExtension());
         } catch (RuntimeException $e) {
             $this->auditImport('chart_accounts', 'coa.import_failed', ['created' => 0, 'updated' => 0, 'skipped' => 0], $file->getClientName(), $e->getMessage());
             return redirect()->back()->with('error', $e->getMessage());
@@ -99,10 +99,10 @@ class DataImportController extends BaseController
 
     public function openingStockTemplate()
     {
-        return $this->csvResponse('opening-stock-template.csv', [
+        return $this->xlsxResponse('opening-stock-template.xlsx', [
             ['movement_date', 'warehouse_code', 'location_code', 'item_code', 'item_name', 'uom_code', 'qty', 'unit_cost', 'reference_no', 'notes'],
             [date('Y-m-d'), 'MAIN', 'STAGING', 'ITEM-0001', 'Example Item', 'PCS', '100', '15000', 'OPENING-001', 'Opening stock import'],
-        ]);
+        ], 'Opening Stock Template');
     }
 
     public function openingStockImportForm(): string
@@ -126,13 +126,13 @@ class DataImportController extends BaseController
         }
 
         $file = $this->request->getFile('csv_file');
-        $uploadError = $this->validateCsvUpload($file);
+        $uploadError = $this->validateSpreadsheetUpload($file);
         if ($uploadError !== null) {
             return redirect()->back()->with('error', $uploadError);
         }
 
         try {
-            $result = $this->importOpeningStockCsv($file->getTempName(), $companyId, $siteId);
+            $result = $this->importOpeningStockSpreadsheet($file->getTempName(), $companyId, $siteId, $file->getClientExtension());
         } catch (RuntimeException $e) {
             $this->auditImport('inventory_stock_movements', 'opening_stock.import_failed', ['created' => 0, 'updated' => 0, 'skipped' => 0], $file->getClientName(), $e->getMessage());
             return redirect()->back()->with('error', $e->getMessage());
@@ -174,21 +174,17 @@ class DataImportController extends BaseController
             ];
         }
 
-        return $this->csvResponse('opening-stock-export.csv', $rows);
+        return $this->xlsxResponse('opening-stock-export.xlsx', $rows, 'Opening Stock Export');
     }
 
-    private function importCoaCsv(string $path, int $companyId): array
+    private function importCoaSpreadsheet(string $path, int $companyId, string $extension): array
     {
-        $handle = fopen($path, 'rb');
-        if ($handle === false) {
-            throw new RuntimeException('Unable to read uploaded CSV file.');
-        }
+        $rows = $this->spreadsheetRows($path, $extension);
+        [$headers, $bodyRows] = $this->splitHeaderRows($rows);
 
-        $headers = $this->csvHeaders($handle);
         foreach (['account_no', 'account_name', 'account_type', 'normal_balance'] as $required) {
             if (! in_array($required, $headers, true)) {
-                fclose($handle);
-                throw new RuntimeException('CSV header must include ' . $required . ' column.');
+                throw new RuntimeException('Spreadsheet header must include ' . $required . ' column.');
             }
         }
 
@@ -203,7 +199,7 @@ class DataImportController extends BaseController
         $db->transBegin();
 
         try {
-            while (($row = fgetcsv($handle)) !== false) {
+            foreach ($bodyRows as $row) {
                 $rowNumber++;
                 $data = $this->rowData($headers, $row, $allowed);
                 if (empty($data['account_no']) || empty($data['account_name'])) {
@@ -236,24 +232,21 @@ class DataImportController extends BaseController
             }
         } catch (Throwable $e) {
             $db->transRollback();
-            fclose($handle);
             throw $e instanceof RuntimeException ? $e : new RuntimeException($e->getMessage(), 0, $e);
         }
 
         if ($db->transStatus() === false) {
             $db->transRollback();
-            fclose($handle);
             throw new RuntimeException('COA import transaction failed. No data was saved.');
         }
 
         $db->transCommit();
-        fclose($handle);
         return compact('created', 'updated', 'skipped');
     }
 
-    private function importOpeningStockCsv(string $path, int $companyId, int $siteId): array
+    private function importOpeningStockSpreadsheet(string $path, int $companyId, int $siteId, string $extension): array
     {
-        $prepared = $this->prepareOpeningStockRows($path, $companyId, $siteId);
+        $prepared = $this->prepareOpeningStockRows($path, $companyId, $siteId, $extension);
         $stock = new InventoryStockService();
         $created = 0;
 
@@ -268,18 +261,17 @@ class DataImportController extends BaseController
         return compact('created', 'updated', 'skipped');
     }
 
-    private function prepareOpeningStockRows(string $path, int $companyId, int $siteId): array
+    /**
+     * @return array{movements: list<array<string, mixed>>, skipped: int}
+     */
+    private function prepareOpeningStockRows(string $path, int $companyId, int $siteId, string $extension): array
     {
-        $handle = fopen($path, 'rb');
-        if ($handle === false) {
-            throw new RuntimeException('Unable to read uploaded CSV file.');
-        }
+        $rows = $this->spreadsheetRows($path, $extension);
+        [$headers, $bodyRows] = $this->splitHeaderRows($rows);
 
-        $headers = $this->csvHeaders($handle);
         foreach (['item_code', 'qty'] as $required) {
             if (! in_array($required, $headers, true)) {
-                fclose($handle);
-                throw new RuntimeException('CSV header must include ' . $required . ' column.');
+                throw new RuntimeException('Spreadsheet header must include ' . $required . ' column.');
             }
         }
 
@@ -288,7 +280,7 @@ class DataImportController extends BaseController
         $skipped = 0;
         $rowNumber = 1;
 
-        while (($row = fgetcsv($handle)) !== false) {
+        foreach ($bodyRows as $row) {
             $rowNumber++;
             $data = $this->rowData($headers, $row, $allowed);
             $qty = (float) ($data['qty'] ?? 0);
@@ -299,19 +291,16 @@ class DataImportController extends BaseController
 
             $item = $this->itemByCode((string) $data['item_code'], $companyId, $siteId);
             if ($item === null) {
-                fclose($handle);
                 throw new RuntimeException("Row {$rowNumber}: item_code '{$data['item_code']}' was not found.");
             }
 
             $warehouseId = ! empty($data['warehouse_code']) ? $this->idByCode('warehouses', (string) $data['warehouse_code'], $companyId, $siteId) : null;
             if (! empty($data['warehouse_code']) && $warehouseId === null) {
-                fclose($handle);
                 throw new RuntimeException("Row {$rowNumber}: warehouse_code '{$data['warehouse_code']}' was not found.");
             }
 
             $locationId = ! empty($data['location_code']) ? $this->idByCode('locations', (string) $data['location_code'], $companyId, $siteId) : null;
             if (! empty($data['location_code']) && $locationId === null) {
-                fclose($handle);
                 throw new RuntimeException("Row {$rowNumber}: location_code '{$data['location_code']}' was not found.");
             }
 
@@ -333,8 +322,6 @@ class DataImportController extends BaseController
                 'notes' => $data['notes'] ?: 'Opening stock import',
             ];
         }
-
-        fclose($handle);
 
         return ['movements' => $movements, 'skipped' => $skipped];
     }
@@ -367,34 +354,73 @@ class DataImportController extends BaseController
         ];
     }
 
-    private function validateCsvUpload($file): ?string
+    private function validateSpreadsheetUpload($file): ?string
     {
         if ($file === null || ! $file->isValid()) {
-            return 'Please upload a valid CSV file.';
+            return 'Please upload a valid spreadsheet file.';
         }
 
         if ($file->getSize() < 1) {
-            return 'Uploaded CSV file is empty.';
+            return 'Uploaded spreadsheet file is empty.';
         }
 
-        if ($file->getSize() > self::MAX_CSV_UPLOAD_BYTES) {
-            return 'CSV file is too large. Maximum allowed size is 5 MB.';
+        if ($file->getSize() > self::MAX_IMPORT_UPLOAD_BYTES) {
+            return 'Spreadsheet file is too large. Maximum allowed size is 5 MB.';
         }
 
-        if (! in_array(strtolower($file->getClientExtension()), ['csv', 'txt'], true)) {
-            return 'Only CSV files are supported for now.';
+        if (! in_array(strtolower($file->getClientExtension()), ['xlsx', 'xls', 'csv', 'txt'], true)) {
+            return 'Only XLSX, XLS, CSV, or TXT files are supported.';
         }
 
         return null;
     }
 
-    private function csvHeaders($handle): array
+    /**
+     * @return list<list<mixed>>
+     */
+    private function spreadsheetRows(string $path, string $extension): array
     {
-        $headers = fgetcsv($handle);
-        if ($headers === false) {
-            throw new RuntimeException('CSV file is empty.');
+        $extension = strtolower($extension);
+
+        if (in_array($extension, ['csv', 'txt'], true)) {
+            $rows = [];
+            $handle = fopen($path, 'rb');
+            if ($handle === false) {
+                throw new RuntimeException('Unable to read uploaded CSV file.');
+            }
+            while (($row = fgetcsv($handle)) !== false) {
+                $rows[] = $row;
+            }
+            fclose($handle);
+
+            return $rows;
         }
-        return array_map(static fn ($value): string => trim((string) $value), $headers);
+
+        $this->assertSpreadsheetLibraryInstalled();
+
+        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($path);
+        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+        $spreadsheet->disconnectWorksheets();
+
+        return $rows;
+    }
+
+    /**
+     * @param list<list<mixed>> $rows
+     * @return array{0: list<string>, 1: list<list<mixed>>}
+     */
+    private function splitHeaderRows(array $rows): array
+    {
+        if ($rows === []) {
+            throw new RuntimeException('Spreadsheet file is empty.');
+        }
+
+        $headers = array_map(static fn ($value): string => trim((string) $value), array_shift($rows));
+        if (implode('', $headers) === '') {
+            throw new RuntimeException('Spreadsheet header row is empty.');
+        }
+
+        return [$headers, $rows];
     }
 
     private function rowData(array $headers, array $row, array $allowed): array
@@ -461,19 +487,37 @@ class DataImportController extends BaseController
         ]);
     }
 
-    private function csvResponse(string $filename, array $rows)
+    private function xlsxResponse(string $filename, array $rows, string $sheetTitle)
     {
-        $handle = fopen('php://temp', 'wb+');
-        foreach ($rows as $row) {
-            fputcsv($handle, $row);
+        $this->assertSpreadsheetLibraryInstalled();
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle(substr($sheetTitle, 0, 31));
+        $sheet->fromArray($rows, null, 'A1');
+
+        $highestColumn = $sheet->getHighestColumn();
+        $sheet->getStyle('A1:' . $highestColumn . '1')->getFont()->setBold(true);
+        foreach (range('A', $highestColumn) as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
         }
-        rewind($handle);
-        $csv = stream_get_contents($handle) ?: '';
-        fclose($handle);
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        ob_start();
+        $writer->save('php://output');
+        $content = ob_get_clean() ?: '';
+        $spreadsheet->disconnectWorksheets();
 
         return $this->response
-            ->setHeader('Content-Type', 'text/csv; charset=UTF-8')
+            ->setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             ->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
-            ->setBody("\xEF\xBB\xBF" . $csv);
+            ->setBody($content);
+    }
+
+    private function assertSpreadsheetLibraryInstalled(): void
+    {
+        if (! class_exists(\PhpOffice\PhpSpreadsheet\Spreadsheet::class)) {
+            throw new RuntimeException('PhpSpreadsheet belum ter-install/ter-load. Jalankan: composer install && composer dump-autoload.');
+        }
     }
 }
