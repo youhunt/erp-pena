@@ -17,6 +17,18 @@ class ExcelLiteTransferController extends BaseController
 
     private array $resources;
 
+    private array $relations = [
+        'warehouse_code' => ['field' => 'warehouse_id', 'table' => 'warehouses', 'tenant' => true, 'site' => true],
+        'country_code' => ['field' => 'country_id', 'table' => 'countries', 'tenant' => false, 'site' => false],
+        'province_code' => ['field' => 'province_id', 'table' => 'provinces', 'tenant' => false, 'site' => false],
+        'city_code' => ['field' => 'city_id', 'table' => 'cities', 'tenant' => false, 'site' => false],
+        'postal_code' => ['field' => 'postal_code_id', 'table' => 'postal_codes', 'tenant' => false, 'site' => false],
+        'from_uom_code' => ['field' => 'from_uom_id', 'table' => 'uoms', 'tenant' => true, 'site' => false],
+        'to_uom_code' => ['field' => 'to_uom_id', 'table' => 'uoms', 'tenant' => true, 'site' => false],
+        'item_code_ref' => ['field' => 'item_id', 'table' => 'items', 'tenant' => true, 'site' => true],
+        'vat_code' => ['field' => 'vat_rate_id', 'table' => 'vat_rates', 'tenant' => true, 'site' => false],
+    ];
+
     public function __construct()
     {
         $this->resources = [
@@ -33,10 +45,10 @@ class ExcelLiteTransferController extends BaseController
             'postal-codes' => ['title' => 'Postal Codes', 'table' => 'postal_codes', 'tenant' => false, 'site' => false, 'fields' => ['country_code', 'province_code', 'city_code', 'code', 'name', 'district', 'village', 'is_active'], 'key' => 'code', 'permission' => 'setup.master'],
             'currencies' => ['title' => 'Currencies', 'table' => 'currencies', 'tenant' => false, 'site' => false, 'fields' => ['code', 'name', 'rounding', 'is_active'], 'key' => 'code', 'permission' => 'setup.master'],
             'uoms' => ['title' => 'Unit of Measure', 'table' => 'uoms', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'description', 'is_active'], 'key' => 'code', 'permission' => 'setup.master'],
-            'uom-conversions' => ['title' => 'UoM Conversions', 'table' => 'uom_conversions', 'tenant' => true, 'site' => false, 'fields' => ['from_uom_code', 'to_uom_code', 'multiplier', 'divider', 'is_active'], 'unique' => ['from_uom_code', 'to_uom_code'], 'permission' => 'setup.master'],
+            'uom-conversions' => ['title' => 'UoM Conversions', 'table' => 'uom_conversions', 'tenant' => true, 'site' => false, 'fields' => ['from_uom_code', 'to_uom_code', 'multiplier', 'divider', 'is_active'], 'unique' => ['from_uom_id', 'to_uom_id'], 'permission' => 'setup.master'],
             'vat' => ['title' => 'VAT', 'table' => 'vat_rates', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'rate', 'description', 'is_active'], 'key' => 'code', 'permission' => 'setup.master'],
             'wht' => ['title' => 'WHT / PPH', 'table' => 'wht_rates', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'rate', 'description', 'is_active'], 'key' => 'code', 'permission' => 'setup.master'],
-            'item-vat' => ['title' => 'Item VAT', 'table' => 'item_vat_rates', 'tenant' => true, 'site' => false, 'fields' => ['item_code_ref', 'vat_code', 'is_active'], 'unique' => ['item_code_ref', 'vat_code'], 'permission' => 'setup.master'],
+            'item-vat' => ['title' => 'Item VAT', 'table' => 'item_vat_rates', 'tenant' => true, 'site' => false, 'fields' => ['item_code_ref', 'vat_code', 'is_active'], 'unique' => ['item_id', 'vat_rate_id'], 'permission' => 'setup.master'],
             'address-master' => ['title' => 'Address Master', 'table' => 'addresses', 'tenant' => true, 'site' => true, 'fields' => ['address_type', 'owner_type', 'owner_code', 'code', 'name', 'country_code', 'province_code', 'city_code', 'postal_code', 'address_line1', 'address_line2', 'contact_name', 'phone', 'mobile', 'email', 'is_active'], 'key' => 'code', 'permission' => 'setup.master'],
             'customer-terms' => ['title' => 'Customer Terms', 'table' => 'customer_terms', 'tenant' => true, 'site' => true, 'fields' => ['terms_code', 'terms_name', 'terms_days', 'promo_code', 'is_active'], 'key' => 'terms_code', 'permission' => 'sales.customer'],
             'customer-promos' => ['title' => 'Customer Promotions', 'table' => 'customer_promotions', 'tenant' => true, 'site' => true, 'fields' => ['promo_code', 'promo_description', 'customer', 'customer_name', 'item_parent', 'item_parent_name', 'line_no', 'promo_type', 'from_qty', 'to_qty', 'uom', 'promo_price', 'pct', 'disc_amount', 'free_item', 'free_item_name', 'free_qty', 'active_date', 'active_hour', 'inactive_date', 'inactive_hour', 'is_active'], 'unique' => ['promo_code', 'line_no'], 'permission' => 'sales.customer'],
@@ -56,13 +68,13 @@ class ExcelLiteTransferController extends BaseController
     public function importForm(string $resource): string
     {
         $config = $this->config($resource, 'manage');
-        return view('system/excel_transfer/import', ['title' => 'Import ' . $config['title'] . ' from Excel', 'resource' => $resource, 'config' => $config, 'headers' => $config['fields']]);
+        return view('system/excel_transfer/import', ['title' => 'Import ' . $config['title'] . ' from Excel', 'resource' => $resource, 'config' => $config, 'headers' => $this->excelHeaders($config)]);
     }
 
     public function template(string $resource)
     {
         $config = $this->config($resource, 'manage');
-        return $this->xlsxResponse($this->slug($config['title']) . '-template.xlsx', [$config['fields'], $this->sampleRow($config)], $config['title'] . ' Template');
+        return $this->xlsxResponse($this->slug($config['title']) . '-template.xlsx', [$this->excelHeaders($config), $this->sampleRow($config)], $config['title'] . ' Template');
     }
 
     public function export(string $resource)
@@ -74,7 +86,7 @@ class ExcelLiteTransferController extends BaseController
         if ($config['tenant'] && $tenant->activeCompanyId() !== null && $db->fieldExists('company_id', $config['table'])) $builder->where('company_id', $tenant->activeCompanyId());
         if ($config['site'] && $tenant->activeSiteId() !== null && $db->fieldExists('site_id', $config['table'])) $builder->where('site_id', $tenant->activeSiteId());
         if ($db->fieldExists('deleted_at', $config['table'])) $builder->where('deleted_at', null);
-        $rows = [$config['fields']];
+        $rows = [$this->excelHeaders($config)];
         foreach ($builder->orderBy('id', 'ASC')->get()->getResultArray() as $row) $rows[] = $this->exportRow($config, $row);
         return $this->xlsxResponse($this->slug($config['title']) . '-export.xlsx', $rows, $config['title'] . ' Export');
     }
@@ -82,7 +94,6 @@ class ExcelLiteTransferController extends BaseController
     public function import(string $resource)
     {
         $config = $this->config($resource, 'manage');
-        if (! $this->hasRequiredTenant($config)) return redirect()->back()->with('error', $this->tenantRequirementMessage($config));
         $file = $this->request->getFile('excel_file');
         $uploadError = $this->validateUpload($file);
         if ($uploadError !== null) return redirect()->back()->with('error', $uploadError);
@@ -134,6 +145,7 @@ class ExcelLiteTransferController extends BaseController
         $rows = $this->readRows($path);
         if ($rows === [] || ! isset($rows[0])) throw new RuntimeException('Uploaded file is empty.');
         $headers = array_map(static fn ($value): string => trim((string) $value), $rows[0]);
+        $allowed = $this->excelHeaders($config);
         $required = $this->requiredHeader($config);
         if ($required !== null && ! in_array($required, $headers, true)) throw new RuntimeException('Header harus memiliki kolom ' . $required . '.');
         $validRows = $rawValidRows = $rawRowsByNumber = $errors = [];
@@ -142,7 +154,7 @@ class ExcelLiteTransferController extends BaseController
             $rowNumber = $index + 2;
             $data = [];
             foreach ($headers as $i => $header) {
-                if ($header !== '' && in_array($header, $config['fields'], true)) {
+                if ($header !== '' && in_array($header, $allowed, true)) {
                     $value = trim((string) ($row[$i] ?? ''));
                     $data[$header] = $value === '' ? null : $value;
                 }
@@ -150,8 +162,14 @@ class ExcelLiteTransferController extends BaseController
             if ($data === []) continue;
             $total++;
             $rawRowsByNumber[$rowNumber] = $data;
-            try { $this->validateRequiredBusinessKey($config, $data); $validRows[] = $data; $rawValidRows[] = ['_row_number' => $rowNumber] + $data; }
-            catch (RuntimeException $e) { $errors[] = ['row' => $rowNumber, 'message' => $e->getMessage()]; }
+            try {
+                $normalized = $this->normalizeBeforeSave($config, $data, $rowNumber);
+                $this->validateRequiredBusinessKey($config, $normalized);
+                $validRows[] = $normalized;
+                $rawValidRows[] = ['_row_number' => $rowNumber] + $data;
+            } catch (RuntimeException $e) {
+                $errors[] = ['row' => $rowNumber, 'message' => $e->getMessage()];
+            }
         }
         return ['headers' => $headers, 'valid_rows' => $validRows, 'raw_valid_rows' => $rawValidRows, 'raw_rows_by_number' => $rawRowsByNumber, 'errors' => $errors, 'total' => $total];
     }
@@ -192,22 +210,21 @@ class ExcelLiteTransferController extends BaseController
     private function persistRows(array $config, array $rows): array
     {
         $db = Database::connect();
-        $tenant = new TenantContext(session());
         $created = $updated = $skipped = 0;
         $now = date('Y-m-d H:i:s');
         $db->transBegin();
         try {
             foreach ($rows as $data) {
-                $data = $this->normalizeBeforeSave($config, $data);
-                if ($config['tenant']) $data['company_id'] = $tenant->activeCompanyId();
-                if ($config['site']) $data['site_id'] = $tenant->activeSiteId();
                 if (array_key_exists('is_active', $data) && $data['is_active'] === null) $data['is_active'] = 1;
                 if (array_key_exists('active', $data) && $data['active'] === null) $data['active'] = 1;
-                $data['updated_by'] = (string) auth()->id(); $data['updated_at'] = $now;
+                $data['updated_by'] = (string) auth()->id();
+                $data['updated_at'] = $now;
                 $existing = $this->findExisting($config, $data);
                 if ($existing !== null) { $db->table($config['table'])->where('id', $existing['id'])->update($data); $updated++; continue; }
-                $data['created_by'] = (string) auth()->id(); $data['created_at'] = $now;
-                $db->table($config['table'])->insert($data); $created++;
+                $data['created_by'] = (string) auth()->id();
+                $data['created_at'] = $now;
+                $db->table($config['table'])->insert($data);
+                $created++;
             }
         } catch (\Throwable $e) { $db->transRollback(); throw new RuntimeException($e->getMessage(), 0, $e); }
         if ($db->transStatus() === false) { $db->transRollback(); throw new RuntimeException('Import failed. No data was saved.'); }
@@ -215,15 +232,104 @@ class ExcelLiteTransferController extends BaseController
         return compact('created', 'updated', 'skipped');
     }
 
-    private function normalizeBeforeSave(array $config, array $data): array
+    private function normalizeBeforeSave(array $config, array $data, int $rowNumber): array
     {
+        if (! empty($config['tenant'])) {
+            $data['company_id'] = $this->resolveCompanyId($data['company_code'] ?? null, $rowNumber);
+            unset($data['company_code']);
+        }
+        if (! empty($config['site'])) {
+            $data['site_id'] = $this->resolveSiteId($data['site_code'] ?? null, $data['company_id'] ?? null, $rowNumber);
+            unset($data['site_code']);
+        }
+
+        foreach ($this->relations as $alias => $relation) {
+            if (! array_key_exists($alias, $data)) continue;
+            $value = $data[$alias];
+            unset($data[$alias]);
+            if ($value === null || $value === '') continue;
+            $id = $this->lookupIdByCode($relation['table'], (string) $value, (bool) $relation['tenant'], (bool) $relation['site'], $data['company_id'] ?? null, $data['site_id'] ?? null);
+            if ($id === null) throw new RuntimeException("{$alias} '{$value}' tidak ditemukan.");
+            $data[$relation['field']] = $id;
+        }
+
+        if ($config['table'] === 'provinces' && isset($data['country_id'])) $data['parent_id'] = $data['country_id'];
+        if ($config['table'] === 'cities' && isset($data['province_id'])) $data['parent_id'] = $data['province_id'];
+        unset($data['country_id'], $data['province_id']);
+
         if ($config['table'] === 'items') $data += ['code' => $data['item_code'] ?? null, 'name' => $data['item_name'] ?? null, 'is_active' => $data['active'] ?? 1];
         elseif ($config['table'] === 'customers') $data += ['code' => $data['customer'] ?? null, 'name' => $data['customern'] ?? null, 'terms_code' => $data['terms'] ?? null, 'phone' => $data['officephon'] ?? null, 'email' => $data['email'] ?? null, 'address' => $data['officeaddre'] ?? null, 'is_active' => $data['active'] ?? 1];
         elseif ($config['table'] === 'suppliers') $data += ['code' => $data['supplier'] ?? null, 'name' => $data['supplierna'] ?? null, 'terms_code' => $data['terms'] ?? null, 'phone' => $data['officephon'] ?? null, 'email' => $data['email'] ?? null, 'address' => $data['officeaddre'] ?? null, 'is_active' => $data['active'] ?? 1];
         return $data;
     }
 
-    private function exportRow(array $config, array $row): array { return array_map(static fn ($field) => (string) ($row[$field] ?? ''), $config['fields']); }
+    private function exportRow(array $config, array $row): array
+    {
+        $line = [];
+        foreach ($this->excelHeaders($config) as $field) {
+            if ($field === 'company_code') { $line[] = $this->lookupCodeById('companies', (int) ($row['company_id'] ?? 0)); continue; }
+            if ($field === 'site_code') { $line[] = $this->lookupCodeById('sites', (int) ($row['site_id'] ?? 0)); continue; }
+            if (isset($this->relations[$field])) { $line[] = $this->lookupCodeById($this->relations[$field]['table'], (int) ($row[$this->relations[$field]['field']] ?? 0)); continue; }
+            if ($config['table'] === 'provinces' && $field === 'country_code') { $line[] = $this->lookupCodeById('countries', (int) ($row['parent_id'] ?? 0)); continue; }
+            if ($config['table'] === 'cities' && $field === 'province_code') { $line[] = $this->lookupCodeById('provinces', (int) ($row['parent_id'] ?? 0)); continue; }
+            $line[] = (string) ($row[$field] ?? '');
+        }
+        return $line;
+    }
+
+    private function excelHeaders(array $config): array
+    {
+        $headers = [];
+        if (! empty($config['tenant'])) $headers[] = 'company_code';
+        if (! empty($config['site'])) $headers[] = 'site_code';
+        return array_values(array_unique(array_merge($headers, $config['fields'])));
+    }
+
+    private function resolveCompanyId(?string $code, int $rowNumber): int
+    {
+        $tenant = new TenantContext(session());
+        if ($code !== null && $code !== '') {
+            $id = $this->lookupIdByCode('companies', $code, false, false, null, null);
+            if ($id !== null) return $id;
+            throw new RuntimeException("company_code '{$code}' tidak ditemukan.");
+        }
+        $id = $tenant->activeCompanyId();
+        if ($id !== null) return (int) $id;
+        throw new RuntimeException('company_code wajib diisi atau active company harus dipilih.');
+    }
+
+    private function resolveSiteId(?string $code, ?int $companyId, int $rowNumber): int
+    {
+        $tenant = new TenantContext(session());
+        if ($code !== null && $code !== '') {
+            $id = $this->lookupIdByCode('sites', $code, $companyId !== null, false, $companyId, null);
+            if ($id !== null) return $id;
+            throw new RuntimeException("site_code '{$code}' tidak ditemukan untuk company terkait.");
+        }
+        $id = $tenant->activeSiteId();
+        if ($id !== null) return (int) $id;
+        throw new RuntimeException('site_code wajib diisi atau active site harus dipilih.');
+    }
+
+    private function lookupIdByCode(string $table, string $code, bool $tenant, bool $site, ?int $companyId, ?int $siteId): ?int
+    {
+        $db = Database::connect();
+        $builder = $db->table($table)->where('code', $code);
+        $tenantContext = new TenantContext(session());
+        $company = $companyId ?? $tenantContext->activeCompanyId();
+        $activeSite = $siteId ?? $tenantContext->activeSiteId();
+        if ($tenant && $company !== null && $db->fieldExists('company_id', $table)) $builder->where('company_id', $company);
+        if ($site && $activeSite !== null && $db->fieldExists('site_id', $table)) $builder->where('site_id', $activeSite);
+        $row = $builder->get()->getRowArray();
+        return $row !== null ? (int) $row['id'] : null;
+    }
+
+    private function lookupCodeById(string $table, int $id): string
+    {
+        if ($id < 1) return '';
+        $row = Database::connect()->table($table)->where('id', $id)->get()->getRowArray();
+        return (string) ($row['code'] ?? '');
+    }
 
     private function xlsxResponse(string $filename, array $rows, string $sheetName)
     {
@@ -238,15 +344,13 @@ class ExcelLiteTransferController extends BaseController
 
     private function validateRequiredBusinessKey(array $config, array $data): void { $key = $this->requiredHeader($config); if ($key !== null && (($data[$key] ?? null) === null || ($data[$key] ?? '') === '')) throw new RuntimeException('Required field ' . $key . ' is empty.'); }
     private function config(string $resource, string $mode): array { if (! isset($this->resources[$resource])) throw PageNotFoundException::forPageNotFound(); $config = $this->resources[$resource]; $permission = $config['permission'] . ($mode === 'view' ? '.view' : '.manage'); $user = auth()->user(); if (! $user || (! $user->can($permission) && ! $user->inGroup('superadmin'))) throw PageNotFoundException::forPageNotFound(); return $config; }
-    private function requiredHeader(array $config): ?string { if (! empty($config['key'])) return (string) $config['key']; return ! empty($config['unique']) ? (string) $config['unique'][0] : (in_array('code', $config['fields'], true) ? 'code' : null); }
+    private function requiredHeader(array $config): ?string { if (! empty($config['key'])) return (string) $config['key']; return ! empty($config['unique']) ? (string) $config['fields'][0] : (in_array('code', $config['fields'], true) ? 'code' : null); }
     private function findExisting(array $config, array $data): ?array { $builder = Database::connect()->table($config['table']); if (! empty($config['key']) && ! empty($data[$config['key']])) $builder->where($config['key'], $data[$config['key']]); elseif (! empty($config['unique'])) { foreach ($config['unique'] as $field) { if (! array_key_exists($field, $data)) return null; $builder->where($field, $data[$field]); } } else return null; if ($config['tenant']) $builder->where('company_id', $data['company_id'] ?? 0); if ($config['site']) $builder->where('site_id', $data['site_id'] ?? null); return $builder->get()->getRowArray() ?: null; }
-    private function hasRequiredTenant(array $config): bool { $tenant = new TenantContext(session()); if ($config['tenant'] && $tenant->activeCompanyId() === null) return false; if ($config['site'] && $tenant->activeSiteId() === null) return false; return true; }
-    private function tenantRequirementMessage(array $config): string { return $config['site'] ? 'Active company and active site are required before importing.' : 'Active company is required before importing.'; }
     private function validateUpload($file): ?string { if ($file === null || ! $file->isValid()) return 'Please upload a valid Excel file.'; if ($file->getSize() < 1) return 'Uploaded file is empty.'; if ($file->getSize() > self::MAX_UPLOAD_BYTES) return 'File is too large. Maximum 10 MB.'; if (! in_array(strtolower($file->getClientExtension()), ['xlsx', 'xls', 'tsv', 'txt'], true)) return 'Gunakan file Excel .xlsx, .xls, .tsv, atau .txt.'; return null; }
     private function storePreview(string $token, array $preview): void { $all = session(self::SESSION_KEY) ?? []; $all[$token] = $preview; session()->set(self::SESSION_KEY, $all); }
     private function getPreview(string $token): ?array { $all = session(self::SESSION_KEY) ?? []; return is_array($all[$token] ?? null) ? $all[$token] : null; }
     private function clearPreview(string $token): void { $all = session(self::SESSION_KEY) ?? []; unset($all[$token]); session()->set(self::SESSION_KEY, $all); }
-    private function sampleRow(array $config): array { return array_map(function (string $header) use ($config): string { return match ($header) { 'code' => 'EXAMPLE', 'name' => 'Example ' . $config['title'], 'description' => 'Example description', 'warehouse_code', 'stockwhs', 'shipwhs' => 'MAIN', 'country_code' => 'IDN', 'province_code' => 'DKI', 'city_code' => 'JKT', 'postal_code' => '12190', 'from_uom_code', 'to_uom_code', 'stockuom', 'purchaseuom', 'sellinguom' => 'PCS', 'item_code_ref', 'item_code' => 'ITEM001', 'vat_code', 'vat' => 'VAT11', 'customer' => 'CUST-999', 'customern' => 'Example Customer', 'supplier' => 'SUP-999', 'supplierna' => 'Example Supplier', 'terms_code', 'terms' => 'NET30', 'promo_code' => 'PROMO-001', 'line_no' => '1', 'email' => 'demo@example.com', 'is_active', 'active' => '1', 'rate', 'item_price', 'purchasep', 'sellingprice', 'multiplier', 'divider', 'terms_days' => '0', default => '', }; }, $config['fields']); }
+    private function sampleRow(array $config): array { return array_map(function (string $header) use ($config): string { return match ($header) { 'company_code' => 'PENA', 'site_code' => 'HO', 'code' => 'EXAMPLE', 'name' => 'Example ' . $config['title'], 'description' => 'Example description', 'warehouse_code', 'stockwhs', 'shipwhs' => 'MAIN', 'country_code' => 'IDN', 'province_code' => 'DKI', 'city_code' => 'JKT', 'postal_code' => '12190', 'from_uom_code', 'to_uom_code', 'stockuom', 'purchaseuom', 'sellinguom' => 'PCS', 'item_code_ref', 'item_code' => 'ITEM001', 'vat_code', 'vat' => 'VAT11', 'customer' => 'CUST-999', 'customern' => 'Example Customer', 'supplier' => 'SUP-999', 'supplierna' => 'Example Supplier', 'terms_code', 'terms' => 'NET30', 'promo_code' => 'PROMO-001', 'line_no' => '1', 'email' => 'demo@example.com', 'is_active', 'active' => '1', 'rate', 'item_price', 'purchasep', 'sellingprice', 'multiplier', 'divider', 'terms_days' => '0', default => '', }; }, $this->excelHeaders($config)); }
     private function slug(string $value): string { return trim(strtolower((string) preg_replace('/[^a-zA-Z0-9]+/', '-', $value)), '-'); }
     private function itemFields(): array { return ['item_code','item_name','item_coded','item_named','shelf_life','stockuom','purchaseuom','sellinguom','stockwhs','item_price','purchasep','sellingprice','vat','item_length','item_width','item_heigh','item_diam','item_lengt','item_widthh','item_heigh_uom','item_diam_uom','out_length','out_width','out_height','out_diame','out_lengt','out_widthh','out_height_uom','out_diame_uom','item_group','item_subg','item_class','item_subc','item_type','item_subty','item_atribu','active']; }
     private function customerFields(): array { return ['customer','customern','customerr','contactnar','description','shipwhs','officeaddre','officecity','officeprovir','officecount','officeposta','officeconta','officephon','officehp','email','taxcode','taxnumber','vat','limitamound','limitqty','terms','limitdays','salescode','salesname','bank1','bankaccou','bank2','bankaccou2','billingcust','billingtoc','billingaddre','billingcity','billingprovi','billingcoun','billingposta','billingconta','billingphon','billinghp','mailcustom','mailcode','mailaddres','mailcity','mailprovin','mailcountr','mailpostal','mailcontac','mailphone','mailhp','shiptocust','shiptocode','shiptoaddr','shiptocity','shiptoprovi','shiptocour','shiptopost','shiptocont','shiptophon','shiptohp','active']; }
