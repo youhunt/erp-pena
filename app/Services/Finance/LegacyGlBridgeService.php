@@ -24,7 +24,12 @@ class LegacyGlBridgeService
         $updated = 0;
         $skipped = 0;
         $now = date('Y-m-d H:i:s');
-        $rows = $db->table('coa')->where('active', 1)->get()->getResultArray();
+
+        $builder = $db->table('coa');
+        if ($db->fieldExists('active', 'coa')) {
+            $builder->where('active', 1);
+        }
+        $rows = $builder->get()->getResultArray();
 
         foreach ($rows as $row) {
             $accountNo = trim((string) ($row['code'] ?? ''));
@@ -79,7 +84,12 @@ class LegacyGlBridgeService
         $updated = 0;
         $skipped = 0;
         $now = date('Y-m-d H:i:s');
-        $rows = $db->table('glbook')->get()->getResultArray();
+
+        $builder = $db->table('glbook');
+        if ($db->fieldExists('active', 'glbook')) {
+            $builder->where('active', 1);
+        }
+        $rows = $builder->get()->getResultArray();
 
         foreach ($rows as $row) {
             $bookCode = trim((string) ($row['booktype'] ?? ''));
