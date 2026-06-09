@@ -16,11 +16,9 @@ use RuntimeException;
 class ExcelTransferController extends BaseController
 {
     private const MAX_XLSX_UPLOAD_BYTES = 10485760;
+    private const SESSION_KEY = 'excel_import_previews';
 
-    /** @var array<string, array<string, mixed>> */
     private array $resources;
-
-    /** @var array<string, array<string, mixed>> */
     private array $relations = [
         'warehouse_code' => ['field' => 'warehouse_id', 'table' => 'warehouses', 'tenant' => true, 'site' => true],
         'country_code' => ['field' => 'country_id', 'table' => 'countries', 'tenant' => false, 'site' => false],
@@ -64,10 +62,8 @@ class ExcelTransferController extends BaseController
         ];
     }
 
-    public function index(): string
-    {
-        return view('system/excel_transfer/index', ['title' => 'Excel Import Export', 'resources' => $this->resources]);
-    }
+    public function index(): string { return view('system/excel_transfer/index', ['title' => 'Excel Import Export', 'resources' => $this->resources]); }
+    public function importForm(string $resource): string { $config = $this->config($resource, 'manage'); return view('system/excel_transfer/import', ['title' => 'Import ' . $config['title'] . ' from Excel', 'resource' => $resource, 'config' => $config, 'headers' => $config['fields']]); }
 
     public function template(string $resource)
     {
@@ -86,18 +82,11 @@ class ExcelTransferController extends BaseController
         if ($config['tenant'] && $tenant->activeCompanyId() !== null && $db->fieldExists('company_id', $config['table'])) $builder->where('company_id', $tenant->activeCompanyId());
         if ($config['site'] && $tenant->activeSiteId() !== null && $db->fieldExists('site_id', $config['table'])) $builder->where('site_id', $tenant->activeSiteId());
         if ($db->fieldExists('deleted_at', $config['table'])) $builder->where('deleted_at', null);
-
         $rows = [$config['fields']];
         foreach ($builder->orderBy('id', 'ASC')->get()->getResultArray() as $row) $rows[] = $this->exportRow($config, $row);
         $sheet = $this->baseWorkbook($config['title'] . ' Export');
         $this->writeRows($sheet, $rows);
         return $this->xlsxResponse($this->slug($config['title']) . '-export.xlsx', $sheet->getParent());
-    }
-
-    public function importForm(string $resource): string
-    {
-        $config = $this->config($resource, 'manage');
-        return view('system/excel_transfer/import', ['title' => 'Import ' . $config['title'] . ' from Excel', 'resource' => $resource, 'config' => $config, 'headers' => $config['fields']]);
     }
 
     public function import(string $resource)
@@ -107,40 +96,104 @@ class ExcelTransferController extends BaseController
         $file = $this->request->getFile('excel_file');
         $uploadError = $this->validateExcelUpload($file);
         if ($uploadError !== null) return redirect()->back()->with('error', $uploadError);
-        try {
-            $result = $this->importXlsx($config, $file->getTempName());
-        } catch (RuntimeException $exception) {
-            $this->audit($config, 'excel.import_failed', ['created' => 0, 'updated' => 0, 'skipped' => 0], $file->getClientName(), $exception->getMessage());
-            return redirect()->back()->with('error', $exception->getMessage());
-        }
-        $this->audit($config, 'excel.import', $result, $file->getClientName());
-        $back = str_starts_with((string) current_url(), site_url('setup/')) ? 'setup/' . $resource : 'system/excel-transfer';
-        return redirect()->to(site_url($back))->with('message', "Excel import finished. {$result['created']} created, {$result['updated']} updated, {$result['skipped']} skipped.");
+        try { $preview = $this->previewXlsx($config, $file->getTempName()); }
+        catch (RuntimeException $exception) { return redirect()->back()->with('error', $exception->getMessage()); }
+
+        $token = bin2hex(random_bytes(16));
+        $returnTo = trim((string) $this->request->getPost('return_to'), '/') ?: 'system/excel-transfer';
+        $this->storePreview($token, ['resource' => $resource, 'config' => $config, 'return_to' => $returnTo] + $preview);
+
+        return view('system/excel_transfer/preview', [
+            'title' => 'Preview Import ' . $config['title'],
+            'resource' => $resource,
+            'config' => $config,
+            'headers' => $preview['headers'],
+            'summary' => ['total' => $preview['total'], 'valid' => count($preview['valid_rows']), 'error' => count($preview['errors'])],
+            'errors' => $preview['errors'],
+            'previewRows' => array_slice($preview['raw_valid_rows'], 0, 25),
+            'returnTo' => $returnTo,
+            'previewToken' => $token,
+            'commitUrl' => 'system/excel-transfer/' . $resource . '/commit',
+            'downloadErrorUrl' => 'system/excel-transfer/' . $resource . '/errors/' . $token,
+        ]);
     }
 
-    private function importXlsx(array $config, string $path): array
+    public function commit(string $resource)
+    {
+        $config = $this->config($resource, 'manage');
+        $token = (string) $this->request->getPost('preview_token');
+        $preview = $this->getPreview($token);
+        if ($preview === null || ($preview['resource'] ?? '') !== $resource) return redirect()->to(site_url('system/excel-transfer'))->with('error', 'Import preview expired. Please upload the Excel file again.');
+        if (! empty($preview['errors'])) return redirect()->to(site_url($preview['return_to'] ?? 'system/excel-transfer'))->with('error', 'Cannot post import with validation errors.');
+        try { $result = $this->persistRows($config, $preview['valid_rows']); }
+        catch (RuntimeException $exception) { return redirect()->to(site_url($preview['return_to'] ?? 'system/excel-transfer'))->with('error', $exception->getMessage()); }
+        $this->clearPreview($token);
+        $this->audit($config, 'excel.import', $result, 'preview:' . $token);
+        return redirect()->to(site_url($preview['return_to'] ?? 'system/excel-transfer'))->with('message', "Excel import posted. {$result['created']} created, {$result['updated']} updated, {$result['skipped']} skipped.");
+    }
+
+    public function downloadErrors(string $resource, string $token)
+    {
+        $config = $this->config($resource, 'manage');
+        $preview = $this->getPreview($token);
+        if ($preview === null || ($preview['resource'] ?? '') !== $resource) return redirect()->to(site_url('system/excel-transfer'))->with('error', 'Import preview expired. Please upload the Excel file again.');
+        $rows = [array_merge(['excel_row', 'error_message'], $preview['headers'] ?? [])];
+        foreach ($preview['errors'] as $error) {
+            $raw = $preview['raw_rows_by_number'][$error['row']] ?? [];
+            $line = [(string) $error['row'], $error['message']];
+            foreach (($preview['headers'] ?? []) as $header) $line[] = (string) ($raw[$header] ?? '');
+            $rows[] = $line;
+        }
+        $sheet = $this->baseWorkbook('Import Errors');
+        $this->writeRows($sheet, $rows);
+        return $this->xlsxResponse($this->slug($config['title']) . '-import-errors.xlsx', $sheet->getParent());
+    }
+
+    private function previewXlsx(array $config, string $path): array
     {
         $rows = IOFactory::load($path)->getActiveSheet()->toArray(null, true, true, false);
         if ($rows === [] || ! isset($rows[0])) throw new RuntimeException('Excel file is empty.');
         $headers = array_map(static fn ($value): string => trim((string) $value), $rows[0]);
         $required = $this->requiredHeader($config);
         if ($required !== null && ! in_array($required, $headers, true)) throw new RuntimeException('Excel header must include ' . $required . ' column.');
+        $validRows = [];
+        $rawValidRows = [];
+        $rawRowsByNumber = [];
+        $errors = [];
+        $total = 0;
+        foreach (array_slice($rows, 1) as $index => $row) {
+            $rowNumber = $index + 2;
+            $data = [];
+            foreach ($headers as $columnIndex => $header) {
+                if ($header === '' || ! in_array($header, $config['fields'], true)) continue;
+                $value = trim((string) ($row[$columnIndex] ?? ''));
+                $data[$header] = $value === '' ? null : $value;
+            }
+            if ($data === []) continue;
+            $total++;
+            $raw = ['_row_number' => $rowNumber] + $data;
+            $rawRowsByNumber[$rowNumber] = $data;
+            try {
+                $normalized = $this->normalizeImportRow($config, $data, $rowNumber);
+                $this->validateRequiredBusinessKey($config, $normalized, $rowNumber);
+                $validRows[] = $normalized;
+                $rawValidRows[] = $raw;
+            } catch (RuntimeException $exception) {
+                $errors[] = ['row' => $rowNumber, 'message' => $exception->getMessage()];
+            }
+        }
+        return compact('headers', 'validRows', 'rawValidRows', 'rawRowsByNumber', 'errors', 'total') + ['valid_rows' => $validRows, 'raw_valid_rows' => $rawValidRows, 'raw_rows_by_number' => $rawRowsByNumber];
+    }
 
+    private function persistRows(array $config, array $rows): array
+    {
         $db = Database::connect();
         $tenant = new TenantContext(session());
         $created = $updated = $skipped = 0;
         $now = date('Y-m-d H:i:s');
         $db->transBegin();
         try {
-            foreach (array_slice($rows, 1) as $index => $row) {
-                $data = [];
-                foreach ($headers as $columnIndex => $header) {
-                    if ($header === '' || ! in_array($header, $config['fields'], true)) continue;
-                    $value = trim((string) ($row[$columnIndex] ?? ''));
-                    $data[$header] = $value === '' ? null : $value;
-                }
-                if ($data === []) { $skipped++; continue; }
-                $data = $this->normalizeImportRow($config, $data, $index + 2);
+            foreach ($rows as $data) {
                 if ($config['tenant']) $data['company_id'] = $tenant->activeCompanyId();
                 if ($config['site']) $data['site_id'] = $tenant->activeSiteId();
                 if (array_key_exists('is_active', $data) && $data['is_active'] === null) $data['is_active'] = 1;
@@ -154,11 +207,7 @@ class ExcelTransferController extends BaseController
                 $db->table($config['table'])->insert($data);
                 $created++;
             }
-        } catch (\Throwable $exception) {
-            $db->transRollback();
-            if ($exception instanceof RuntimeException) throw $exception;
-            throw new RuntimeException($exception->getMessage(), 0, $exception);
-        }
+        } catch (\Throwable $exception) { $db->transRollback(); throw new RuntimeException($exception->getMessage(), 0, $exception); }
         if ($db->transStatus() === false) { $db->transRollback(); throw new RuntimeException('Excel import transaction failed. No data was saved.'); }
         $db->transCommit();
         return compact('created', 'updated', 'skipped');
@@ -168,11 +217,10 @@ class ExcelTransferController extends BaseController
     {
         foreach ($this->relations as $alias => $relation) {
             if (! array_key_exists($alias, $data)) continue;
-            $value = $data[$alias];
-            unset($data[$alias]);
+            $value = $data[$alias]; unset($data[$alias]);
             if ($value === null || $value === '') continue;
             $id = $this->lookupIdByCode($relation['table'], (string) $value, (bool) $relation['tenant'], (bool) $relation['site']);
-            if ($id === null) throw new RuntimeException("Row {$rowNumber}: {$alias} '{$value}' was not found.");
+            if ($id === null) throw new RuntimeException("{$alias} '{$value}' was not found.");
             $data[$relation['field']] = $id;
         }
         if ($config['table'] === 'provinces' && isset($data['country_id'])) $data['parent_id'] = $data['country_id'];
@@ -182,6 +230,15 @@ class ExcelTransferController extends BaseController
         elseif ($config['table'] === 'customers') $data += ['code' => $data['customer'] ?? null, 'name' => $data['customern'] ?? null, 'terms_code' => $data['terms'] ?? null, 'tax_number' => $data['taxnumber'] ?? null, 'phone' => $data['officephon'] ?? null, 'email' => $data['email'] ?? null, 'address' => $data['officeaddre'] ?? null, 'is_active' => $data['active'] ?? 1];
         elseif ($config['table'] === 'suppliers') $data += ['code' => $data['supplier'] ?? null, 'name' => $data['supplierna'] ?? null, 'terms_code' => $data['terms'] ?? null, 'tax_number' => $data['taxnumber'] ?? null, 'phone' => $data['officephon'] ?? null, 'email' => $data['email'] ?? null, 'address' => $data['officeaddre'] ?? null, 'is_active' => $data['active'] ?? 1];
         return $data;
+    }
+
+    private function validateRequiredBusinessKey(array $config, array $data, int $rowNumber): void
+    {
+        $key = $this->requiredHeader($config);
+        if ($key !== null) {
+            $normalizedKey = $this->relations[$key]['field'] ?? $key;
+            if (! array_key_exists($normalizedKey, $data) || $data[$normalizedKey] === null || $data[$normalizedKey] === '') throw new RuntimeException("Required field {$key} is empty.");
+        }
     }
 
     private function exportRow(array $config, array $row): array
@@ -195,6 +252,10 @@ class ExcelTransferController extends BaseController
         }
         return $line;
     }
+
+    private function storePreview(string $token, array $preview): void { $all = session(self::SESSION_KEY) ?? []; $all[$token] = $preview; session()->set(self::SESSION_KEY, $all); }
+    private function getPreview(string $token): ?array { $all = session(self::SESSION_KEY) ?? []; return is_array($all[$token] ?? null) ? $all[$token] : null; }
+    private function clearPreview(string $token): void { $all = session(self::SESSION_KEY) ?? []; unset($all[$token]); session()->set(self::SESSION_KEY, $all); }
 
     private function baseWorkbook(string $sheetName): \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet { $spreadsheet = new Spreadsheet(); $sheet = $spreadsheet->getActiveSheet(); $sheet->setTitle(substr($sheetName, 0, 31)); return $sheet; }
     private function writeRows(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet, array $rows): void { foreach ($rows as $rowIndex => $row) $sheet->fromArray($row, null, 'A' . ($rowIndex + 1)); $highestColumn = $sheet->getHighestColumn(); $sheet->getStyle('A1:' . $highestColumn . '1')->getFont()->setBold(true); $sheet->getStyle('A1:' . $highestColumn . '1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('EAF2FF'); $sheet->freezePane('A2'); foreach (range('A', $highestColumn) as $column) $sheet->getColumnDimension($column)->setAutoSize(true); }
