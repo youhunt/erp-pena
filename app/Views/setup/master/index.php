@@ -76,7 +76,7 @@ $formatValue = static function (string $field, mixed $value) use ($relationLabel
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
             <div>
                 <h4 class="card-title mb-1"><?= esc($config['title']) ?></h4>
-                <p class="text-muted mb-0">Manage, import, and export master data.</p>
+                <p class="text-muted mb-0">Manage master data and bulk update using Excel files.</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
                 <?php if ($canManage && ! empty($config['sync_action'])): ?>
@@ -89,20 +89,28 @@ $formatValue = static function (string $field, mixed $value) use ($relationLabel
                 <?php endif ?>
 
                 <a class="btn btn-outline-secondary waves-effect waves-light" href="<?= site_url("setup/{$resource}/export") ?>">
-                    <i class="bx bx-download me-1"></i> Export CSV
+                    <i class="bx bx-download me-1"></i> Export Excel
                 </a>
 
                 <?php if ($canManage): ?>
                     <a class="btn btn-outline-secondary waves-effect waves-light" href="<?= site_url("setup/{$resource}/template") ?>">
-                        <i class="bx bx-file me-1"></i> Template
+                        <i class="bx bx-file me-1"></i> Excel Template
                     </a>
                     <a class="btn btn-outline-success waves-effect waves-light" href="<?= site_url("setup/{$resource}/import") ?>">
-                        <i class="bx bx-upload me-1"></i> Import CSV
+                        <i class="bx bx-upload me-1"></i> Import Excel
                     </a>
                     <a class="btn btn-primary waves-effect waves-light" href="<?= site_url("setup/{$resource}/new") ?>">
                         <i class="bx bx-plus me-1"></i> New
                     </a>
                 <?php endif ?>
+            </div>
+        </div>
+
+        <div class="alert alert-info d-flex align-items-start gap-2 mb-3">
+            <i class="bx bx-info-circle fs-5"></i>
+            <div>
+                <div class="fw-semibold">Excel bulk update</div>
+                <div>Download the Excel template first, keep the first-row headers unchanged, then upload the filled <code>.xlsx</code> file using Import Excel.</div>
             </div>
         </div>
 
@@ -180,122 +188,53 @@ $formatValue = static function (string $field, mixed $value) use ($relationLabel
                         </td>
                     </tr>
                 <?php endforeach ?>
-
-                <tr id="masterEmptyRow" class="d-none">
-                    <td colspan="<?= count($listFields) + 2 ?>" class="text-center text-muted py-4">No matching records found.</td>
-                </tr>
-
-                <?php if ($rows === []): ?>
-                    <tr>
-                        <td colspan="<?= count($listFields) + 2 ?>" class="text-center text-muted py-4">No records yet. Use New or Import CSV to add master data.</td>
-                    </tr>
-                <?php endif ?>
                 </tbody>
             </table>
         </div>
-
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
-            <div class="text-muted small" id="masterPaginationInfo"></div>
-            <div class="btn-group" role="group" aria-label="Pagination">
-                <button class="btn btn-outline-secondary btn-sm" type="button" id="masterPrevPage">Previous</button>
-                <button class="btn btn-outline-secondary btn-sm disabled" type="button" id="masterPageInfo">Page 1</button>
-                <button class="btn btn-outline-secondary btn-sm" type="button" id="masterNextPage">Next</button>
-            </div>
-        </div>
     </div>
 </div>
+<?= $this->endSection() ?>
 
+<?= $this->section('scripts') ?>
 <script>
-document.addEventListener('DOMContentLoaded', function () {
+(function () {
     const table = document.getElementById('masterDataTable');
-    if (!table) return;
-
-    const rows = Array.from(table.querySelectorAll('tbody tr[data-status]'));
-    const emptyRow = document.getElementById('masterEmptyRow');
     const search = document.getElementById('masterSearch');
     const status = document.getElementById('masterStatusFilter');
     const perPage = document.getElementById('masterPerPage');
     const reset = document.getElementById('masterResetFilter');
-    const prev = document.getElementById('masterPrevPage');
-    const next = document.getElementById('masterNextPage');
-    const pageInfo = document.getElementById('masterPageInfo');
-    const paginationInfo = document.getElementById('masterPaginationInfo');
-    let page = 1;
+    if (!table) return;
 
-    function matchedRows() {
-        const keyword = (search.value || '').toLowerCase().trim();
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+
+    function applyFilter() {
+        const keyword = (search.value || '').toLowerCase();
         const statusValue = status.value;
-
-        return rows.filter(function (row) {
-            const textMatch = keyword === '' || row.innerText.toLowerCase().includes(keyword);
-            const statusMatch = statusValue === 'all' || row.dataset.status === statusValue;
-            return textMatch && statusMatch;
-        });
-    }
-
-    function render() {
-        const matches = matchedRows();
+        let visible = 0;
         const limit = parseInt(perPage.value, 10) || 25;
-        const totalPages = Math.max(1, Math.ceil(matches.length / limit));
-        page = Math.min(page, totalPages);
-        const start = (page - 1) * limit;
-        const end = start + limit;
 
-        rows.forEach(function (row) {
-            row.classList.add('d-none');
+        rows.forEach(row => {
+            const text = row.innerText.toLowerCase();
+            const rowStatus = row.dataset.status || 'active';
+            const matchedKeyword = keyword === '' || text.includes(keyword);
+            const matchedStatus = statusValue === 'all' || rowStatus === statusValue;
+            const shouldShow = matchedKeyword && matchedStatus && visible < limit;
+            row.style.display = shouldShow ? '' : 'none';
+            if (matchedKeyword && matchedStatus) visible++;
         });
-
-        matches.slice(start, end).forEach(function (row) {
-            row.classList.remove('d-none');
-        });
-
-        if (emptyRow) {
-            emptyRow.classList.toggle('d-none', matches.length > 0);
-        }
-
-        prev.disabled = page <= 1;
-        next.disabled = page >= totalPages;
-        pageInfo.textContent = 'Page ' + page + ' / ' + totalPages;
-
-        if (matches.length === 0) {
-            paginationInfo.textContent = 'Showing 0 of ' + rows.length + ' records';
-        } else {
-            paginationInfo.textContent = 'Showing ' + (start + 1) + '-' + Math.min(end, matches.length) + ' of ' + matches.length + ' records';
-        }
     }
 
-    [search, status, perPage].forEach(function (input) {
-        input.addEventListener('input', function () {
-            page = 1;
-            render();
+    [search, status, perPage].forEach(el => el && el.addEventListener('input', applyFilter));
+    if (reset) {
+        reset.addEventListener('click', function () {
+            search.value = '';
+            status.value = 'all';
+            perPage.value = '25';
+            applyFilter();
         });
-        input.addEventListener('change', function () {
-            page = 1;
-            render();
-        });
-    });
+    }
 
-    reset.addEventListener('click', function () {
-        search.value = '';
-        status.value = 'all';
-        perPage.value = '25';
-        page = 1;
-        render();
-    });
-
-    prev.addEventListener('click', function () {
-        if (page > 1) {
-            page--;
-            render();
-        }
-    });
-
-    next.addEventListener('click', function () {
-        page++;
-        render();
-    });
-
-    render();
-});
+    applyFilter();
+})();
 </script>
 <?= $this->endSection() ?>
