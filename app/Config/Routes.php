@@ -182,10 +182,10 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
             $routes->get($resource . '/(:num)/edit', 'Setup\MasterDataController::edit/' . $resource . '/$1');
             $routes->post($resource . '/(:num)', 'Setup\MasterDataController::update/' . $resource . '/$1');
             $routes->post($resource . '/(:num)/delete', 'Setup\MasterDataController::delete/' . $resource . '/$1');
-            $routes->get($resource . '/export', 'Setup\MasterDataTransferController::export/' . $resource);
-            $routes->get($resource . '/import', 'Setup\MasterDataTransferController::importForm/' . $resource);
-            $routes->post($resource . '/import', 'Setup\MasterDataTransferController::import/' . $resource);
-            $routes->get($resource . '/template', 'Setup\MasterDataTransferController::template/' . $resource);
+            $routes->get($resource . '/export', 'System\ExcelTransferController::export/' . $resource);
+            $routes->get($resource . '/import', 'System\ExcelTransferController::importForm/' . $resource);
+            $routes->post($resource . '/import', 'System\ExcelTransferController::import/' . $resource);
+            $routes->get($resource . '/template', 'System\ExcelTransferController::template/' . $resource);
         }
         $routes->post('provinces/sync', 'Setup\WilayahSyncController::provinces');
         $routes->post('cities/sync', 'Setup\WilayahSyncController::cities');
