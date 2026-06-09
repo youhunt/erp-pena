@@ -16,7 +16,7 @@ class XlsxSheetWriter
         try {
             $this->createWorkbookFiles($workDir, $rows, $sheetName);
             $xlsxPath = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'pena_excel_' . bin2hex(random_bytes(8)) . '.xlsx';
-            $this->compressWorkbook($workDir, $xlsxPath);
+            $this->writeZipFromDirectory($workDir, $xlsxPath);
 
             if (! is_file($xlsxPath) || filesize($xlsxPath) < 1) {
                 throw new RuntimeException('Unable to generate Excel .xlsx file.');
@@ -48,43 +48,113 @@ class XlsxSheetWriter
         }
     }
 
-    private function compressWorkbook(string $workDir, string $xlsxPath): void
+    private function writeZipFromDirectory(string $sourceDir, string $zipPath): void
     {
-        if (stripos(PHP_OS_FAMILY, 'Windows') !== false) {
-            $command = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -LiteralPath ' . $this->psQuote($workDir . DIRECTORY_SEPARATOR . '*') . ' -DestinationPath ' . $this->psQuote($xlsxPath) . ' -Force"';
-            $this->runCommand($command, 'PowerShell Compress-Archive failed. Make sure shell_exec/exec is enabled and PowerShell is available.');
-            return;
+        $files = $this->collectFiles($sourceDir);
+        $handle = fopen($zipPath, 'wb');
+        if ($handle === false) {
+            throw new RuntimeException('Unable to create Excel output file.');
         }
 
-        $current = getcwd();
-        chdir($workDir);
-        try {
-            $command = 'zip -qr ' . escapeshellarg($xlsxPath) . ' .';
-            $this->runCommand($command, 'zip command failed. Install zip or enable PHP ZipArchive.');
-        } finally {
-            if ($current !== false) {
-                chdir($current);
+        $centralDirectory = '';
+        $offset = 0;
+        $dosTime = $this->dosTime();
+        $dosDate = $this->dosDate();
+
+        foreach ($files as $localName => $path) {
+            $data = file_get_contents($path);
+            if ($data === false) {
+                fclose($handle);
+                throw new RuntimeException('Unable to read Excel package part: ' . $localName);
             }
+
+            $crc = hexdec(hash('crc32b', $data));
+            $size = strlen($data);
+            $nameLength = strlen($localName);
+
+            $localHeader = pack(
+                'VvvvvvVVVvv',
+                0x04034b50,
+                20,
+                0,
+                0,
+                $dosTime,
+                $dosDate,
+                $crc,
+                $size,
+                $size,
+                $nameLength,
+                0
+            );
+
+            fwrite($handle, $localHeader . $localName . $data);
+
+            $centralDirectory .= pack(
+                'VvvvvvvVVVvvvvvVV',
+                0x02014b50,
+                20,
+                20,
+                0,
+                0,
+                $dosTime,
+                $dosDate,
+                $crc,
+                $size,
+                $size,
+                $nameLength,
+                0,
+                0,
+                0,
+                0,
+                0,
+                $offset
+            ) . $localName;
+
+            $offset += strlen($localHeader) + $nameLength + $size;
         }
+
+        $centralOffset = $offset;
+        $centralSize = strlen($centralDirectory);
+        fwrite($handle, $centralDirectory);
+        fwrite($handle, pack('VvvvvVVv', 0x06054b50, 0, 0, count($files), count($files), $centralSize, $centralOffset, 0));
+        fclose($handle);
     }
 
-    private function runCommand(string $command, string $errorMessage): void
+    private function collectFiles(string $directory): array
     {
-        if (! function_exists('exec')) {
-            throw new RuntimeException('exec is disabled. Enable PHP ZipArchive, or allow exec for Excel generation.');
+        $files = [];
+        $baseLength = strlen(rtrim($directory, DIRECTORY_SEPARATOR)) + 1;
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::LEAVES_ONLY
+        );
+
+        foreach ($iterator as $file) {
+            if (! $file->isFile()) {
+                continue;
+            }
+
+            $path = $file->getPathname();
+            $localName = substr($path, $baseLength);
+            $localName = str_replace(DIRECTORY_SEPARATOR, '/', $localName);
+            $files[$localName] = $path;
         }
 
-        $output = [];
-        $exitCode = 0;
-        exec($command . ' 2>&1', $output, $exitCode);
-        if ($exitCode !== 0) {
-            throw new RuntimeException($errorMessage . ' ' . trim(implode(' ', $output)));
-        }
+        ksort($files);
+        return $files;
     }
 
-    private function psQuote(string $path): string
+    private function dosTime(): int
     {
-        return "'" . str_replace("'", "''", $path) . "'";
+        $time = getdate();
+        return (($time['hours'] ?? 0) << 11) | (($time['minutes'] ?? 0) << 5) | (int) floor(($time['seconds'] ?? 0) / 2);
+    }
+
+    private function dosDate(): int
+    {
+        $time = getdate();
+        $year = max(1980, (int) ($time['year'] ?? 1980));
+        return (($year - 1980) << 9) | (($time['mon'] ?? 1) << 5) | ($time['mday'] ?? 1);
     }
 
     private function contentTypesXml(): string
