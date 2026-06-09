@@ -3,14 +3,17 @@
 namespace App\Controllers\Finance;
 
 use App\Controllers\BaseController;
+use App\Database\Seeds\FinanceGlSeeder;
 use App\Models\ChartAccountModel;
 use App\Models\GlBookModel;
 use App\Models\GlEntryLineModel;
 use App\Models\GlEntryModel;
 use App\Models\GlPostingProfileModel;
 use App\Services\Finance\GeneralLedgerService;
+use App\Services\Finance\LegacyGlBridgeService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
+use Config\Database;
 use RuntimeException;
 
 class GeneralLedgerController extends BaseController
@@ -27,6 +30,92 @@ class GeneralLedgerController extends BaseController
             'title' => 'Chart of Account',
             'accounts' => $accounts->orderBy('account_no', 'ASC')->findAll(300),
         ]);
+    }
+
+    public function books(): string
+    {
+        $tenant = new TenantContext(session());
+        $model = new GlBookModel();
+        if ($tenant->activeCompanyId() !== null) {
+            $model->where('company_id', $tenant->activeCompanyId());
+        }
+
+        return view('finance/gl/books', [
+            'title' => 'GL Book',
+            'books' => $model->orderBy('is_default', 'DESC')->orderBy('book_code', 'ASC')->findAll(100),
+            'legacyBooks' => $this->legacyRows('glbook', 100),
+        ]);
+    }
+
+    public function columns(): string
+    {
+        return view('finance/gl/columns', [
+            'title' => 'GL Column',
+            'columns' => $this->legacyRows('glcolumn', 100),
+            'lines' => $this->legacyRows('glcolumnline', 200),
+        ]);
+    }
+
+    public function legacyCoa(): string
+    {
+        return view('finance/gl/legacy_coa', [
+            'title' => 'Legacy COA Source',
+            'coaRows' => $this->legacyRows('coa', 300),
+            'coaLines' => $this->legacyRows('coaline', 300),
+        ]);
+    }
+
+    public function recurring(): string
+    {
+        return view('finance/gl/recurring', [
+            'title' => 'Recurring Journal',
+            'recurringRows' => $this->legacyRows('recurring', 100),
+            'recurringLines' => $this->legacyRows('recurring_line', 300),
+        ]);
+    }
+
+    public function utilities(): string
+    {
+        $db = Database::connect();
+
+        return view('finance/gl/utilities', [
+            'title' => 'GL Utilities',
+            'hasCoa' => $db->tableExists('coa'),
+            'hasGlBook' => $db->tableExists('glbook'),
+            'legacyCoaCount' => $db->tableExists('coa') ? $db->table('coa')->countAllResults() : 0,
+            'legacyBookCount' => $db->tableExists('glbook') ? $db->table('glbook')->countAllResults() : 0,
+            'modernCoaCount' => $db->tableExists('chart_accounts') ? $db->table('chart_accounts')->countAllResults() : 0,
+            'modernBookCount' => $db->tableExists('gl_books') ? $db->table('gl_books')->countAllResults() : 0,
+        ]);
+    }
+
+    public function initDefaults()
+    {
+        Database::seeder()->call(FinanceGlSeeder::class);
+
+        return redirect()->to(site_url('gl/utilities'))->with('message', 'Finance GL default data initialized.');
+    }
+
+    public function syncLegacyCoa()
+    {
+        try {
+            $result = (new LegacyGlBridgeService())->syncCoaToChartAccounts();
+        } catch (RuntimeException $exception) {
+            return redirect()->to(site_url('gl/utilities'))->with('error', $exception->getMessage());
+        }
+
+        return redirect()->to(site_url('gl/utilities'))->with('message', "Legacy COA synced. {$result['created']} created, {$result['updated']} updated, {$result['skipped']} skipped.");
+    }
+
+    public function syncLegacyBooks()
+    {
+        try {
+            $result = (new LegacyGlBridgeService())->syncGlBookToModern();
+        } catch (RuntimeException $exception) {
+            return redirect()->to(site_url('gl/utilities'))->with('error', $exception->getMessage());
+        }
+
+        return redirect()->to(site_url('gl/utilities'))->with('message', "Legacy GL Book synced. {$result['created']} created, {$result['updated']} updated, {$result['skipped']} skipped.");
     }
 
     public function entries(): string
@@ -89,7 +178,7 @@ class GeneralLedgerController extends BaseController
     {
         return view('finance/gl/entries/form', [
             'title' => 'Create GL Entry',
-            'books' => $this->books(),
+            'books' => $this->booksList(),
             'accounts' => $this->accounts(),
         ]);
     }
@@ -153,7 +242,7 @@ class GeneralLedgerController extends BaseController
         return $model->where('is_active', 1)->where('is_postable', 1)->orderBy('account_no', 'ASC')->findAll(300);
     }
 
-    private function books(): array
+    private function booksList(): array
     {
         $tenant = new TenantContext(session());
         $model = new GlBookModel();
@@ -189,5 +278,15 @@ class GeneralLedgerController extends BaseController
         $int = (int) $value;
 
         return $int > 0 ? $int : null;
+    }
+
+    private function legacyRows(string $table, int $limit): array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists($table)) {
+            return [];
+        }
+
+        return $db->table($table)->limit($limit)->get()->getResultArray();
     }
 }
