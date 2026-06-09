@@ -30,6 +30,10 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Item VAT', 'setup/item-vat', 'setup.master.view'),
                 $this->leaf('Address Master', 'setup/address-master', 'setup.master.view'),
             ]),
+            $this->group('System', 'bx-data', 25, [
+                $this->leaf('Data Import Export', 'system/data-import', 'setup.master.view'),
+                $this->leaf('Excel Import Export', 'system/excel-transfer', 'setup.master.view'),
+            ]),
             $this->group('POS', 'bx-store-alt', 30, [
                 $this->leaf('POS Master', $this->placeholderRoute('POS Master'), 'pos.view'),
                 $this->leaf('POS System', $this->placeholderRoute('POS System'), 'pos.view'),
