@@ -121,6 +121,7 @@ class ErpMenu extends BaseConfig
             ]),
             $this->group('GL', 'bx-book', 130, [
                 $this->leaf('GL Utilities', 'gl/utilities', 'finance.gl.view'),
+                $this->leaf('Legacy GL Excel', 'gl/legacy-excel', 'finance.gl.view'),
                 $this->leaf('GL Book', 'gl/books', 'finance.gl.view'),
                 $this->leaf('GL Column', 'gl/columns', 'finance.gl.view'),
                 $this->leaf('Legacy COA Source', 'gl/legacy-coa', 'finance.gl.view'),
