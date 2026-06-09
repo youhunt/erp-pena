@@ -25,13 +25,13 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('data-import/opening-stock/import', 'System\DataImportController::openingStockImport');
         $routes->get('data-import/opening-stock/export', 'System\DataImportController::openingStockExport');
 
-        $routes->get('excel-transfer', 'System\ExcelTransferController::index');
-        $routes->get('excel-transfer/(:segment)/template', 'System\ExcelTransferController::template/$1');
-        $routes->get('excel-transfer/(:segment)/import', 'System\ExcelTransferController::importForm/$1');
-        $routes->post('excel-transfer/(:segment)/import', 'System\ExcelTransferController::import/$1');
-        $routes->post('excel-transfer/(:segment)/commit', 'System\ExcelTransferController::commit/$1');
-        $routes->get('excel-transfer/(:segment)/errors/(:segment)', 'System\ExcelTransferController::downloadErrors/$1/$2');
-        $routes->get('excel-transfer/(:segment)/export', 'System\ExcelTransferController::export/$1');
+        $routes->get('excel-transfer', 'System\ExcelLiteTransferController::index');
+        $routes->get('excel-transfer/(:segment)/template', 'System\ExcelLiteTransferController::template/$1');
+        $routes->get('excel-transfer/(:segment)/import', 'System\ExcelLiteTransferController::importForm/$1');
+        $routes->post('excel-transfer/(:segment)/import', 'System\ExcelLiteTransferController::import/$1');
+        $routes->post('excel-transfer/(:segment)/commit', 'System\ExcelLiteTransferController::commit/$1');
+        $routes->get('excel-transfer/(:segment)/errors/(:segment)', 'System\ExcelLiteTransferController::downloadErrors/$1/$2');
+        $routes->get('excel-transfer/(:segment)/export', 'System\ExcelLiteTransferController::export/$1');
     });
 
     $routes->group('admin', static function (RouteCollection $routes): void {
@@ -184,10 +184,10 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
             $routes->get($resource . '/(:num)/edit', 'Setup\MasterDataController::edit/' . $resource . '/$1');
             $routes->post($resource . '/(:num)', 'Setup\MasterDataController::update/' . $resource . '/$1');
             $routes->post($resource . '/(:num)/delete', 'Setup\MasterDataController::delete/' . $resource . '/$1');
-            $routes->get($resource . '/export', 'System\ExcelTransferController::export/' . $resource);
-            $routes->get($resource . '/import', 'System\ExcelTransferController::importForm/' . $resource);
-            $routes->post($resource . '/import', 'System\ExcelTransferController::import/' . $resource);
-            $routes->get($resource . '/template', 'System\ExcelTransferController::template/' . $resource);
+            $routes->get($resource . '/export', 'System\ExcelLiteTransferController::export/' . $resource);
+            $routes->get($resource . '/import', 'System\ExcelLiteTransferController::importForm/' . $resource);
+            $routes->post($resource . '/import', 'System\ExcelLiteTransferController::import/' . $resource);
+            $routes->get($resource . '/template', 'System\ExcelLiteTransferController::template/' . $resource);
         }
         $routes->post('provinces/sync', 'Setup\WilayahSyncController::provinces');
         $routes->post('cities/sync', 'Setup\WilayahSyncController::cities');
