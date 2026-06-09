@@ -9,9 +9,12 @@ use App\Services\Inventory\InventoryStockService;
 use App\Services\TenantContext;
 use Config\Database;
 use RuntimeException;
+use Throwable;
 
 class DataImportController extends BaseController
 {
+    private const MAX_CSV_UPLOAD_BYTES = 5242880;
+
     public function index(): string
     {
         return view('system/data_import/index', [
@@ -78,11 +81,9 @@ class DataImportController extends BaseController
         }
 
         $file = $this->request->getFile('csv_file');
-        if ($file === null || ! $file->isValid()) {
-            return redirect()->back()->with('error', 'Please upload a valid CSV file.');
-        }
-        if (! in_array(strtolower($file->getClientExtension()), ['csv', 'txt'], true)) {
-            return redirect()->back()->with('error', 'Only CSV files are supported for now.');
+        $uploadError = $this->validateCsvUpload($file);
+        if ($uploadError !== null) {
+            return redirect()->back()->with('error', $uploadError);
         }
 
         try {
@@ -119,20 +120,19 @@ class DataImportController extends BaseController
     {
         $tenant = new TenantContext(session());
         $companyId = $tenant->activeCompanyId();
-        if ($companyId === null || $companyId < 1) {
-            return redirect()->back()->with('error', 'Active company is required before importing opening stock.');
+        $siteId = $tenant->activeSiteId();
+        if ($companyId === null || $companyId < 1 || $siteId === null || $siteId < 1) {
+            return redirect()->back()->with('error', 'Active company and active site are required before importing opening stock.');
         }
 
         $file = $this->request->getFile('csv_file');
-        if ($file === null || ! $file->isValid()) {
-            return redirect()->back()->with('error', 'Please upload a valid CSV file.');
-        }
-        if (! in_array(strtolower($file->getClientExtension()), ['csv', 'txt'], true)) {
-            return redirect()->back()->with('error', 'Only CSV files are supported for now.');
+        $uploadError = $this->validateCsvUpload($file);
+        if ($uploadError !== null) {
+            return redirect()->back()->with('error', $uploadError);
         }
 
         try {
-            $result = $this->importOpeningStockCsv($file->getTempName(), $companyId, $tenant->activeSiteId());
+            $result = $this->importOpeningStockCsv($file->getTempName(), $companyId, $siteId);
         } catch (RuntimeException $e) {
             $this->auditImport('inventory_stock_movements', 'opening_stock.import_failed', ['created' => 0, 'updated' => 0, 'skipped' => 0], $file->getClientName(), $e->getMessage());
             return redirect()->back()->with('error', $e->getMessage());
@@ -194,50 +194,88 @@ class DataImportController extends BaseController
 
         $allowed = ['account_no', 'account_name', 'account_type', 'normal_balance', 'parent_account_no', 'is_postable', 'is_active'];
         $model = new ChartAccountModel();
+        $db = Database::connect();
         $created = 0;
         $updated = 0;
         $skipped = 0;
         $rowNumber = 1;
 
-        while (($row = fgetcsv($handle)) !== false) {
-            $rowNumber++;
-            $data = $this->rowData($headers, $row, $allowed);
-            if (empty($data['account_no']) || empty($data['account_name'])) {
-                $skipped++;
-                continue;
-            }
+        $db->transBegin();
 
-            $data['account_type'] = strtolower((string) ($data['account_type'] ?? 'asset'));
-            $data['normal_balance'] = strtolower((string) ($data['normal_balance'] ?? 'debit'));
-            if (! in_array($data['account_type'], ['asset', 'liability', 'equity', 'revenue', 'expense'], true)) {
-                fclose($handle);
-                throw new RuntimeException("Row {$rowNumber}: invalid account_type.");
-            }
-            if (! in_array($data['normal_balance'], ['debit', 'credit'], true)) {
-                fclose($handle);
-                throw new RuntimeException("Row {$rowNumber}: invalid normal_balance.");
-            }
+        try {
+            while (($row = fgetcsv($handle)) !== false) {
+                $rowNumber++;
+                $data = $this->rowData($headers, $row, $allowed);
+                if (empty($data['account_no']) || empty($data['account_name'])) {
+                    $skipped++;
+                    continue;
+                }
 
-            $data['company_id'] = $companyId;
-            $data['is_postable'] = (int) ($data['is_postable'] ?? 1);
-            $data['is_active'] = (int) ($data['is_active'] ?? 1);
+                $data['account_type'] = strtolower((string) ($data['account_type'] ?? 'asset'));
+                $data['normal_balance'] = strtolower((string) ($data['normal_balance'] ?? 'debit'));
+                if (! in_array($data['account_type'], ['asset', 'liability', 'equity', 'revenue', 'expense'], true)) {
+                    throw new RuntimeException("Row {$rowNumber}: invalid account_type.");
+                }
+                if (! in_array($data['normal_balance'], ['debit', 'credit'], true)) {
+                    throw new RuntimeException("Row {$rowNumber}: invalid normal_balance.");
+                }
 
-            $existing = $model->where('company_id', $companyId)->where('account_no', $data['account_no'])->first();
-            if ($existing !== null) {
-                $model->update((int) $existing['id'], $data);
-                $updated++;
-                continue;
+                $data['company_id'] = $companyId;
+                $data['is_postable'] = (int) ($data['is_postable'] ?? 1);
+                $data['is_active'] = (int) ($data['is_active'] ?? 1);
+
+                $existing = $model->where('company_id', $companyId)->where('account_no', $data['account_no'])->first();
+                if ($existing !== null) {
+                    $model->update((int) $existing['id'], $data);
+                    $updated++;
+                    continue;
+                }
+
+                $model->insert($data);
+                $created++;
             }
-
-            $model->insert($data);
-            $created++;
+        } catch (Throwable $e) {
+            $db->transRollback();
+            fclose($handle);
+            throw $e instanceof RuntimeException ? $e : new RuntimeException($e->getMessage(), 0, $e);
         }
 
+        if ($db->transStatus() === false) {
+            $db->transRollback();
+            fclose($handle);
+            throw new RuntimeException('COA import transaction failed. No data was saved.');
+        }
+
+        $db->transCommit();
         fclose($handle);
         return compact('created', 'updated', 'skipped');
     }
 
-    private function importOpeningStockCsv(string $path, int $companyId, ?int $siteId): array
+    private function importOpeningStockCsv(string $path, int $companyId, int $siteId): array
+    {
+        $prepared = $this->prepareOpeningStockRows($path, $companyId, $siteId);
+        $stock = new InventoryStockService();
+        $created = 0;
+
+        foreach ($prepared['movements'] as $movement) {
+            $stock->stockIn($movement, auth()->id());
+            $created++;
+        }
+
+        $skipped = $prepared['skipped'];
+        $updated = 0;
+
+        return compact('created', 'updated', 'skipped');
+    }
+
+    /**
+     * Validate the entire opening-stock CSV before posting any stock movement.
+     * This avoids partial posting caused by a missing item, warehouse, or location
+     * discovered halfway through the import file.
+     *
+     * @return array{movements: list<array<string, mixed>>, skipped: int}
+     */
+    private function prepareOpeningStockRows(string $path, int $companyId, int $siteId): array
     {
         $handle = fopen($path, 'rb');
         if ($handle === false) {
@@ -253,9 +291,7 @@ class DataImportController extends BaseController
         }
 
         $allowed = ['movement_date', 'warehouse_code', 'location_code', 'item_code', 'item_name', 'uom_code', 'qty', 'unit_cost', 'reference_no', 'notes'];
-        $stock = new InventoryStockService();
-        $created = 0;
-        $updated = 0;
+        $movements = [];
         $skipped = 0;
         $rowNumber = 1;
 
@@ -286,7 +322,7 @@ class DataImportController extends BaseController
                 throw new RuntimeException("Row {$rowNumber}: location_code '{$data['location_code']}' was not found.");
             }
 
-            $stock->stockIn([
+            $movements[] = [
                 'company_id' => $companyId,
                 'site_id' => $siteId,
                 'warehouse_id' => $warehouseId,
@@ -302,13 +338,12 @@ class DataImportController extends BaseController
                 'reference_type' => 'opening_stock_import',
                 'reference_no' => $data['reference_no'] ?: 'OPENING-' . date('Ymd'),
                 'notes' => $data['notes'] ?: 'Opening stock import',
-            ], auth()->id());
-
-            $created++;
+            ];
         }
 
         fclose($handle);
-        return compact('created', 'updated', 'skipped');
+
+        return ['movements' => $movements, 'skipped' => $skipped];
     }
 
     private function masterModules(): array
@@ -337,6 +372,27 @@ class DataImportController extends BaseController
         return [
             ['group' => 'Inventory', 'name' => 'Opening Stock', 'route' => 'system/data-import/opening-stock'],
         ];
+    }
+
+    private function validateCsvUpload($file): ?string
+    {
+        if ($file === null || ! $file->isValid()) {
+            return 'Please upload a valid CSV file.';
+        }
+
+        if ($file->getSize() < 1) {
+            return 'Uploaded CSV file is empty.';
+        }
+
+        if ($file->getSize() > self::MAX_CSV_UPLOAD_BYTES) {
+            return 'CSV file is too large. Maximum allowed size is 5 MB.';
+        }
+
+        if (! in_array(strtolower($file->getClientExtension()), ['csv', 'txt'], true)) {
+            return 'Only CSV files are supported for now.';
+        }
+
+        return null;
     }
 
     private function csvHeaders($handle): array
