@@ -1,0 +1,380 @@
+<?php
+
+namespace App\Controllers\System;
+
+use App\Controllers\BaseController;
+use App\Services\AuditLogService;
+use App\Services\TenantContext;
+use CodeIgniter\Exceptions\PageNotFoundException;
+use Config\Database;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use RuntimeException;
+
+class ExcelTransferController extends BaseController
+{
+    private const MAX_XLSX_UPLOAD_BYTES = 10485760;
+
+    /** @var array<string, array<string, mixed>> */
+    private array $resources;
+
+    public function __construct()
+    {
+        $this->resources = [
+            'warehouses' => ['title' => 'Warehouses', 'table' => 'warehouses', 'tenant' => true, 'site' => true, 'fields' => ['code', 'name', 'description', 'is_active'], 'permission' => 'setup.master'],
+            'locations' => ['title' => 'Locations', 'table' => 'locations', 'tenant' => true, 'site' => true, 'fields' => ['warehouse_code', 'code', 'name', 'description', 'is_active'], 'permission' => 'setup.master'],
+            'uoms' => ['title' => 'Unit of Measure', 'table' => 'uoms', 'tenant' => true, 'site' => false, 'fields' => ['code', 'name', 'description', 'is_active'], 'permission' => 'setup.master'],
+            'items' => ['title' => 'Items', 'table' => 'items', 'tenant' => true, 'site' => true, 'fields' => $this->itemFields(), 'permission' => 'inventory.item'],
+            'customers' => ['title' => 'Customers', 'table' => 'customers', 'tenant' => true, 'site' => true, 'fields' => $this->customerFields(), 'permission' => 'sales.customer'],
+            'suppliers' => ['title' => 'Suppliers', 'table' => 'suppliers', 'tenant' => true, 'site' => true, 'fields' => $this->supplierFields(), 'permission' => 'purchase.supplier'],
+        ];
+    }
+
+    public function index(): string
+    {
+        return view('system/excel_transfer/index', [
+            'title' => 'Excel Import Export',
+            'resources' => $this->resources,
+        ]);
+    }
+
+    public function template(string $resource)
+    {
+        $config = $this->config($resource, 'manage');
+        $sheet = $this->baseWorkbook($config['title'] . ' Template');
+        $this->writeRows($sheet, [$config['fields'], $this->sampleRow($config)]);
+
+        return $this->xlsxResponse($this->slug($config['title']) . '-template.xlsx', $sheet->getParent());
+    }
+
+    public function export(string $resource)
+    {
+        $config = $this->config($resource, 'view');
+        $db = Database::connect();
+        $tenant = new TenantContext(session());
+        $builder = $db->table($config['table']);
+
+        if ($config['tenant'] && $tenant->activeCompanyId() !== null && $db->fieldExists('company_id', $config['table'])) {
+            $builder->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($config['site'] && $tenant->activeSiteId() !== null && $db->fieldExists('site_id', $config['table'])) {
+            $builder->where('site_id', $tenant->activeSiteId());
+        }
+        if ($db->fieldExists('deleted_at', $config['table'])) {
+            $builder->where('deleted_at', null);
+        }
+
+        $rows = [$config['fields']];
+        foreach ($builder->orderBy('id', 'ASC')->get()->getResultArray() as $row) {
+            $rows[] = $this->exportRow($config, $row);
+        }
+
+        $sheet = $this->baseWorkbook($config['title'] . ' Export');
+        $this->writeRows($sheet, $rows);
+
+        return $this->xlsxResponse($this->slug($config['title']) . '-export.xlsx', $sheet->getParent());
+    }
+
+    public function importForm(string $resource): string
+    {
+        $config = $this->config($resource, 'manage');
+
+        return view('system/excel_transfer/import', [
+            'title' => 'Import ' . $config['title'] . ' from Excel',
+            'resource' => $resource,
+            'config' => $config,
+            'headers' => $config['fields'],
+        ]);
+    }
+
+    public function import(string $resource)
+    {
+        $config = $this->config($resource, 'manage');
+        if (! $this->hasRequiredTenant($config)) {
+            return redirect()->back()->with('error', $this->tenantRequirementMessage($config));
+        }
+
+        $file = $this->request->getFile('excel_file');
+        $uploadError = $this->validateExcelUpload($file);
+        if ($uploadError !== null) {
+            return redirect()->back()->with('error', $uploadError);
+        }
+
+        try {
+            $result = $this->importXlsx($config, $file->getTempName());
+        } catch (RuntimeException $exception) {
+            $this->audit($config, 'excel.import_failed', ['created' => 0, 'updated' => 0, 'skipped' => 0], $file->getClientName(), $exception->getMessage());
+            return redirect()->back()->with('error', $exception->getMessage());
+        }
+
+        $this->audit($config, 'excel.import', $result, $file->getClientName());
+        return redirect()->to(site_url('system/excel-transfer'))->with('message', "Excel import finished. {$result['created']} created, {$result['updated']} updated, {$result['skipped']} skipped.");
+    }
+
+    private function importXlsx(array $config, string $path): array
+    {
+        $spreadsheet = IOFactory::load($path);
+        $sheet = $spreadsheet->getActiveSheet();
+        $rows = $sheet->toArray(null, true, true, false);
+        if ($rows === [] || ! isset($rows[0])) {
+            throw new RuntimeException('Excel file is empty.');
+        }
+
+        $headers = array_map(static fn ($value): string => trim((string) $value), $rows[0]);
+        $required = $this->requiredHeader($config);
+        if ($required !== null && ! in_array($required, $headers, true)) {
+            throw new RuntimeException('Excel header must include ' . $required . ' column.');
+        }
+
+        $db = Database::connect();
+        $tenant = new TenantContext(session());
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+        $now = date('Y-m-d H:i:s');
+
+        $db->transBegin();
+
+        try {
+            foreach (array_slice($rows, 1) as $index => $row) {
+                $data = [];
+                foreach ($headers as $columnIndex => $header) {
+                    if ($header === '' || ! in_array($header, $config['fields'], true)) {
+                        continue;
+                    }
+                    $value = trim((string) ($row[$columnIndex] ?? ''));
+                    $data[$header] = $value === '' ? null : $value;
+                }
+
+                if ($data === []) {
+                    $skipped++;
+                    continue;
+                }
+
+                $rowNumber = $index + 2;
+                $data = $this->normalizeImportRow($config, $data, $rowNumber);
+                if ($config['tenant']) $data['company_id'] = $tenant->activeCompanyId();
+                if ($config['site']) $data['site_id'] = $tenant->activeSiteId();
+                if (array_key_exists('is_active', $data) && $data['is_active'] === null) $data['is_active'] = 1;
+                if (array_key_exists('active', $data) && $data['active'] === null) $data['active'] = 1;
+                $data['updated_by'] = (string) auth()->id();
+                $data['updated_at'] = $now;
+
+                $existing = $this->findExisting($config, $data);
+                if ($existing !== null) {
+                    $db->table($config['table'])->where('id', $existing['id'])->update($data);
+                    $updated++;
+                    continue;
+                }
+
+                $data['created_by'] = (string) auth()->id();
+                $data['created_at'] = $now;
+                $db->table($config['table'])->insert($data);
+                $created++;
+            }
+        } catch (\Throwable $exception) {
+            $db->transRollback();
+            if ($exception instanceof RuntimeException) throw $exception;
+            throw new RuntimeException($exception->getMessage(), 0, $exception);
+        }
+
+        if ($db->transStatus() === false) {
+            $db->transRollback();
+            throw new RuntimeException('Excel import transaction failed. No data was saved.');
+        }
+
+        $db->transCommit();
+        return compact('created', 'updated', 'skipped');
+    }
+
+    private function normalizeImportRow(array $config, array $data, int $rowNumber): array
+    {
+        if ($config['table'] === 'locations' && ! empty($data['warehouse_code'])) {
+            $warehouseId = $this->lookupIdByCode('warehouses', (string) $data['warehouse_code'], true, true);
+            if ($warehouseId === null) {
+                throw new RuntimeException("Row {$rowNumber}: warehouse_code '{$data['warehouse_code']}' was not found.");
+            }
+            unset($data['warehouse_code']);
+            $data['warehouse_id'] = $warehouseId;
+        }
+
+        if ($config['table'] === 'items') {
+            $data += ['code' => $data['item_code'] ?? null, 'name' => $data['item_name'] ?? null, 'is_active' => $data['active'] ?? 1];
+        } elseif ($config['table'] === 'customers') {
+            $data += ['code' => $data['customer'] ?? null, 'name' => $data['customern'] ?? null, 'terms_code' => $data['terms'] ?? null, 'tax_number' => $data['taxnumber'] ?? null, 'phone' => $data['officephon'] ?? null, 'email' => $data['email'] ?? null, 'address' => $data['officeaddre'] ?? null, 'is_active' => $data['active'] ?? 1];
+        } elseif ($config['table'] === 'suppliers') {
+            $data += ['code' => $data['supplier'] ?? null, 'name' => $data['supplierna'] ?? null, 'terms_code' => $data['terms'] ?? null, 'tax_number' => $data['taxnumber'] ?? null, 'phone' => $data['officephon'] ?? null, 'email' => $data['email'] ?? null, 'address' => $data['officeaddre'] ?? null, 'is_active' => $data['active'] ?? 1];
+        }
+
+        return $data;
+    }
+
+    private function exportRow(array $config, array $row): array
+    {
+        $line = [];
+        foreach ($config['fields'] as $field) {
+            if ($config['table'] === 'locations' && $field === 'warehouse_code') {
+                $line[] = $this->lookupCodeById('warehouses', (int) ($row['warehouse_id'] ?? 0));
+                continue;
+            }
+            $line[] = (string) ($row[$field] ?? '');
+        }
+        return $line;
+    }
+
+    private function baseWorkbook(string $sheetName): \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle(substr($sheetName, 0, 31));
+        return $sheet;
+    }
+
+    private function writeRows(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet, array $rows): void
+    {
+        foreach ($rows as $rowIndex => $row) {
+            $sheet->fromArray($row, null, 'A' . ($rowIndex + 1));
+        }
+
+        $highestColumn = $sheet->getHighestColumn();
+        $sheet->getStyle('A1:' . $highestColumn . '1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:' . $highestColumn . '1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('EAF2FF');
+        $sheet->freezePane('A2');
+
+        foreach (range('A', $highestColumn) as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+    }
+
+    private function xlsxResponse(string $filename, Spreadsheet $spreadsheet)
+    {
+        $path = tempnam(sys_get_temp_dir(), 'pena_excel_');
+        (new Xlsx($spreadsheet))->save($path);
+        $content = file_get_contents($path) ?: '';
+        @unlink($path);
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            ->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
+            ->setBody($content);
+    }
+
+    private function config(string $resource, string $mode): array
+    {
+        if (! isset($this->resources[$resource])) throw PageNotFoundException::forPageNotFound();
+        $config = $this->resources[$resource];
+        $permission = $config['permission'] . ($mode === 'view' ? '.view' : '.manage');
+        $user = auth()->user();
+        if (! $user || (! $user->can($permission) && ! $user->inGroup('superadmin'))) throw PageNotFoundException::forPageNotFound();
+        return $config;
+    }
+
+    private function requiredHeader(array $config): ?string
+    {
+        return match ($config['table']) {
+            'items' => 'item_code',
+            'customers' => 'customer',
+            'suppliers' => 'supplier',
+            default => in_array('code', $config['fields'], true) ? 'code' : null,
+        };
+    }
+
+    private function findExisting(array $config, array $data): ?array
+    {
+        $builder = Database::connect()->table($config['table']);
+        if ($config['table'] === 'items' && ! empty($data['item_code'])) $builder->where('item_code', $data['item_code']);
+        elseif ($config['table'] === 'customers' && ! empty($data['customer'])) $builder->where('customer', $data['customer']);
+        elseif ($config['table'] === 'suppliers' && ! empty($data['supplier'])) $builder->where('supplier', $data['supplier']);
+        elseif (! empty($data['code'])) $builder->where('code', $data['code']);
+        else return null;
+        if ($config['tenant']) $builder->where('company_id', $data['company_id'] ?? 0);
+        if ($config['site']) $builder->where('site_id', $data['site_id'] ?? null);
+        return $builder->get()->getRowArray() ?: null;
+    }
+
+    private function lookupIdByCode(string $table, string $code, bool $tenant, bool $site): ?int
+    {
+        $db = Database::connect();
+        $builder = $db->table($table)->where('code', $code);
+        $tenantContext = new TenantContext(session());
+        if ($tenant && $tenantContext->activeCompanyId() !== null && $db->fieldExists('company_id', $table)) $builder->where('company_id', $tenantContext->activeCompanyId());
+        if ($site && $tenantContext->activeSiteId() !== null && $db->fieldExists('site_id', $table)) $builder->where('site_id', $tenantContext->activeSiteId());
+        $row = $builder->get()->getRowArray();
+        return $row !== null ? (int) $row['id'] : null;
+    }
+
+    private function lookupCodeById(string $table, int $id): string
+    {
+        if ($id < 1) return '';
+        $row = Database::connect()->table($table)->where('id', $id)->get()->getRowArray();
+        return (string) ($row['code'] ?? '');
+    }
+
+    private function hasRequiredTenant(array $config): bool
+    {
+        $tenant = new TenantContext(session());
+        if ($config['tenant'] && $tenant->activeCompanyId() === null) return false;
+        if ($config['site'] && $tenant->activeSiteId() === null) return false;
+        return true;
+    }
+
+    private function tenantRequirementMessage(array $config): string
+    {
+        return $config['site']
+            ? 'Active company and active site are required before importing this Excel file.'
+            : 'Active company is required before importing this Excel file.';
+    }
+
+    private function validateExcelUpload($file): ?string
+    {
+        if ($file === null || ! $file->isValid()) return 'Please upload a valid Excel file.';
+        if ($file->getSize() < 1) return 'Uploaded Excel file is empty.';
+        if ($file->getSize() > self::MAX_XLSX_UPLOAD_BYTES) return 'Excel file is too large. Maximum allowed size is 10 MB.';
+        if (! in_array(strtolower($file->getClientExtension()), ['xlsx'], true)) return 'Only .xlsx Excel files are supported.';
+        return null;
+    }
+
+    private function audit(array $config, string $action, array $result, string $filename, ?string $error = null): void
+    {
+        (new AuditLogService())->log('system.excel_transfer', $action, [
+            'table_name' => $config['table'],
+            'description' => $error === null ? $config['title'] . ' Excel import completed.' : $config['title'] . ' Excel import failed: ' . $error,
+            'new_values' => [
+                'title' => $config['title'],
+                'table' => $config['table'],
+                'filename' => $filename,
+                'created' => $result['created'] ?? 0,
+                'updated' => $result['updated'] ?? 0,
+                'skipped' => $result['skipped'] ?? 0,
+                'error' => $error,
+            ],
+        ]);
+    }
+
+    private function sampleRow(array $config): array
+    {
+        return array_map(function (string $header) use ($config): string {
+            return match ($header) {
+                'code' => 'EXAMPLE', 'name' => 'Example ' . $config['title'], 'description' => 'Example description',
+                'warehouse_code', 'stockwhs', 'shipwhs' => 'MAIN',
+                'customer' => 'CUST-999', 'customern' => 'Example Customer', 'customerr' => 'Example Customer Ref',
+                'supplier' => 'SUP-999', 'supplierna' => 'Example Supplier', 'supplierref' => 'Example Supplier Ref',
+                'item_code' => 'ITEM001', 'item_name' => 'Example Item', 'stockuom', 'purchaseuom', 'sellinguom' => 'PCS',
+                'officeaddre', 'billingaddre', 'mailaddres', 'shiptoaddr', 'billingadre' => 'Jl. Demo Address No. 1',
+                'officecity', 'billingcity', 'mailcity', 'shiptocity' => 'Jakarta Selatan',
+                'officephon', 'billingphon', 'mailphone', 'shiptophon' => '021-50881234',
+                'officehp', 'billinghp', 'mailhp', 'shiptohp' => '08119001001',
+                'email' => 'demo@example.com', 'terms' => 'NET30', 'vat' => 'VAT11', 'taxcode' => 'PKP',
+                'is_active', 'active' => '1', 'rate', 'item_price', 'purchasep', 'sellingprice' => '0',
+                default => '',
+            };
+        }, $config['fields']);
+    }
+
+    private function slug(string $value): string { return trim(strtolower((string) preg_replace('/[^a-zA-Z0-9]+/', '-', $value)), '-'); }
+    private function itemFields(): array { return ['item_code','item_name','item_coded','item_named','shelf_life','stockuom','purchaseuom','sellinguom','stockwhs','item_price','purchasep','sellingprice','vat','item_length','item_width','item_heigh','item_diam','item_lengt','item_widthh','item_heigh_uom','item_diam_uom','out_length','out_width','out_height','out_diame','out_lengt','out_widthh','out_height_uom','out_diame_uom','item_group','item_subg','item_class','item_subc','item_type','item_subty','item_atribu','active']; }
+    private function customerFields(): array { return ['customer','customern','customerr','contactnar','description','shipwhs','officeaddre','officecity','officeprovir','officecount','officeposta','officeconta','officephon','officehp','email','taxcode','taxnumber','vat','limitamound','limitqty','terms','limitdays','salescode','salesname','bank1','bankaccou','bank2','bankaccou2','billingcust','billingtoc','billingaddre','billingcity','billingprovi','billingcoun','billingposta','billingconta','billingphon','billinghp','mailcustom','mailcode','mailaddres','mailcity','mailprovin','mailcountr','mailpostal','mailcontac','mailphone','mailhp','shiptocust','shiptocode','shiptoaddr','shiptocity','shiptoprovi','shiptocour','shiptopost','shiptocont','shiptophon','shiptohp','active']; }
+    private function supplierFields(): array { return ['supplier','supplierna','supplierref','contactnar','description','officeaddre','officecity','officeprovir','officecoun','officeposta','officeconta','officephon','officehp','email','mailaddres','mailcity','mailprovin','mailcountr','mailpostal','mailcontac','mailphone','mailhp','billingadre','billingcity','billingprovi','billingcoun','billingposta','billingconta','billingphon','billinghp','taxcode','taxnumber','vat','limitamound','limitqty','terms','limitdays','employee','purchasing','bank1','bankaccou','bank2','bankaccou2','shiptoaddr','shiptocity','shiptoprovi','shiptocoun','shiptopost','shiptocont','shiptophon','shiptohp','active']; }
+}
