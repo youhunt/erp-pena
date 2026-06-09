@@ -120,6 +120,13 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('books', 'Finance\GeneralLedgerController::books');
         $routes->get('columns', 'Finance\GeneralLedgerController::columns');
         $routes->get('legacy-coa', 'Finance\GeneralLedgerController::legacyCoa');
+        $routes->get('legacy-excel', 'Finance\LegacyGlExcelController::index');
+        $routes->get('legacy-excel/(:segment)/template', 'Finance\LegacyGlExcelController::template/$1');
+        $routes->get('legacy-excel/(:segment)/export', 'Finance\LegacyGlExcelController::export/$1');
+        $routes->get('legacy-excel/(:segment)/import', 'Finance\LegacyGlExcelController::importForm/$1');
+        $routes->post('legacy-excel/(:segment)/import', 'Finance\LegacyGlExcelController::import/$1');
+        $routes->post('legacy-excel/(:segment)/commit', 'Finance\LegacyGlExcelController::commit/$1');
+        $routes->get('legacy-excel/(:segment)/errors/(:segment)', 'Finance\LegacyGlExcelController::downloadErrors/$1/$2');
         $routes->get('chart-of-accounts', 'Finance\GeneralLedgerController::chartAccounts');
         $routes->get('posting-profiles', 'Finance\GeneralLedgerController::postingProfiles');
         $routes->post('posting-profiles', 'Finance\GeneralLedgerController::updatePostingProfiles');
