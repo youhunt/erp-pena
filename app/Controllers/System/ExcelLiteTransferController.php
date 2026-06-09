@@ -4,6 +4,7 @@ namespace App\Controllers\System;
 
 use App\Controllers\BaseController;
 use App\Libraries\XlsxSheetReader;
+use App\Libraries\XlsxSheetWriter;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use Config\Database;
@@ -61,7 +62,7 @@ class ExcelLiteTransferController extends BaseController
     public function template(string $resource)
     {
         $config = $this->config($resource, 'manage');
-        return $this->excelHtmlResponse($this->slug($config['title']) . '-template.xls', [$config['fields'], $this->sampleRow($config)]);
+        return $this->xlsxResponse($this->slug($config['title']) . '-template.xlsx', [$config['fields'], $this->sampleRow($config)], $config['title'] . ' Template');
     }
 
     public function export(string $resource)
@@ -75,7 +76,7 @@ class ExcelLiteTransferController extends BaseController
         if ($db->fieldExists('deleted_at', $config['table'])) $builder->where('deleted_at', null);
         $rows = [$config['fields']];
         foreach ($builder->orderBy('id', 'ASC')->get()->getResultArray() as $row) $rows[] = $this->exportRow($config, $row);
-        return $this->excelHtmlResponse($this->slug($config['title']) . '-export.xls', $rows);
+        return $this->xlsxResponse($this->slug($config['title']) . '-export.xlsx', $rows, $config['title'] . ' Export');
     }
 
     public function import(string $resource)
@@ -125,7 +126,7 @@ class ExcelLiteTransferController extends BaseController
             foreach (($preview['headers'] ?? []) as $header) $line[] = (string) ($raw[$header] ?? '');
             $rows[] = $line;
         }
-        return $this->excelHtmlResponse($this->slug($config['title']) . '-import-errors.xls', $rows);
+        return $this->xlsxResponse($this->slug($config['title']) . '-import-errors.xlsx', $rows, 'Import Errors');
     }
 
     private function previewUploadedFile(array $config, string $path): array
@@ -224,19 +225,15 @@ class ExcelLiteTransferController extends BaseController
 
     private function exportRow(array $config, array $row): array { return array_map(static fn ($field) => (string) ($row[$field] ?? ''), $config['fields']); }
 
-    private function excelHtmlResponse(string $filename, array $rows)
+    private function xlsxResponse(string $filename, array $rows, string $sheetName)
     {
-        $html = "<html><head><meta charset=\"UTF-8\"><style>td,th{mso-number-format:'\\@';}</style></head><body><table border=\"1\">";
-        foreach ($rows as $rowIndex => $row) {
-            $html .= '<tr>';
-            foreach ($row as $cell) {
-                $tag = $rowIndex === 0 ? 'th' : 'td';
-                $html .= '<' . $tag . '>' . htmlspecialchars((string) $cell, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</' . $tag . '>';
-            }
-            $html .= '</tr>';
-        }
-        $html .= '</table></body></html>';
-        return $this->response->setHeader('Content-Type', 'application/vnd.ms-excel; charset=UTF-8')->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')->setBody($html);
+        $path = (new XlsxSheetWriter())->writeFirstSheet($rows, $sheetName);
+        $content = file_get_contents($path) ?: '';
+        @unlink($path);
+        return $this->response
+            ->setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            ->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
+            ->setBody($content);
     }
 
     private function validateRequiredBusinessKey(array $config, array $data): void { $key = $this->requiredHeader($config); if ($key !== null && (($data[$key] ?? null) === null || ($data[$key] ?? '') === '')) throw new RuntimeException('Required field ' . $key . ' is empty.'); }
