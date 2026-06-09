@@ -24,6 +24,12 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('data-import/opening-stock/import', 'System\DataImportController::openingStockImportForm');
         $routes->post('data-import/opening-stock/import', 'System\DataImportController::openingStockImport');
         $routes->get('data-import/opening-stock/export', 'System\DataImportController::openingStockExport');
+
+        $routes->get('excel-transfer', 'System\ExcelTransferController::index');
+        $routes->get('excel-transfer/(:segment)/template', 'System\ExcelTransferController::template/$1');
+        $routes->get('excel-transfer/(:segment)/import', 'System\ExcelTransferController::importForm/$1');
+        $routes->post('excel-transfer/(:segment)/import', 'System\ExcelTransferController::import/$1');
+        $routes->get('excel-transfer/(:segment)/export', 'System\ExcelTransferController::export/$1');
     });
 
     $routes->group('admin', static function (RouteCollection $routes): void {
