@@ -157,7 +157,7 @@ class XlsxSheetWriter
 
     private function safeSheetName(string $name): string
     {
-        $name = preg_replace('/[\\\/\?\*\[\]\:]/', ' ', $name) ?: 'Sheet1';
+        $name = preg_replace('~[\\/\?\*\[\]\:]~', ' ', $name) ?: 'Sheet1';
         $name = trim($name) ?: 'Sheet1';
         return substr($name, 0, 31);
     }
