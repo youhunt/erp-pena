@@ -29,6 +29,8 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('excel-transfer/(:segment)/template', 'System\ExcelTransferController::template/$1');
         $routes->get('excel-transfer/(:segment)/import', 'System\ExcelTransferController::importForm/$1');
         $routes->post('excel-transfer/(:segment)/import', 'System\ExcelTransferController::import/$1');
+        $routes->post('excel-transfer/(:segment)/commit', 'System\ExcelTransferController::commit/$1');
+        $routes->get('excel-transfer/(:segment)/errors/(:segment)', 'System\ExcelTransferController::downloadErrors/$1/$2');
         $routes->get('excel-transfer/(:segment)/export', 'System\ExcelTransferController::export/$1');
     });
 
