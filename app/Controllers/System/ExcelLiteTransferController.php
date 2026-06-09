@@ -3,6 +3,7 @@
 namespace App\Controllers\System;
 
 use App\Controllers\BaseController;
+use App\Libraries\XlsxSheetReader;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use Config\Database;
@@ -48,19 +49,19 @@ class ExcelLiteTransferController extends BaseController
 
     public function index(): string
     {
-        return view('system/excel_transfer/index', ['title' => 'Excel Lite Import Export', 'resources' => $this->resources]);
+        return view('system/excel_transfer/index', ['title' => 'Excel Import Export', 'resources' => $this->resources]);
     }
 
     public function importForm(string $resource): string
     {
         $config = $this->config($resource, 'manage');
-        return view('system/excel_transfer/import', ['title' => 'Import ' . $config['title'] . ' from Excel Lite', 'resource' => $resource, 'config' => $config, 'headers' => $config['fields']]);
+        return view('system/excel_transfer/import', ['title' => 'Import ' . $config['title'] . ' from Excel', 'resource' => $resource, 'config' => $config, 'headers' => $config['fields']]);
     }
 
     public function template(string $resource)
     {
         $config = $this->config($resource, 'manage');
-        return $this->tabResponse($this->slug($config['title']) . '-template.xls', [$config['fields'], $this->sampleRow($config)]);
+        return $this->excelHtmlResponse($this->slug($config['title']) . '-template.xls', [$config['fields'], $this->sampleRow($config)]);
     }
 
     public function export(string $resource)
@@ -74,7 +75,7 @@ class ExcelLiteTransferController extends BaseController
         if ($db->fieldExists('deleted_at', $config['table'])) $builder->where('deleted_at', null);
         $rows = [$config['fields']];
         foreach ($builder->orderBy('id', 'ASC')->get()->getResultArray() as $row) $rows[] = $this->exportRow($config, $row);
-        return $this->tabResponse($this->slug($config['title']) . '-export.xls', $rows);
+        return $this->excelHtmlResponse($this->slug($config['title']) . '-export.xls', $rows);
     }
 
     public function import(string $resource)
@@ -84,7 +85,7 @@ class ExcelLiteTransferController extends BaseController
         $file = $this->request->getFile('excel_file');
         $uploadError = $this->validateUpload($file);
         if ($uploadError !== null) return redirect()->back()->with('error', $uploadError);
-        try { $preview = $this->previewTabFile($config, $file->getTempName()); }
+        try { $preview = $this->previewUploadedFile($config, $file->getTempName()); }
         catch (RuntimeException $exception) { return redirect()->back()->with('error', $exception->getMessage()); }
         $token = bin2hex(random_bytes(16));
         $returnTo = trim((string) $this->request->getPost('return_to'), '/') ?: 'system/excel-transfer';
@@ -104,12 +105,12 @@ class ExcelLiteTransferController extends BaseController
         $config = $this->config($resource, 'manage');
         $token = (string) $this->request->getPost('preview_token');
         $preview = $this->getPreview($token);
-        if ($preview === null || ($preview['resource'] ?? '') !== $resource) return redirect()->to(site_url('system/excel-transfer'))->with('error', 'Import preview expired. Upload ulang file Excel Lite.');
+        if ($preview === null || ($preview['resource'] ?? '') !== $resource) return redirect()->to(site_url('system/excel-transfer'))->with('error', 'Import preview expired. Upload ulang file Excel.');
         if (! empty($preview['errors'])) return redirect()->to(site_url($preview['return_to'] ?? 'system/excel-transfer'))->with('error', 'Tidak bisa post data yang masih punya error.');
         try { $result = $this->persistRows($config, $preview['valid_rows']); }
         catch (RuntimeException $exception) { return redirect()->to(site_url($preview['return_to'] ?? 'system/excel-transfer'))->with('error', $exception->getMessage()); }
         $this->clearPreview($token);
-        return redirect()->to(site_url($preview['return_to'] ?? 'system/excel-transfer'))->with('message', "Excel Lite import posted. {$result['created']} created, {$result['updated']} updated, {$result['skipped']} skipped.");
+        return redirect()->to(site_url($preview['return_to'] ?? 'system/excel-transfer'))->with('message', "Excel import posted. {$result['created']} created, {$result['updated']} updated, {$result['skipped']} skipped.");
     }
 
     public function downloadErrors(string $resource, string $token)
@@ -124,26 +125,27 @@ class ExcelLiteTransferController extends BaseController
             foreach (($preview['headers'] ?? []) as $header) $line[] = (string) ($raw[$header] ?? '');
             $rows[] = $line;
         }
-        return $this->tabResponse($this->slug($config['title']) . '-import-errors.xls', $rows);
+        return $this->excelHtmlResponse($this->slug($config['title']) . '-import-errors.xls', $rows);
     }
 
-    private function previewTabFile(array $config, string $path): array
+    private function previewUploadedFile(array $config, string $path): array
     {
-        $content = file_get_contents($path);
-        if ($content === false || trim($content) === '') throw new RuntimeException('Uploaded file is empty.');
-        if (str_starts_with($content, 'PK')) throw new RuntimeException('File .xlsx asli belum bisa diproses tanpa PHP ZipArchive. Download template ulang dari aplikasi ini lalu simpan tetap sebagai Excel Lite / Tab Delimited.');
-        $lines = preg_split('/\r\n|\n|\r/', ltrim($content, "\xEF\xBB\xBF"));
-        $headers = array_map('trim', str_getcsv((string) array_shift($lines), "\t"));
+        $rows = $this->readRows($path);
+        if ($rows === [] || ! isset($rows[0])) throw new RuntimeException('Uploaded file is empty.');
+        $headers = array_map(static fn ($value): string => trim((string) $value), $rows[0]);
         $required = $this->requiredHeader($config);
         if ($required !== null && ! in_array($required, $headers, true)) throw new RuntimeException('Header harus memiliki kolom ' . $required . '.');
         $validRows = $rawValidRows = $rawRowsByNumber = $errors = [];
         $total = 0;
-        foreach ($lines as $index => $line) {
-            if (trim((string) $line) === '') continue;
+        foreach (array_slice($rows, 1) as $index => $row) {
             $rowNumber = $index + 2;
-            $values = str_getcsv((string) $line, "\t");
             $data = [];
-            foreach ($headers as $i => $header) if ($header !== '' && in_array($header, $config['fields'], true)) $data[$header] = trim((string) ($values[$i] ?? '')) ?: null;
+            foreach ($headers as $i => $header) {
+                if ($header !== '' && in_array($header, $config['fields'], true)) {
+                    $value = trim((string) ($row[$i] ?? ''));
+                    $data[$header] = $value === '' ? null : $value;
+                }
+            }
             if ($data === []) continue;
             $total++;
             $rawRowsByNumber[$rowNumber] = $data;
@@ -151,6 +153,39 @@ class ExcelLiteTransferController extends BaseController
             catch (RuntimeException $e) { $errors[] = ['row' => $rowNumber, 'message' => $e->getMessage()]; }
         }
         return ['headers' => $headers, 'valid_rows' => $validRows, 'raw_valid_rows' => $rawValidRows, 'raw_rows_by_number' => $rawRowsByNumber, 'errors' => $errors, 'total' => $total];
+    }
+
+    private function readRows(string $path): array
+    {
+        $content = file_get_contents($path);
+        if ($content === false || $content === '') return [];
+        if (str_starts_with($content, 'PK')) return (new XlsxSheetReader())->readFirstSheet($path);
+        if (stripos($content, '<table') !== false) return $this->readHtmlTableRows($content);
+        return $this->readTabRows($content);
+    }
+
+    private function readTabRows(string $content): array
+    {
+        $lines = preg_split('/\r\n|\n|\r/', ltrim($content, "\xEF\xBB\xBF"));
+        $rows = [];
+        foreach ($lines as $line) {
+            if (trim((string) $line) === '') continue;
+            $rows[] = str_getcsv((string) $line, "\t");
+        }
+        return $rows;
+    }
+
+    private function readHtmlTableRows(string $content): array
+    {
+        $rows = [];
+        if (! preg_match_all('/<tr[^>]*>(.*?)<\/tr>/is', $content, $trMatches)) return [];
+        foreach ($trMatches[1] as $trHtml) {
+            preg_match_all('/<t[dh][^>]*>(.*?)<\/t[dh]>/is', $trHtml, $tdMatches);
+            $row = [];
+            foreach ($tdMatches[1] as $cellHtml) $row[] = html_entity_decode(trim(strip_tags($cellHtml)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            if ($row !== []) $rows[] = $row;
+        }
+        return $rows;
     }
 
     private function persistRows(array $config, array $rows): array
@@ -188,15 +223,29 @@ class ExcelLiteTransferController extends BaseController
     }
 
     private function exportRow(array $config, array $row): array { return array_map(static fn ($field) => (string) ($row[$field] ?? ''), $config['fields']); }
-    private function tabResponse(string $filename, array $rows) { $body = "\xEF\xBB\xBF"; foreach ($rows as $row) $body .= implode("\t", array_map([$this, 'safeCell'], $row)) . "\r\n"; return $this->response->setHeader('Content-Type', 'application/vnd.ms-excel; charset=UTF-8')->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')->setBody($body); }
-    private function safeCell(mixed $value): string { return str_replace(["\t", "\r", "\n"], ' ', (string) $value); }
+
+    private function excelHtmlResponse(string $filename, array $rows)
+    {
+        $html = "<html><head><meta charset=\"UTF-8\"><style>td,th{mso-number-format:'\\@';}</style></head><body><table border=\"1\">";
+        foreach ($rows as $rowIndex => $row) {
+            $html .= '<tr>';
+            foreach ($row as $cell) {
+                $tag = $rowIndex === 0 ? 'th' : 'td';
+                $html .= '<' . $tag . '>' . htmlspecialchars((string) $cell, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</' . $tag . '>';
+            }
+            $html .= '</tr>';
+        }
+        $html .= '</table></body></html>';
+        return $this->response->setHeader('Content-Type', 'application/vnd.ms-excel; charset=UTF-8')->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')->setBody($html);
+    }
+
     private function validateRequiredBusinessKey(array $config, array $data): void { $key = $this->requiredHeader($config); if ($key !== null && (($data[$key] ?? null) === null || ($data[$key] ?? '') === '')) throw new RuntimeException('Required field ' . $key . ' is empty.'); }
     private function config(string $resource, string $mode): array { if (! isset($this->resources[$resource])) throw PageNotFoundException::forPageNotFound(); $config = $this->resources[$resource]; $permission = $config['permission'] . ($mode === 'view' ? '.view' : '.manage'); $user = auth()->user(); if (! $user || (! $user->can($permission) && ! $user->inGroup('superadmin'))) throw PageNotFoundException::forPageNotFound(); return $config; }
     private function requiredHeader(array $config): ?string { if (! empty($config['key'])) return (string) $config['key']; return ! empty($config['unique']) ? (string) $config['unique'][0] : (in_array('code', $config['fields'], true) ? 'code' : null); }
     private function findExisting(array $config, array $data): ?array { $builder = Database::connect()->table($config['table']); if (! empty($config['key']) && ! empty($data[$config['key']])) $builder->where($config['key'], $data[$config['key']]); elseif (! empty($config['unique'])) { foreach ($config['unique'] as $field) { if (! array_key_exists($field, $data)) return null; $builder->where($field, $data[$field]); } } else return null; if ($config['tenant']) $builder->where('company_id', $data['company_id'] ?? 0); if ($config['site']) $builder->where('site_id', $data['site_id'] ?? null); return $builder->get()->getRowArray() ?: null; }
     private function hasRequiredTenant(array $config): bool { $tenant = new TenantContext(session()); if ($config['tenant'] && $tenant->activeCompanyId() === null) return false; if ($config['site'] && $tenant->activeSiteId() === null) return false; return true; }
     private function tenantRequirementMessage(array $config): string { return $config['site'] ? 'Active company and active site are required before importing.' : 'Active company is required before importing.'; }
-    private function validateUpload($file): ?string { if ($file === null || ! $file->isValid()) return 'Please upload a valid Excel Lite file.'; if ($file->getSize() < 1) return 'Uploaded file is empty.'; if ($file->getSize() > self::MAX_UPLOAD_BYTES) return 'File is too large. Maximum 10 MB.'; if (! in_array(strtolower($file->getClientExtension()), ['xls', 'tsv', 'txt'], true)) return 'Gunakan file template Excel Lite dari aplikasi (.xls). File .xlsx membutuhkan PHP ZipArchive.'; return null; }
+    private function validateUpload($file): ?string { if ($file === null || ! $file->isValid()) return 'Please upload a valid Excel file.'; if ($file->getSize() < 1) return 'Uploaded file is empty.'; if ($file->getSize() > self::MAX_UPLOAD_BYTES) return 'File is too large. Maximum 10 MB.'; if (! in_array(strtolower($file->getClientExtension()), ['xlsx', 'xls', 'tsv', 'txt'], true)) return 'Gunakan file Excel .xlsx, .xls, .tsv, atau .txt.'; return null; }
     private function storePreview(string $token, array $preview): void { $all = session(self::SESSION_KEY) ?? []; $all[$token] = $preview; session()->set(self::SESSION_KEY, $all); }
     private function getPreview(string $token): ?array { $all = session(self::SESSION_KEY) ?? []; return is_array($all[$token] ?? null) ? $all[$token] : null; }
     private function clearPreview(string $token): void { $all = session(self::SESSION_KEY) ?? []; unset($all[$token]); session()->set(self::SESSION_KEY, $all); }
