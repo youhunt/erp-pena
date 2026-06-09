@@ -1,6 +1,11 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php
+$currentPath = trim((string) uri_string(), '/');
+$isSetupFlow = str_starts_with($currentPath, 'setup/');
+$returnTo = $isSetupFlow ? 'setup/' . $resource : 'system/excel-transfer';
+?>
 <div class="row justify-content-center">
     <div class="col-xl-8">
         <div class="card">
@@ -8,13 +13,13 @@
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <div>
                         <h4 class="card-title mb-1"><?= esc($title) ?></h4>
-                        <p class="text-muted mb-0">Upload native Microsoft Excel file for <?= esc($config['title']) ?>.</p>
+                        <p class="text-muted mb-0">Upload native Microsoft Excel file for <?= esc($config['title']) ?>. Data will be validated and previewed before posting.</p>
                     </div>
-                    <a href="<?= site_url('system/excel-transfer') ?>" class="btn btn-light">Back</a>
+                    <a href="<?= site_url($returnTo) ?>" class="btn btn-light">Back</a>
                 </div>
 
                 <div class="alert alert-warning">
-                    Download the Excel template first, fill data in Microsoft Excel, and keep the first-row headers unchanged.
+                    Download the Excel template first, fill data in Microsoft Excel, and keep the first-row headers unchanged. Uploading here will only preview and validate the data first.
                 </div>
 
                 <div class="mb-3">
@@ -23,8 +28,9 @@
                     </a>
                 </div>
 
-                <form method="post" action="<?= site_url('system/excel-transfer/' . $resource . '/import') ?>" enctype="multipart/form-data">
+                <form method="post" action="<?= site_url($currentPath) ?>" enctype="multipart/form-data">
                     <?= csrf_field() ?>
+                    <input type="hidden" name="return_to" value="<?= esc($returnTo) ?>">
                     <div class="mb-3">
                         <label class="form-label">Excel File (.xlsx)</label>
                         <input type="file" name="excel_file" class="form-control" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
@@ -41,10 +47,10 @@
                     </div>
 
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary" onclick="return confirm('Import this Excel file?')">
-                            <i class="bx bx-upload me-1"></i> Import Excel
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bx bx-search-alt me-1"></i> Preview Excel
                         </button>
-                        <a href="<?= site_url('system/excel-transfer') ?>" class="btn btn-light">Cancel</a>
+                        <a href="<?= site_url($returnTo) ?>" class="btn btn-light">Cancel</a>
                     </div>
                 </form>
             </div>
