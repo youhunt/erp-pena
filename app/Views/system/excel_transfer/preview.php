@@ -58,7 +58,8 @@
                 <?php endif ?>
 
                 <?php if (! empty($previewRows)): ?>
-                    <h5 class="mb-3">Valid Row Preview</h5>
+                    <h5 class="mb-1">Valid Row Preview</h5>
+                    <p class="text-muted small mb-3">Excel Row mengikuti nomor baris asli di file. Baris 1 adalah header, jadi data pertama mulai dari baris 2.</p>
                     <div class="table-responsive">
                         <table class="table table-sm table-nowrap table-hover align-middle">
                             <thead class="table-light">

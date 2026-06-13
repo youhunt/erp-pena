@@ -191,6 +191,12 @@ $formatValue = static function (string $field, mixed $value) use ($relationLabel
                 </tbody>
             </table>
         </div>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
+            <div class="text-muted small" id="masterPaginationInfo"></div>
+            <nav aria-label="Master data pagination">
+                <ul class="pagination pagination-sm mb-0" id="masterPagination"></ul>
+            </nav>
+        </div>
     </div>
 </div>
 <?= $this->endSection() ?>
@@ -203,38 +209,96 @@ $formatValue = static function (string $field, mixed $value) use ($relationLabel
     const status = document.getElementById('masterStatusFilter');
     const perPage = document.getElementById('masterPerPage');
     const reset = document.getElementById('masterResetFilter');
+    const pagination = document.getElementById('masterPagination');
+    const paginationInfo = document.getElementById('masterPaginationInfo');
     if (!table) return;
 
     const rows = Array.from(table.querySelectorAll('tbody tr'));
+    let currentPage = 1;
 
-    function applyFilter() {
+    function pageButton(label, page, disabled, active) {
+        const li = document.createElement('li');
+        li.className = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+
+        const button = document.createElement('button');
+        button.className = 'page-link';
+        button.type = 'button';
+        button.textContent = label;
+        button.disabled = disabled;
+        button.addEventListener('click', function () {
+            currentPage = page;
+            applyFilter();
+        });
+
+        li.appendChild(button);
+        return li;
+    }
+
+    function renderPagination(totalMatched, limit) {
+        if (!pagination || !paginationInfo) return;
+
+        pagination.innerHTML = '';
+        const totalPages = Math.max(1, Math.ceil(totalMatched / limit));
+        currentPage = Math.min(Math.max(currentPage, 1), totalPages);
+        const start = totalMatched === 0 ? 0 : ((currentPage - 1) * limit) + 1;
+        const end = Math.min(currentPage * limit, totalMatched);
+        paginationInfo.textContent = `Showing ${start}-${end} of ${totalMatched} rows`;
+
+        pagination.appendChild(pageButton('Previous', Math.max(1, currentPage - 1), currentPage === 1, false));
+
+        const pages = new Set([1, totalPages, currentPage - 1, currentPage, currentPage + 1]);
+        let lastPage = 0;
+        Array.from(pages)
+            .filter(page => page >= 1 && page <= totalPages)
+            .sort((a, b) => a - b)
+            .forEach(page => {
+                if (lastPage && page - lastPage > 1) {
+                    const li = document.createElement('li');
+                    li.className = 'page-item disabled';
+                    li.innerHTML = '<span class="page-link">...</span>';
+                    pagination.appendChild(li);
+                }
+                pagination.appendChild(pageButton(String(page), page, false, page === currentPage));
+                lastPage = page;
+            });
+
+        pagination.appendChild(pageButton('Next', Math.min(totalPages, currentPage + 1), currentPage === totalPages, false));
+    }
+
+    function applyFilter(resetPage) {
+        if (resetPage) currentPage = 1;
         const keyword = (search.value || '').toLowerCase();
         const statusValue = status.value;
-        let visible = 0;
         const limit = parseInt(perPage.value, 10) || 25;
+        const matchedRows = [];
 
         rows.forEach(row => {
             const text = row.innerText.toLowerCase();
             const rowStatus = row.dataset.status || 'active';
             const matchedKeyword = keyword === '' || text.includes(keyword);
             const matchedStatus = statusValue === 'all' || rowStatus === statusValue;
-            const shouldShow = matchedKeyword && matchedStatus && visible < limit;
-            row.style.display = shouldShow ? '' : 'none';
-            if (matchedKeyword && matchedStatus) visible++;
+            if (matchedKeyword && matchedStatus) matchedRows.push(row);
+            row.style.display = 'none';
         });
+
+        const totalPages = Math.max(1, Math.ceil(matchedRows.length / limit));
+        currentPage = Math.min(currentPage, totalPages);
+        const startIndex = (currentPage - 1) * limit;
+        matchedRows.slice(startIndex, startIndex + limit).forEach(row => row.style.display = '');
+        renderPagination(matchedRows.length, limit);
     }
 
-    [search, status, perPage].forEach(el => el && el.addEventListener('input', applyFilter));
+    [search, status, perPage].forEach(el => el && el.addEventListener('input', () => applyFilter(true)));
     if (reset) {
         reset.addEventListener('click', function () {
             search.value = '';
             status.value = 'all';
             perPage.value = '25';
-            applyFilter();
+            applyFilter(true);
         });
     }
 
-    applyFilter();
+    applyFilter(true);
 })();
 </script>
 <?= $this->endSection() ?>
