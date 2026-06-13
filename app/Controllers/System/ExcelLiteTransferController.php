@@ -13,7 +13,8 @@ use RuntimeException;
 class ExcelLiteTransferController extends BaseController
 {
     private const MAX_UPLOAD_BYTES = 10485760;
-    private const SESSION_KEY = 'excel_lite_import_previews';
+    private const PREVIEW_DIR = 'excel_lite_import_previews';
+    private const PREVIEW_TTL_SECONDS = 21600;
 
     private array $resources;
 
@@ -269,9 +270,9 @@ class ExcelLiteTransferController extends BaseController
         foreach ($this->excelHeaders($config) as $field) {
             if ($field === 'company_code') { $line[] = $this->lookupCodeById('companies', (int) ($row['company_id'] ?? 0)); continue; }
             if ($field === 'site_code') { $line[] = $this->lookupCodeById('sites', (int) ($row['site_id'] ?? 0)); continue; }
-            if (isset($this->relations[$field])) { $line[] = $this->lookupCodeById($this->relations[$field]['table'], (int) ($row[$this->relations[$field]['field']] ?? 0)); continue; }
             if ($config['table'] === 'provinces' && $field === 'country_code') { $line[] = $this->lookupCodeById('countries', (int) ($row['parent_id'] ?? 0)); continue; }
             if ($config['table'] === 'cities' && $field === 'province_code') { $line[] = $this->lookupCodeById('provinces', (int) ($row['parent_id'] ?? 0)); continue; }
+            if (isset($this->relations[$field])) { $line[] = $this->lookupCodeById($this->relations[$field]['table'], (int) ($row[$this->relations[$field]['field']] ?? 0)); continue; }
             $line[] = (string) ($row[$field] ?? '');
         }
         return $line;
@@ -314,7 +315,7 @@ class ExcelLiteTransferController extends BaseController
     private function lookupIdByCode(string $table, string $code, bool $tenant, bool $site, ?int $companyId, ?int $siteId): ?int
     {
         $db = Database::connect();
-        $builder = $db->table($table)->where('code', $code);
+        $builder = $db->table($table)->where($this->codeColumn($table), $code);
         $tenantContext = new TenantContext(session());
         $company = $companyId ?? $tenantContext->activeCompanyId();
         $activeSite = $siteId ?? $tenantContext->activeSiteId();
@@ -328,7 +329,19 @@ class ExcelLiteTransferController extends BaseController
     {
         if ($id < 1) return '';
         $row = Database::connect()->table($table)->where('id', $id)->get()->getRowArray();
-        return (string) ($row['code'] ?? '');
+        return (string) ($row[$this->codeColumn($table)] ?? $row['code'] ?? '');
+    }
+
+    private function codeColumn(string $table): string
+    {
+        return match ($table) {
+            'items' => 'item_code',
+            'customers' => 'customer',
+            'suppliers' => 'supplier',
+            'customer_terms', 'supplier_terms' => 'terms_code',
+            'customer_promotions', 'supplier_promotions' => 'promo_code',
+            default => 'code',
+        };
     }
 
     private function xlsxResponse(string $filename, array $rows, string $sheetName)
@@ -347,9 +360,53 @@ class ExcelLiteTransferController extends BaseController
     private function requiredHeader(array $config): ?string { if (! empty($config['key'])) return (string) $config['key']; return ! empty($config['unique']) ? (string) $config['fields'][0] : (in_array('code', $config['fields'], true) ? 'code' : null); }
     private function findExisting(array $config, array $data): ?array { $builder = Database::connect()->table($config['table']); if (! empty($config['key']) && ! empty($data[$config['key']])) $builder->where($config['key'], $data[$config['key']]); elseif (! empty($config['unique'])) { foreach ($config['unique'] as $field) { if (! array_key_exists($field, $data)) return null; $builder->where($field, $data[$field]); } } else return null; if ($config['tenant']) $builder->where('company_id', $data['company_id'] ?? 0); if ($config['site']) $builder->where('site_id', $data['site_id'] ?? null); return $builder->get()->getRowArray() ?: null; }
     private function validateUpload($file): ?string { if ($file === null || ! $file->isValid()) return 'Please upload a valid Excel file.'; if ($file->getSize() < 1) return 'Uploaded file is empty.'; if ($file->getSize() > self::MAX_UPLOAD_BYTES) return 'File is too large. Maximum 10 MB.'; if (! in_array(strtolower($file->getClientExtension()), ['xlsx', 'xls', 'tsv', 'txt'], true)) return 'Gunakan file Excel .xlsx, .xls, .tsv, atau .txt.'; return null; }
-    private function storePreview(string $token, array $preview): void { $all = session(self::SESSION_KEY) ?? []; $all[$token] = $preview; session()->set(self::SESSION_KEY, $all); }
-    private function getPreview(string $token): ?array { $all = session(self::SESSION_KEY) ?? []; return is_array($all[$token] ?? null) ? $all[$token] : null; }
-    private function clearPreview(string $token): void { $all = session(self::SESSION_KEY) ?? []; unset($all[$token]); session()->set(self::SESSION_KEY, $all); }
+    private function storePreview(string $token, array $preview): void
+    {
+        $path = $this->previewPath($token);
+        if ($path === null) throw new RuntimeException('Token preview import Excel tidak valid.');
+
+        $dir = $this->previewDir();
+        if (! is_dir($dir) && ! mkdir($dir, 0775, true) && ! is_dir($dir)) {
+            throw new RuntimeException('Tidak bisa membuat folder cache import Excel.');
+        }
+
+        $json = json_encode(['created_at' => time(), 'preview' => $preview], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        if ($json === false || file_put_contents($path, $json, LOCK_EX) === false) {
+            throw new RuntimeException('Tidak bisa menyimpan preview import Excel.');
+        }
+    }
+
+    private function getPreview(string $token): ?array
+    {
+        $path = $this->previewPath($token);
+        if ($path === null || ! is_file($path)) return null;
+
+        $payload = json_decode((string) file_get_contents($path), true);
+        if (! is_array($payload) || ! is_array($payload['preview'] ?? null)) return null;
+        if ((int) ($payload['created_at'] ?? 0) < time() - self::PREVIEW_TTL_SECONDS) {
+            @unlink($path);
+            return null;
+        }
+
+        return $payload['preview'];
+    }
+
+    private function clearPreview(string $token): void
+    {
+        $path = $this->previewPath($token);
+        if ($path !== null && is_file($path)) @unlink($path);
+    }
+
+    private function previewDir(): string
+    {
+        return rtrim(WRITEPATH, '\\/') . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . self::PREVIEW_DIR;
+    }
+
+    private function previewPath(string $token): ?string
+    {
+        if (! preg_match('/^[a-f0-9]{32}$/', $token)) return null;
+        return $this->previewDir() . DIRECTORY_SEPARATOR . $token . '.json';
+    }
     private function sampleRow(array $config): array { return array_map(function (string $header) use ($config): string { return match ($header) { 'company_code' => 'PENA', 'site_code' => 'HO', 'code' => 'EXAMPLE', 'name' => 'Example ' . $config['title'], 'description' => 'Example description', 'warehouse_code', 'stockwhs', 'shipwhs' => 'MAIN', 'country_code' => 'IDN', 'province_code' => 'DKI', 'city_code' => 'JKT', 'postal_code' => '12190', 'from_uom_code', 'to_uom_code', 'stockuom', 'purchaseuom', 'sellinguom' => 'PCS', 'item_code_ref', 'item_code' => 'ITEM001', 'vat_code', 'vat' => 'VAT11', 'customer' => 'CUST-999', 'customern' => 'Example Customer', 'supplier' => 'SUP-999', 'supplierna' => 'Example Supplier', 'terms_code', 'terms' => 'NET30', 'promo_code' => 'PROMO-001', 'line_no' => '1', 'email' => 'demo@example.com', 'is_active', 'active' => '1', 'rate', 'item_price', 'purchasep', 'sellingprice', 'multiplier', 'divider', 'terms_days' => '0', default => '', }; }, $this->excelHeaders($config)); }
     private function slug(string $value): string { return trim(strtolower((string) preg_replace('/[^a-zA-Z0-9]+/', '-', $value)), '-'); }
     private function itemFields(): array { return ['item_code','item_name','item_coded','item_named','shelf_life','stockuom','purchaseuom','sellinguom','stockwhs','item_price','purchasep','sellingprice','vat','item_length','item_width','item_heigh','item_diam','item_lengt','item_widthh','item_heigh_uom','item_diam_uom','out_length','out_width','out_height','out_diame','out_lengt','out_widthh','out_height_uom','out_diame_uom','item_group','item_subg','item_class','item_subc','item_type','item_subty','item_atribu','active']; }
