@@ -235,14 +235,18 @@ class ExcelLiteTransferController extends BaseController
 
     private function normalizeBeforeSave(array $config, array $data, int $rowNumber): array
     {
+        $companyCode = $data['company_code'] ?? null;
+        $siteCode = $data['site_code'] ?? null;
+
         if (! empty($config['tenant'])) {
-            $data['company_id'] = $this->resolveCompanyId($data['company_code'] ?? null, $rowNumber);
+            $data['company_id'] = $this->resolveCompanyId($companyCode, $rowNumber);
             unset($data['company_code']);
         }
         if (! empty($config['site'])) {
-            $data['site_id'] = $this->resolveSiteId($data['site_code'] ?? null, $data['company_id'] ?? null, $rowNumber);
+            $data['site_id'] = $this->resolveSiteId($siteCode, $data['company_id'] ?? null, $rowNumber);
             unset($data['site_code']);
         }
+        $this->syncLegacyScopeCodes($config, $data, $companyCode, $siteCode);
 
         foreach ($this->relations as $alias => $relation) {
             if (! array_key_exists($alias, $data)) continue;
@@ -262,6 +266,17 @@ class ExcelLiteTransferController extends BaseController
         elseif ($config['table'] === 'customers') $data += ['code' => $data['customer'] ?? null, 'name' => $data['customern'] ?? null, 'terms_code' => $data['terms'] ?? null, 'phone' => $data['officephon'] ?? null, 'email' => $data['email'] ?? null, 'address' => $data['officeaddre'] ?? null, 'is_active' => $data['active'] ?? 1];
         elseif ($config['table'] === 'suppliers') $data += ['code' => $data['supplier'] ?? null, 'name' => $data['supplierna'] ?? null, 'terms_code' => $data['terms'] ?? null, 'phone' => $data['officephon'] ?? null, 'email' => $data['email'] ?? null, 'address' => $data['officeaddre'] ?? null, 'is_active' => $data['active'] ?? 1];
         return $data;
+    }
+
+    private function syncLegacyScopeCodes(array $config, array &$data, ?string $companyCode, ?string $siteCode): void
+    {
+        $db = Database::connect();
+        if (! empty($config['tenant']) && $db->fieldExists('company', $config['table'])) {
+            $data['company'] = (string) ($companyCode ?: $this->lookupCodeById('companies', (int) ($data['company_id'] ?? 0)));
+        }
+        if (! empty($config['site']) && $db->fieldExists('site', $config['table'])) {
+            $data['site'] = (string) ($siteCode ?: $this->lookupCodeById('sites', (int) ($data['site_id'] ?? 0)));
+        }
     }
 
     private function exportRow(array $config, array $row): array
