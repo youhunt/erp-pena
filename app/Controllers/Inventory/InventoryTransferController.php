@@ -3,6 +3,7 @@
 namespace App\Controllers\Inventory;
 
 use App\Controllers\BaseController;
+use App\Services\AuditLogService;
 use App\Services\Inventory\InventoryStockService;
 use App\Services\TenantContext;
 use Config\Database;
@@ -145,6 +146,22 @@ class InventoryTransferController extends BaseController
             return redirect()->back()->withInput()->with('error', $exception->getMessage());
         }
 
+        $this->auditTransfer('transfer.create', [
+            'id' => $headerId,
+            'company_id' => $companyId,
+            'site_id' => $siteId,
+            'transfer_no' => $transferNo,
+        ], [
+            'status' => 'draft',
+            'transfer_date' => $transferDate,
+            'line_count' => count($lines),
+            'total_qty' => array_sum(array_column($lines, 'qty')),
+            'from_warehouse_id' => $fromWarehouseId,
+            'from_location_id' => $fromLocationId,
+            'to_warehouse_id' => $toWarehouseId,
+            'to_location_id' => $toLocationId,
+        ]);
+
         return redirect()->to('/inventory/transfers/' . $headerId)->with('message', 'Inventory transfer draft saved.');
     }
 
@@ -166,6 +183,15 @@ class InventoryTransferController extends BaseController
                     'updated_by' => auth()->id(),
                     'updated_at' => $now,
                 ]);
+
+            $this->auditTransfer('transfer.submit', $transfer, [
+                'old_status' => $transfer['status'],
+                'new_status' => 'submitted',
+                'submitted_at' => $now,
+                'submitted_by' => auth()->id(),
+            ], [
+                'status' => $transfer['status'],
+            ]);
         } catch (Throwable $exception) {
             return redirect()->back()->with('error', $exception->getMessage());
         }
@@ -261,6 +287,17 @@ class InventoryTransferController extends BaseController
             return redirect()->back()->with('error', $exception->getMessage());
         }
 
+        $this->auditTransfer('transfer.post', $transfer, [
+            'old_status' => $transfer['status'],
+            'new_status' => 'posted',
+            'posted_at' => $now,
+            'posted_by' => auth()->id(),
+            'line_count' => count($lines),
+            'movement_count' => count($lines) * 2,
+        ], [
+            'status' => $transfer['status'],
+        ]);
+
         return redirect()->to('/inventory/transfers/' . $id)->with('message', 'Inventory transfer posted.');
     }
 
@@ -276,16 +313,27 @@ class InventoryTransferController extends BaseController
             }
 
             $now = date('Y-m-d H:i:s');
+            $cancelReason = trim((string) $this->request->getPost('cancel_reason')) ?: null;
             Database::connect()->table('inventory_transfer_headers')
                 ->where('id', $id)
                 ->update([
                     'status' => 'cancelled',
                     'cancelled_at' => $now,
                     'cancelled_by' => auth()->id(),
-                    'cancel_reason' => trim((string) $this->request->getPost('cancel_reason')) ?: null,
+                    'cancel_reason' => $cancelReason,
                     'updated_by' => auth()->id(),
                     'updated_at' => $now,
                 ]);
+
+            $this->auditTransfer('transfer.cancel', $transfer, [
+                'old_status' => $transfer['status'],
+                'new_status' => 'cancelled',
+                'cancelled_at' => $now,
+                'cancelled_by' => auth()->id(),
+                'cancel_reason' => $cancelReason,
+            ], [
+                'status' => $transfer['status'],
+            ]);
         } catch (Throwable $exception) {
             return redirect()->back()->with('error', $exception->getMessage());
         }
@@ -413,6 +461,36 @@ class InventoryTransferController extends BaseController
     private function nextTransferNo(): string
     {
         return 'TRF-' . date('Ymd-His');
+    }
+
+    /**
+     * @param array<string, mixed> $transfer
+     * @param array<string, mixed> $newValues
+     * @param array<string, mixed>|null $oldValues
+     */
+    private function auditTransfer(string $action, array $transfer, array $newValues, ?array $oldValues = null): void
+    {
+        (new AuditLogService())->log('inventory.transfer', $action, [
+            'company_id' => $transfer['company_id'] ?? null,
+            'site_id' => $transfer['site_id'] ?? null,
+            'table_name' => 'inventory_transfer_headers',
+            'record_id' => $transfer['id'] ?? null,
+            'record_code' => $transfer['transfer_no'] ?? null,
+            'description' => $this->auditDescription($action, (string) ($transfer['transfer_no'] ?? '-')),
+            'old_values' => $oldValues,
+            'new_values' => $newValues,
+        ]);
+    }
+
+    private function auditDescription(string $action, string $transferNo): string
+    {
+        return match ($action) {
+            'transfer.create' => "Inventory transfer {$transferNo} draft created.",
+            'transfer.submit' => "Inventory transfer {$transferNo} submitted.",
+            'transfer.post' => "Inventory transfer {$transferNo} posted and stock moved.",
+            'transfer.cancel' => "Inventory transfer {$transferNo} cancelled.",
+            default => "Inventory transfer {$transferNo} updated.",
+        };
     }
 
     private function nullableInt(mixed $value): ?int
