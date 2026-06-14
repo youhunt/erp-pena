@@ -40,6 +40,10 @@ class TenantContext
      */
     public function accessibleCompanies(int $userId): array
     {
+        if ($this->isSuperadmin($userId)) {
+            return $this->companies->where('is_active', 1)->orderBy('code', 'ASC')->findAll();
+        }
+
         $rows = db_connect()->table('user_company_access access')
             ->select('companies.*')
             ->join('companies', 'companies.id = access.company_id')
@@ -55,9 +59,7 @@ class TenantContext
             return $rows;
         }
 
-        return $this->isSuperadmin($userId)
-            ? $this->companies->where('is_active', 1)->orderBy('code', 'ASC')->findAll()
-            : [];
+        return [];
     }
 
     /**
@@ -69,6 +71,14 @@ class TenantContext
 
         if ($companyId === null) {
             return [];
+        }
+
+        if ($this->isSuperadmin($userId)) {
+            return $this->sites
+                ->where('company_id', $companyId)
+                ->where('is_active', 1)
+                ->orderBy('code', 'ASC')
+                ->findAll();
         }
 
         $rows = db_connect()->table('user_site_access access')
@@ -87,9 +97,7 @@ class TenantContext
             return $rows;
         }
 
-        return $this->isSuperadmin($userId)
-            ? $this->sites->where('company_id', $companyId)->where('is_active', 1)->orderBy('code', 'ASC')->findAll()
-            : [];
+        return [];
     }
 
     public function userCanAccessCompany(int $userId, int $companyId): bool
