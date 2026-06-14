@@ -58,6 +58,7 @@
                         <tr>
                             <th>#</th>
                             <th>Item</th>
+                            <th>Batch No</th>
                             <th class="text-end">Ordered</th>
                             <th class="text-end">Reserved</th>
                             <th class="text-end">Delivered</th>
@@ -68,7 +69,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                    <?php foreach ($lines as $line): ?>
+                    <?php foreach ($lines as $index => $line): ?>
                         <?php
                             $itemCode = (string) ($line['item_code'] ?? '');
                             $available = (float) (($stockByItem[$itemCode]['available'] ?? 0));
@@ -78,6 +79,7 @@
                         <tr>
                             <td><?= esc($line['line_no']) ?><input type="hidden" name="sales_order_line_id[]" value="<?= (int) $line['id'] ?>"></td>
                             <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
+                            <td><input type="text" name="batch_no[]" class="form-control" value="<?= esc(old('batch_no.' . $index)) ?>" placeholder="Optional"></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_ordered'] ?? $line['qty'] ?? 0), 4)) ?></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_reserved'] ?? 0), 4)) ?></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_delivered'] ?? 0), 4)) ?></td>
@@ -89,7 +91,7 @@
                     <?php endforeach ?>
 
                     <?php if ($lines === []): ?>
-                        <tr><td colspan="9" class="text-center text-muted py-4">No outstanding line to deliver.</td></tr>
+                        <tr><td colspan="10" class="text-center text-muted py-4">No outstanding line to deliver.</td></tr>
                     <?php endif ?>
                     </tbody>
                 </table>

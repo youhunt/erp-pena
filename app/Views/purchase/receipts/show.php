@@ -37,12 +37,13 @@
                 <h4 class="card-title mb-3">Received Lines</h4>
                 <div class="table-responsive">
                     <table class="table table-nowrap align-middle mb-0">
-                        <thead class="table-light"><tr><th>#</th><th>Item</th><th class="text-end">Qty</th><th>UoM</th><th class="text-end">Unit Cost</th></tr></thead>
+                        <thead class="table-light"><tr><th>#</th><th>Item</th><th>Batch</th><th class="text-end">Qty</th><th>UoM</th><th class="text-end">Unit Cost</th></tr></thead>
                         <tbody>
                         <?php foreach ($lines as $line): ?>
                             <tr>
                                 <td><?= esc($line['line_no']) ?></td>
                                 <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
+                                <td><?= esc(($line['batch_no'] ?? '') !== '' ? $line['batch_no'] : '-') ?></td>
                                 <td class="text-end"><?= esc(number_format((float) $line['qty_received'], 4)) ?></td>
                                 <td><?= esc($line['uom_code'] ?? '-') ?></td>
                                 <td class="text-end"><?= esc(number_format((float) $line['unit_cost'], 6)) ?></td>

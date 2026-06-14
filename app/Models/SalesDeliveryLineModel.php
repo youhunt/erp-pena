@@ -12,7 +12,7 @@ class SalesDeliveryLineModel extends Model
     protected $useTimestamps = true;
     protected $allowedFields = [
         'sales_delivery_id', 'sales_order_id', 'sales_order_line_id', 'line_no',
-        'item_id', 'item_code', 'item_name', 'qty_delivered', 'uom_code',
+        'item_id', 'item_code', 'batch_no', 'item_name', 'qty_delivered', 'uom_code',
         'unit_price', 'warehouse_id', 'location_id',
     ];
 }

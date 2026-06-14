@@ -79,6 +79,7 @@ class SalesDeliveryService
                     'line_no' => $soLine['line_no'],
                     'item_id' => $soLine['item_id'] ?? null,
                     'item_code' => $soLine['item_code'] ?? null,
+                    'batch_no' => trim((string) ($line['batch_no'] ?? '')),
                     'item_name' => $soLine['item_name'] ?? null,
                     'qty_delivered' => $qtyDeliver,
                     'uom_code' => $soLine['uom_code'] ?? 'PCS',
@@ -107,6 +108,7 @@ class SalesDeliveryService
                         'location_id' => null,
                         'item_id' => $soLine['item_id'] ?? null,
                         'item_code' => $soLine['item_code'] ?? '',
+                        'batch_no' => trim((string) ($line['batch_no'] ?? '')),
                         'uom_code' => $soLine['uom_code'] ?? 'PCS',
                         'qty' => $qtyDeliver,
                     ], $userId);
@@ -119,6 +121,7 @@ class SalesDeliveryService
                     'location_id' => $header['location_id'] ?? null,
                     'item_id' => $soLine['item_id'] ?? null,
                     'item_code' => $soLine['item_code'] ?? '',
+                    'batch_no' => trim((string) ($line['batch_no'] ?? '')),
                     'item_name' => $soLine['item_name'] ?? null,
                     'uom_code' => $soLine['uom_code'] ?? 'PCS',
                     'qty' => $qtyDeliver,

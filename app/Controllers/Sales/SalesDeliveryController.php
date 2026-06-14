@@ -143,11 +143,16 @@ class SalesDeliveryController extends BaseController
     {
         $lineIds = (array) $this->request->getPost('sales_order_line_id');
         $qtys = (array) $this->request->getPost('qty_delivered');
+        $batchNos = (array) $this->request->getPost('batch_no');
         $lines = [];
         foreach ($lineIds as $index => $lineId) {
             $qty = (float) ($qtys[$index] ?? 0);
             if ((int) $lineId > 0 && $qty > 0) {
-                $lines[] = ['sales_order_line_id' => (int) $lineId, 'qty_delivered' => $qty];
+                $lines[] = [
+                    'sales_order_line_id' => (int) $lineId,
+                    'qty_delivered' => $qty,
+                    'batch_no' => trim((string) ($batchNos[$index] ?? '')),
+                ];
             }
         }
         return $lines;
@@ -210,7 +215,7 @@ class SalesDeliveryController extends BaseController
         }
 
         $builder = $db->table('inventory_stock_balances')
-            ->select('item_code, qty_on_hand, qty_reserved, qty_available')
+            ->select('item_code, SUM(qty_on_hand) qty_on_hand, SUM(qty_reserved) qty_reserved, SUM(qty_available) qty_available')
             ->whereIn('item_code', $codes);
 
         if ($tenant->activeCompanyId() !== null) {
@@ -223,7 +228,7 @@ class SalesDeliveryController extends BaseController
         $locationId === null ? $builder->where('location_id', null) : $builder->where('location_id', $locationId);
 
         $stock = [];
-        foreach ($builder->get()->getResultArray() as $row) {
+        foreach ($builder->groupBy('item_code')->get()->getResultArray() as $row) {
             $stock[(string) $row['item_code']] = [
                 'on_hand' => (float) ($row['qty_on_hand'] ?? 0),
                 'reserved' => (float) ($row['qty_reserved'] ?? 0),

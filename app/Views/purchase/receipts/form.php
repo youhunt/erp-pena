@@ -58,6 +58,7 @@
                         <tr>
                             <th>#</th>
                             <th>Item</th>
+                            <th>Batch No</th>
                             <th class="text-end">Ordered</th>
                             <th class="text-end">Received</th>
                             <th class="text-end">Outstanding</th>
@@ -66,10 +67,11 @@
                         </tr>
                     </thead>
                     <tbody>
-                    <?php foreach ($lines as $line): ?>
+                    <?php foreach ($lines as $index => $line): ?>
                         <tr>
                             <td><?= esc($line['line_no']) ?><input type="hidden" name="purchase_order_line_id[]" value="<?= (int) $line['id'] ?>"></td>
                             <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
+                            <td><input type="text" name="batch_no[]" class="form-control" value="<?= esc(old('batch_no.' . $index)) ?>" placeholder="Optional"></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_ordered'] ?? $line['qty'] ?? 0), 4)) ?></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_received'] ?? 0), 4)) ?></td>
                             <td class="text-end fw-semibold"><?= esc(number_format((float) ($line['qty_outstanding'] ?? $line['qty'] ?? 0), 4)) ?></td>
@@ -79,7 +81,7 @@
                     <?php endforeach ?>
 
                     <?php if ($lines === []): ?>
-                        <tr><td colspan="7" class="text-center text-muted py-4">No outstanding line to receive.</td></tr>
+                        <tr><td colspan="8" class="text-center text-muted py-4">No outstanding line to receive.</td></tr>
                     <?php endif ?>
                     </tbody>
                 </table>

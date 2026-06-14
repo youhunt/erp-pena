@@ -134,11 +134,16 @@ class PurchaseReceiptController extends BaseController
     {
         $lineIds = (array) $this->request->getPost('purchase_order_line_id');
         $qtys = (array) $this->request->getPost('qty_received');
+        $batchNos = (array) $this->request->getPost('batch_no');
         $lines = [];
         foreach ($lineIds as $index => $lineId) {
             $qty = (float) ($qtys[$index] ?? 0);
             if ((int) $lineId > 0 && $qty > 0) {
-                $lines[] = ['purchase_order_line_id' => (int) $lineId, 'qty_received' => $qty];
+                $lines[] = [
+                    'purchase_order_line_id' => (int) $lineId,
+                    'qty_received' => $qty,
+                    'batch_no' => trim((string) ($batchNos[$index] ?? '')),
+                ];
             }
         }
         return $lines;

@@ -279,11 +279,11 @@ Yang sudah dikerjakan:
 - Inventory Transfer posted sudah bisa di-reverse dengan movement balik dari destination ke source serta jejak reversal per line.
 - Inventory stock posting sudah mengecek Period Close module `inventory`, sehingga stok tidak bisa bergerak pada periode inventory yang sudah ditutup.
 - Stock Card sudah tersedia untuk melihat movement kronologis, opening balance, qty in/out, dan running balance per filter item/warehouse/location/tanggal.
-- Stock balance, stock movement, stock card, stock opname, manual in/out, dan inventory transfer sudah mulai membawa `batch_no` sebagai baseline batch-aware ledger.
+- Stock balance, stock movement, stock card, stock opname, manual in/out, inventory transfer, purchase receipt, dan delivery order sudah mulai membawa `batch_no` sebagai baseline batch-aware ledger.
 
 Sisa pekerjaan:
 - General stock movement reversal dan period close process checklist belum lengkap.
-- Integrasi batch dengan PO receipt, DO, POS, dan production masih perlu dipastikan end-to-end.
+- Integrasi batch dengan POS dan production masih perlu dipastikan end-to-end.
 
 ## Phase 5 - Purchase Core
 
