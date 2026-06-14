@@ -1,6 +1,16 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php
+$status = (string) ($transfer['status'] ?? 'draft');
+$statusClass = match ($status) {
+    'draft' => 'bg-secondary-subtle text-secondary',
+    'submitted' => 'bg-info-subtle text-info',
+    'posted' => 'bg-success-subtle text-success',
+    'cancelled' => 'bg-danger-subtle text-danger',
+    default => 'bg-light text-dark',
+};
+?>
 <div class="card mb-3">
     <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
@@ -8,7 +18,25 @@
                 <h4 class="card-title mb-1"><?= esc($transfer['transfer_no']) ?></h4>
                 <p class="text-muted mb-0">Inventory transfer document detail.</p>
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-wrap gap-2">
+                <?php if ($status === 'draft'): ?>
+                    <form method="post" action="<?= site_url('inventory/transfers/' . (int) $transfer['id'] . '/submit') ?>">
+                        <?= csrf_field() ?>
+                        <button class="btn btn-info" type="submit" onclick="return confirm('Submit this transfer?')">Submit</button>
+                    </form>
+                <?php endif ?>
+
+                <?php if (in_array($status, ['draft', 'submitted'], true)): ?>
+                    <form method="post" action="<?= site_url('inventory/transfers/' . (int) $transfer['id'] . '/post') ?>">
+                        <?= csrf_field() ?>
+                        <button class="btn btn-success" type="submit" onclick="return confirm('Post this transfer and move stock now?')">Post</button>
+                    </form>
+                    <form method="post" action="<?= site_url('inventory/transfers/' . (int) $transfer['id'] . '/cancel') ?>">
+                        <?= csrf_field() ?>
+                        <button class="btn btn-outline-danger" type="submit" onclick="return confirm('Cancel this transfer document?')">Cancel</button>
+                    </form>
+                <?php endif ?>
+
                 <a href="<?= site_url('inventory/transfers/new') ?>" class="btn btn-primary">New Transfer</a>
                 <a href="<?= site_url('inventory/transfers') ?>" class="btn btn-light">Back</a>
             </div>
@@ -21,7 +49,7 @@
             </div>
             <div class="col-md-3 mb-3">
                 <div class="text-muted">Status</div>
-                <span class="badge bg-success-subtle text-success"><?= esc(ucfirst((string) $transfer['status'])) ?></span>
+                <span class="badge <?= esc($statusClass) ?>"><?= esc(ucfirst($status)) ?></span>
             </div>
             <div class="col-md-3 mb-3">
                 <div class="text-muted">Posted At</div>
