@@ -156,12 +156,15 @@ class InventoryTransferController extends BaseController
                 throw new RuntimeException('Only draft transfer can be submitted.');
             }
 
+            $now = date('Y-m-d H:i:s');
             Database::connect()->table('inventory_transfer_headers')
                 ->where('id', $id)
                 ->update([
                     'status' => 'submitted',
+                    'submitted_at' => $now,
+                    'submitted_by' => auth()->id(),
                     'updated_by' => auth()->id(),
-                    'updated_at' => date('Y-m-d H:i:s'),
+                    'updated_at' => $now,
                 ]);
         } catch (Throwable $exception) {
             return redirect()->back()->with('error', $exception->getMessage());
@@ -272,12 +275,16 @@ class InventoryTransferController extends BaseController
                 throw new RuntimeException('Transfer is already cancelled.');
             }
 
+            $now = date('Y-m-d H:i:s');
             Database::connect()->table('inventory_transfer_headers')
                 ->where('id', $id)
                 ->update([
                     'status' => 'cancelled',
+                    'cancelled_at' => $now,
+                    'cancelled_by' => auth()->id(),
+                    'cancel_reason' => trim((string) $this->request->getPost('cancel_reason')) ?: null,
                     'updated_by' => auth()->id(),
-                    'updated_at' => date('Y-m-d H:i:s'),
+                    'updated_at' => $now,
                 ]);
         } catch (Throwable $exception) {
             return redirect()->back()->with('error', $exception->getMessage());
