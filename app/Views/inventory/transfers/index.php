@@ -35,6 +35,17 @@
                     <?php endif ?>
 
                     <?php foreach ($transfers as $transfer): ?>
+                        <?php
+                        $status = (string) ($transfer['status'] ?? 'draft');
+                        $statusClass = match ($status) {
+                            'draft' => 'bg-secondary-subtle text-secondary',
+                            'submitted' => 'bg-info-subtle text-info',
+                            'posted' => 'bg-success-subtle text-success',
+                            'cancelled' => 'bg-danger-subtle text-danger',
+                            'reversed' => 'bg-warning-subtle text-warning',
+                            default => 'bg-light text-dark',
+                        };
+                        ?>
                         <tr>
                             <td class="fw-semibold"><?= esc($transfer['transfer_no']) ?></td>
                             <td><?= esc(substr((string) $transfer['transfer_date'], 0, 10)) ?></td>
@@ -52,7 +63,7 @@
                             </td>
                             <td class="text-end"><?= number_format((float) ($transfer['line_count'] ?? 0)) ?></td>
                             <td class="text-end"><?= number_format((float) ($transfer['total_qty'] ?? 0), 4) ?></td>
-                            <td><span class="badge bg-success-subtle text-success"><?= esc(ucfirst((string) $transfer['status'])) ?></span></td>
+                            <td><span class="badge <?= esc($statusClass) ?>"><?= esc(ucfirst($status)) ?></span></td>
                             <td class="text-end">
                                 <a href="<?= site_url('inventory/transfers/' . (int) $transfer['id']) ?>" class="btn btn-sm btn-outline-primary">View</a>
                             </td>

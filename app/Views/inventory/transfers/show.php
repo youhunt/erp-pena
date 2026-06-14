@@ -8,6 +8,7 @@ $statusClass = match ($status) {
     'submitted' => 'bg-info-subtle text-info',
     'posted' => 'bg-success-subtle text-success',
     'cancelled' => 'bg-danger-subtle text-danger',
+    'reversed' => 'bg-warning-subtle text-warning',
     default => 'bg-light text-dark',
 };
 ?>
@@ -35,6 +36,14 @@ $statusClass = match ($status) {
                         <?= csrf_field() ?>
                         <input type="text" name="cancel_reason" class="form-control form-control-sm" placeholder="Cancel reason" style="max-width: 180px;">
                         <button class="btn btn-outline-danger" type="submit" onclick="return confirm('Cancel this transfer document?')">Cancel</button>
+                    </form>
+                <?php endif ?>
+
+                <?php if ($status === 'posted'): ?>
+                    <form method="post" action="<?= site_url('inventory/transfers/' . (int) $transfer['id'] . '/reverse') ?>" class="d-flex gap-2">
+                        <?= csrf_field() ?>
+                        <input type="text" name="reversal_reason" class="form-control form-control-sm" placeholder="Reverse reason" style="max-width: 180px;">
+                        <button class="btn btn-warning" type="submit" onclick="return confirm('Reverse this posted transfer?')">Reverse</button>
                     </form>
                 <?php endif ?>
 
@@ -98,6 +107,23 @@ $statusClass = match ($status) {
             </div>
         <?php endif ?>
 
+        <?php if ($status === 'reversed'): ?>
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <div class="text-muted">Reversed At</div>
+                    <div class="fw-semibold"><?= esc($transfer['reversed_at'] ?? '-') ?></div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="text-muted">Reversed By</div>
+                    <div class="fw-semibold"><?= esc($transfer['reversed_by'] ?? '-') ?></div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <div class="text-muted">Reversal Reason</div>
+                    <div class="fw-semibold"><?= esc($transfer['reversal_reason'] ?? '-') ?></div>
+                </div>
+            </div>
+        <?php endif ?>
+
         <div class="row">
             <div class="col-md-6 mb-3">
                 <div class="border rounded p-3 h-100">
@@ -135,6 +161,8 @@ $statusClass = match ($status) {
                         <th class="text-end">Unit Cost</th>
                         <th class="text-end">Out Movement</th>
                         <th class="text-end">In Movement</th>
+                        <th class="text-end">Rev Out</th>
+                        <th class="text-end">Rev In</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -150,6 +178,8 @@ $statusClass = match ($status) {
                             <td class="text-end"><?= number_format((float) $line['unit_cost'], 4) ?></td>
                             <td class="text-end"><?= esc($line['transfer_out_movement_id'] ?? '-') ?></td>
                             <td class="text-end"><?= esc($line['transfer_in_movement_id'] ?? '-') ?></td>
+                            <td class="text-end"><?= esc($line['reversal_out_movement_id'] ?? '-') ?></td>
+                            <td class="text-end"><?= esc($line['reversal_in_movement_id'] ?? '-') ?></td>
                         </tr>
                     <?php endforeach ?>
                 </tbody>

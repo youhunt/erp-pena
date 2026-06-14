@@ -54,6 +54,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('transfers/(:num)/submit', 'Inventory\InventoryTransferController::submit/$1');
         $routes->post('transfers/(:num)/post', 'Inventory\InventoryTransferController::post/$1');
         $routes->post('transfers/(:num)/cancel', 'Inventory\InventoryTransferController::cancel/$1');
+        $routes->post('transfers/(:num)/reverse', 'Inventory\InventoryTransferController::reverse/$1');
         $routes->get('transfers/(:num)', 'Inventory\InventoryTransferController::show/$1');
         $routes->get('stock-opname', 'Inventory\InventoryMovementController::stockOpname');
         $routes->post('stock-opname', 'Inventory\InventoryMovementController::storeStockOpname');

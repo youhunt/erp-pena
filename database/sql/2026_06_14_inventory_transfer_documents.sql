@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS `inventory_transfer_headers` (
   `cancelled_at` DATETIME NULL DEFAULT NULL,
   `cancelled_by` INT(11) UNSIGNED NULL DEFAULT NULL,
   `cancel_reason` TEXT NULL,
+  `reversed_at` DATETIME NULL DEFAULT NULL,
+  `reversed_by` INT(11) UNSIGNED NULL DEFAULT NULL,
+  `reversal_reason` TEXT NULL,
   `created_by` INT(11) UNSIGNED NULL DEFAULT NULL,
   `updated_by` INT(11) UNSIGNED NULL DEFAULT NULL,
   `created_at` DATETIME NULL DEFAULT NULL,
@@ -50,6 +53,8 @@ CREATE TABLE IF NOT EXISTS `inventory_transfer_lines` (
   `unit_cost` DECIMAL(18,4) NOT NULL DEFAULT 0.0000,
   `transfer_out_movement_id` INT(11) UNSIGNED NULL DEFAULT NULL,
   `transfer_in_movement_id` INT(11) UNSIGNED NULL DEFAULT NULL,
+  `reversal_out_movement_id` INT(11) UNSIGNED NULL DEFAULT NULL,
+  `reversal_in_movement_id` INT(11) UNSIGNED NULL DEFAULT NULL,
   `notes` TEXT NULL,
   `created_at` DATETIME NULL DEFAULT NULL,
   `updated_at` DATETIME NULL DEFAULT NULL,
@@ -59,6 +64,8 @@ CREATE TABLE IF NOT EXISTS `inventory_transfer_lines` (
   KEY `idx_inventory_transfer_line_item_id` (`item_id`),
   KEY `idx_inventory_transfer_line_out_movement` (`transfer_out_movement_id`),
   KEY `idx_inventory_transfer_line_in_movement` (`transfer_in_movement_id`),
+  KEY `idx_inventory_transfer_line_rev_out_movement` (`reversal_out_movement_id`),
+  KEY `idx_inventory_transfer_line_rev_in_movement` (`reversal_in_movement_id`),
   CONSTRAINT `fk_inventory_transfer_lines_header`
     FOREIGN KEY (`header_id`) REFERENCES `inventory_transfer_headers` (`id`)
     ON DELETE CASCADE ON UPDATE CASCADE
@@ -90,6 +97,28 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = @db_name AND TABLE_NAME = @table_name AND COLUMN_NAME = 'cancel_reason');
 SET @sql := IF(@col_exists = 0, 'ALTER TABLE `inventory_transfer_headers` ADD COLUMN `cancel_reason` TEXT NULL AFTER `cancelled_by`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = @db_name AND TABLE_NAME = @table_name AND COLUMN_NAME = 'reversed_at');
+SET @sql := IF(@col_exists = 0, 'ALTER TABLE `inventory_transfer_headers` ADD COLUMN `reversed_at` DATETIME NULL DEFAULT NULL AFTER `cancel_reason`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = @db_name AND TABLE_NAME = @table_name AND COLUMN_NAME = 'reversed_by');
+SET @sql := IF(@col_exists = 0, 'ALTER TABLE `inventory_transfer_headers` ADD COLUMN `reversed_by` INT(11) UNSIGNED NULL DEFAULT NULL AFTER `reversed_at`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = @db_name AND TABLE_NAME = @table_name AND COLUMN_NAME = 'reversal_reason');
+SET @sql := IF(@col_exists = 0, 'ALTER TABLE `inventory_transfer_headers` ADD COLUMN `reversal_reason` TEXT NULL AFTER `reversed_by`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @table_name := 'inventory_transfer_lines';
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = @db_name AND TABLE_NAME = @table_name AND COLUMN_NAME = 'reversal_out_movement_id');
+SET @sql := IF(@col_exists = 0, 'ALTER TABLE `inventory_transfer_lines` ADD COLUMN `reversal_out_movement_id` INT(11) UNSIGNED NULL DEFAULT NULL AFTER `transfer_in_movement_id`', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = @db_name AND TABLE_NAME = @table_name AND COLUMN_NAME = 'reversal_in_movement_id');
+SET @sql := IF(@col_exists = 0, 'ALTER TABLE `inventory_transfer_lines` ADD COLUMN `reversal_in_movement_id` INT(11) UNSIGNED NULL DEFAULT NULL AFTER `reversal_out_movement_id`', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET FOREIGN_KEY_CHECKS = 1;

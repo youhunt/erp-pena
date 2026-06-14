@@ -341,6 +341,115 @@ class InventoryTransferController extends BaseController
         return redirect()->to('/inventory/transfers/' . $id)->with('message', 'Inventory transfer cancelled.');
     }
 
+    public function reverse(int $id)
+    {
+        $db = Database::connect();
+        $stock = new InventoryStockService();
+        $now = date('Y-m-d H:i:s');
+        $reason = trim((string) $this->request->getPost('reversal_reason')) ?: null;
+
+        $db->transBegin();
+
+        try {
+            $transfer = $this->transferHeader($id);
+            if ((string) $transfer['status'] !== 'posted') {
+                throw new RuntimeException('Only posted transfer can be reversed.');
+            }
+
+            $lines = $db->table('inventory_transfer_lines')
+                ->where('header_id', $id)
+                ->orderBy('line_no', 'ASC')
+                ->get()
+                ->getResultArray();
+
+            if ($lines === []) {
+                throw new RuntimeException('Cannot reverse transfer without lines.');
+            }
+
+            foreach ($lines as $line) {
+                if (empty($line['transfer_out_movement_id']) || empty($line['transfer_in_movement_id'])) {
+                    throw new RuntimeException('Transfer line is not fully posted.');
+                }
+                if (! empty($line['reversal_out_movement_id']) || ! empty($line['reversal_in_movement_id'])) {
+                    throw new RuntimeException('Transfer line has already been reversed.');
+                }
+
+                $referenceNo = $transfer['transfer_no'] . '-REV-' . str_pad((string) $line['line_no'], 3, '0', STR_PAD_LEFT);
+                $base = [
+                    'company_id' => (int) $transfer['company_id'],
+                    'site_id' => $transfer['site_id'] !== null ? (int) $transfer['site_id'] : null,
+                    'warehouse_id' => $transfer['to_warehouse_id'] !== null ? (int) $transfer['to_warehouse_id'] : null,
+                    'location_id' => $transfer['to_location_id'] !== null ? (int) $transfer['to_location_id'] : null,
+                    'item_id' => $line['item_id'] !== null ? (int) $line['item_id'] : null,
+                    'item_code' => $line['item_code'],
+                    'item_name' => $line['item_name'],
+                    'uom_code' => $line['uom_code'],
+                    'qty' => (float) $line['qty'],
+                    'unit_cost' => (float) $line['unit_cost'],
+                    'movement_date' => $now,
+                    'reference_type' => 'inventory_transfer_reversal',
+                    'reference_id' => $id,
+                    'reference_no' => $referenceNo,
+                    'notes' => trim(($reason ?? '') . ' Reversal for transfer ' . $transfer['transfer_no']),
+                ];
+
+                $reversalOutId = $stock->stockOut($base + [
+                    'movement_type' => 'transfer_reversal_out',
+                    'direction' => 'out',
+                ], auth()->id());
+
+                $reversalInId = $stock->stockIn($base + [
+                    'warehouse_id' => $transfer['from_warehouse_id'] !== null ? (int) $transfer['from_warehouse_id'] : null,
+                    'location_id' => $transfer['from_location_id'] !== null ? (int) $transfer['from_location_id'] : null,
+                    'movement_type' => 'transfer_reversal_in',
+                    'direction' => 'in',
+                ], auth()->id());
+
+                $db->table('inventory_transfer_lines')
+                    ->where('id', $line['id'])
+                    ->update([
+                        'reversal_out_movement_id' => $reversalOutId,
+                        'reversal_in_movement_id' => $reversalInId,
+                        'updated_at' => $now,
+                    ]);
+            }
+
+            $db->table('inventory_transfer_headers')
+                ->where('id', $id)
+                ->update([
+                    'status' => 'reversed',
+                    'reversed_at' => $now,
+                    'reversed_by' => auth()->id(),
+                    'reversal_reason' => $reason,
+                    'updated_by' => auth()->id(),
+                    'updated_at' => $now,
+                ]);
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to reverse inventory transfer.');
+            }
+
+            $db->transCommit();
+        } catch (Throwable $exception) {
+            $db->transRollback();
+            return redirect()->back()->with('error', $exception->getMessage());
+        }
+
+        $this->auditTransfer('transfer.reverse', $transfer, [
+            'old_status' => $transfer['status'],
+            'new_status' => 'reversed',
+            'reversed_at' => $now,
+            'reversed_by' => auth()->id(),
+            'reversal_reason' => $reason,
+            'line_count' => count($lines),
+            'movement_count' => count($lines) * 2,
+        ], [
+            'status' => $transfer['status'],
+        ]);
+
+        return redirect()->to('/inventory/transfers/' . $id)->with('message', 'Inventory transfer reversed.');
+    }
+
     private function transferHeader(int $id): array
     {
         $tenant = new TenantContext(session());
@@ -489,6 +598,7 @@ class InventoryTransferController extends BaseController
             'transfer.submit' => "Inventory transfer {$transferNo} submitted.",
             'transfer.post' => "Inventory transfer {$transferNo} posted and stock moved.",
             'transfer.cancel' => "Inventory transfer {$transferNo} cancelled.",
+            'transfer.reverse' => "Inventory transfer {$transferNo} reversed.",
             default => "Inventory transfer {$transferNo} updated.",
         };
     }
