@@ -40,6 +40,7 @@
         </div>
 
         <?= $this->include('partials/footer') ?>
+        <?= $this->renderSection('scripts') ?>
     </div>
 </div>
 
