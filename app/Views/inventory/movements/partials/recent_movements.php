@@ -8,6 +8,7 @@
                         <th>Date</th>
                         <th>Type</th>
                         <th>Item</th>
+                        <th>Batch</th>
                         <th>Dir</th>
                         <th class="text-end">Qty</th>
                         <th>Ref</th>
@@ -23,6 +24,7 @@
                             <div class="fw-semibold"><?= esc($movement['item_code'] ?? '-') ?></div>
                             <small class="text-muted"><?= esc($movement['item_name'] ?? '-') ?></small>
                         </td>
+                        <td><?= esc(($movement['batch_no'] ?? '') !== '' ? $movement['batch_no'] : '-') ?></td>
                         <td><span class="badge bg-<?= ($movement['direction'] ?? '') === 'in' ? 'success' : 'danger' ?>"><?= esc($movement['direction'] ?? '-') ?></span></td>
                         <td class="text-end"><?= esc(number_format((float) ($movement['qty'] ?? 0), 4)) ?></td>
                         <td><?= esc($movement['reference_no'] ?? '-') ?></td>
@@ -31,7 +33,7 @@
                 <?php endforeach ?>
 
                 <?php if ($recentMovements === []): ?>
-                    <tr><td colspan="7" class="text-center text-muted py-4">No stock movement yet.</td></tr>
+                    <tr><td colspan="8" class="text-center text-muted py-4">No stock movement yet.</td></tr>
                 <?php endif ?>
                 </tbody>
             </table>

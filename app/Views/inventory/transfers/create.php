@@ -78,6 +78,7 @@
                     <thead class="table-light">
                         <tr>
                             <th style="min-width:220px">Item Code</th>
+                            <th style="min-width:140px">Batch No</th>
                             <th style="min-width:120px">UoM</th>
                             <th style="min-width:120px" class="text-end">Qty</th>
                             <th style="min-width:140px" class="text-end">Unit Cost</th>
@@ -91,6 +92,7 @@
                                 <td>
                                     <input list="item-options" name="item_code[]" class="form-control" value="<?= esc(old('item_code.' . $i)) ?>" placeholder="ITEM001">
                                 </td>
+                                <td><input type="text" name="batch_no[]" class="form-control" value="<?= esc(old('batch_no.' . $i)) ?>" placeholder="Optional"></td>
                                 <td><input type="text" name="uom_code[]" class="form-control" value="<?= esc(old('uom_code.' . $i, 'PCS')) ?>"></td>
                                 <td><input type="number" step="0.0001" name="qty[]" class="form-control text-end" value="<?= esc(old('qty.' . $i, $i === 0 ? '1' : '')) ?>"></td>
                                 <td><input type="number" step="0.0001" name="unit_cost[]" class="form-control text-end" value="<?= esc(old('unit_cost.' . $i, '0')) ?>"></td>
@@ -127,6 +129,7 @@ function addTransferLine() {
     const row = document.createElement('tr');
     row.innerHTML = `
         <td><input list="item-options" name="item_code[]" class="form-control" placeholder="ITEM001"></td>
+        <td><input type="text" name="batch_no[]" class="form-control" placeholder="Optional"></td>
         <td><input type="text" name="uom_code[]" class="form-control" value="PCS"></td>
         <td><input type="number" step="0.0001" name="qty[]" class="form-control text-end"></td>
         <td><input type="number" step="0.0001" name="unit_cost[]" class="form-control text-end" value="0"></td>

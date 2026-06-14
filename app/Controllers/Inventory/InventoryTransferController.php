@@ -126,6 +126,7 @@ class InventoryTransferController extends BaseController
                     'line_no' => $index + 1,
                     'item_id' => $line['item_id'],
                     'item_code' => $line['item_code'],
+                    'batch_no' => $line['batch_no'] ?? '',
                     'item_name' => $line['item_name'],
                     'uom_code' => $line['uom_code'],
                     'qty' => $line['qty'],
@@ -235,6 +236,7 @@ class InventoryTransferController extends BaseController
                     'location_id' => $transfer['from_location_id'] !== null ? (int) $transfer['from_location_id'] : null,
                     'item_id' => $line['item_id'] !== null ? (int) $line['item_id'] : null,
                     'item_code' => $line['item_code'],
+                    'batch_no' => $line['batch_no'] ?? '',
                     'item_name' => $line['item_name'],
                     'uom_code' => $line['uom_code'],
                     'qty' => (float) $line['qty'],
@@ -382,6 +384,7 @@ class InventoryTransferController extends BaseController
                     'location_id' => $transfer['to_location_id'] !== null ? (int) $transfer['to_location_id'] : null,
                     'item_id' => $line['item_id'] !== null ? (int) $line['item_id'] : null,
                     'item_code' => $line['item_code'],
+                    'batch_no' => $line['batch_no'],
                     'item_name' => $line['item_name'],
                     'uom_code' => $line['uom_code'],
                     'qty' => (float) $line['qty'],
@@ -481,6 +484,7 @@ class InventoryTransferController extends BaseController
     private function postedLines(int $companyId): array
     {
         $itemCodes = (array) $this->request->getPost('item_code');
+        $batchNos = (array) $this->request->getPost('batch_no');
         $qtys = (array) $this->request->getPost('qty');
         $uoms = (array) $this->request->getPost('uom_code');
         $unitCosts = (array) $this->request->getPost('unit_cost');
@@ -502,6 +506,7 @@ class InventoryTransferController extends BaseController
             $lines[] = [
                 'item_id' => isset($item['id']) ? (int) $item['id'] : null,
                 'item_code' => $item['item_code'] ?? $item['code'] ?? $itemCode,
+                'batch_no' => trim((string) ($batchNos[$index] ?? '')),
                 'item_name' => $item['item_name'] ?? $item['name'] ?? $itemCode,
                 'uom_code' => trim((string) ($uoms[$index] ?? ($item['stockuom'] ?? 'PCS'))) ?: 'PCS',
                 'qty' => $qty,

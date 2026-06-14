@@ -59,6 +59,11 @@
     </div>
 </div>
 
+<div class="mb-3">
+    <label class="form-label">Batch No</label>
+    <input type="text" name="batch_no" class="form-control inventory-batch-no" value="<?= esc(old('batch_no')) ?>" placeholder="Optional batch / lot no">
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.inventory-item-select').forEach(function (select) {

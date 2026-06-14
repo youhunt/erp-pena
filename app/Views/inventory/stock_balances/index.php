@@ -47,6 +47,7 @@
                 <thead class="table-light">
                     <tr>
                         <th>Item</th>
+                        <th>Batch</th>
                         <th>Warehouse</th>
                         <th>Location</th>
                         <th>UoM</th>
@@ -61,6 +62,7 @@
                 <?php foreach ($balances as $balance): ?>
                     <tr>
                         <td class="fw-semibold"><?= esc($balance['item_code'] ?? '-') ?></td>
+                        <td><?= esc(($balance['batch_no'] ?? '') !== '' ? $balance['batch_no'] : '-') ?></td>
                         <td><?= esc(trim(($balance['warehouse_code'] ?? '-') . ' ' . ($balance['warehouse_name'] ?? ''))) ?></td>
                         <td><?= esc(trim(($balance['location_code'] ?? '-') . ' ' . ($balance['location_name'] ?? ''))) ?></td>
                         <td><?= esc($balance['uom_code'] ?? '-') ?></td>
@@ -73,7 +75,7 @@
                 <?php endforeach ?>
 
                 <?php if ($balances === []): ?>
-                    <tr><td colspan="9" class="text-center text-muted py-4">No stock balance found.</td></tr>
+                    <tr><td colspan="10" class="text-center text-muted py-4">No stock balance found.</td></tr>
                 <?php endif ?>
                 </tbody>
             </table>

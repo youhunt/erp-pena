@@ -96,6 +96,7 @@ class InventoryStockService
                 'location_id' => $data['location_id'] ?? null,
                 'item_id' => $data['item_id'] ?? null,
                 'item_code' => $data['item_code'],
+                'batch_no' => trim((string) ($data['batch_no'] ?? '')),
                 'item_name' => $data['item_name'] ?? null,
                 'uom_code' => $data['uom_code'] ?? 'PCS',
                 'movement_date' => $data['movement_date'] ?? date('Y-m-d H:i:s'),
@@ -224,10 +225,12 @@ class InventoryStockService
             'warehouse_id' => $data['warehouse_id'] ?? null,
             'location_id' => $data['location_id'] ?? null,
             'item_code' => $data['item_code'],
+            'batch_no' => trim((string) ($data['batch_no'] ?? '')),
         ];
 
         $query = $model->where('company_id', $where['company_id'])
-            ->where('item_code', $where['item_code']);
+            ->where('item_code', $where['item_code'])
+            ->where('batch_no', $where['batch_no']);
 
         foreach (['site_id', 'warehouse_id', 'location_id'] as $field) {
             $where[$field] === null ? $query->where($field, null) : $query->where($field, $where[$field]);
@@ -245,6 +248,7 @@ class InventoryStockService
             'location_id' => $data['location_id'] ?? null,
             'item_id' => $data['item_id'] ?? null,
             'item_code' => $data['item_code'],
+            'batch_no' => $where['batch_no'],
             'uom_code' => $data['uom_code'] ?? 'PCS',
             'qty_on_hand' => 0,
             'qty_reserved' => 0,

@@ -28,7 +28,7 @@ class StockCardController extends BaseController
     }
 
     /**
-     * @return array{item_code: string, warehouse_id: ?int, location_id: ?int, date_from: string, date_to: string}
+     * @return array{item_code: string, batch_no: string, warehouse_id: ?int, location_id: ?int, date_from: string, date_to: string}
      */
     private function filters(): array
     {
@@ -44,6 +44,7 @@ class StockCardController extends BaseController
 
         return [
             'item_code' => trim((string) $this->request->getGet('item_code')),
+            'batch_no' => trim((string) $this->request->getGet('batch_no')),
             'warehouse_id' => $this->nullableInt($this->request->getGet('warehouse_id')),
             'location_id' => $this->nullableInt($this->request->getGet('location_id')),
             'date_from' => $dateFrom,
@@ -95,6 +96,9 @@ class StockCardController extends BaseController
         }
         if ($filters['item_code'] !== '') {
             $builder->where($prefix . 'item_code', $filters['item_code']);
+        }
+        if ($filters['batch_no'] !== '') {
+            $builder->where($prefix . 'batch_no', $filters['batch_no']);
         }
         if ($filters['warehouse_id'] !== null) {
             $builder->where($prefix . 'warehouse_id', $filters['warehouse_id']);

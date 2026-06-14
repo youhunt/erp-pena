@@ -156,6 +156,7 @@ $statusClass = match ($status) {
                     <tr>
                         <th class="text-end">#</th>
                         <th>Item</th>
+                        <th>Batch</th>
                         <th>UoM</th>
                         <th class="text-end">Qty</th>
                         <th class="text-end">Unit Cost</th>
@@ -173,6 +174,7 @@ $statusClass = match ($status) {
                                 <div class="fw-semibold"><?= esc($line['item_code']) ?></div>
                                 <div class="text-muted small"><?= esc($line['item_name'] ?? '') ?></div>
                             </td>
+                            <td><?= esc(($line['batch_no'] ?? '') !== '' ? $line['batch_no'] : '-') ?></td>
                             <td><?= esc($line['uom_code']) ?></td>
                             <td class="text-end"><?= number_format((float) $line['qty'], 4) ?></td>
                             <td class="text-end"><?= number_format((float) $line['unit_cost'], 4) ?></td>

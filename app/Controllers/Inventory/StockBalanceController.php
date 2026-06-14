@@ -28,6 +28,7 @@ class StockBalanceController extends BaseController
         if ($keyword !== '') {
             $builder->groupStart()
                 ->like('b.item_code', $keyword)
+                ->orLike('b.batch_no', $keyword)
                 ->orLike('w.code', $keyword)
                 ->orLike('w.name', $keyword)
                 ->orLike('l.code', $keyword)

@@ -22,10 +22,11 @@
                                     data-uom="<?= esc($balance['uom_code'] ?? 'PCS') ?>"
                                     data-warehouse-id="<?= esc((string) ($balance['warehouse_id'] ?? '')) ?>"
                                     data-location-id="<?= esc((string) ($balance['location_id'] ?? '')) ?>"
+                                    data-batch-no="<?= esc((string) ($balance['batch_no'] ?? '')) ?>"
                                     data-system-qty="<?= esc((string) ($balance['qty_on_hand'] ?? 0)) ?>"
                                     data-cost="<?= esc((string) ($balance['avg_cost'] ?? 0)) ?>"
                                 >
-                                    <?= esc(($balance['item_code'] ?? '-') . ' / ' . ($balance['warehouse_code'] ?? '-') . ' / ' . ($balance['location_code'] ?? '-') . ' / Qty ' . number_format((float) ($balance['qty_on_hand'] ?? 0), 4)) ?>
+                                    <?= esc(($balance['item_code'] ?? '-') . ' / ' . ($balance['warehouse_code'] ?? '-') . ' / ' . ($balance['location_code'] ?? '-') . ' / Batch ' . (($balance['batch_no'] ?? '') !== '' ? $balance['batch_no'] : '-') . ' / Qty ' . number_format((float) ($balance['qty_on_hand'] ?? 0), 4)) ?>
                                 </option>
                             <?php endforeach ?>
                         </select>
@@ -85,8 +86,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const warehouse = document.querySelector('[name="warehouse_id"]');
         const location = document.querySelector('[name="location_id"]');
+        const batchNo = document.querySelector('[name="batch_no"]');
         if (warehouse) warehouse.value = option.dataset.warehouseId || '';
         if (location) location.value = option.dataset.locationId || '';
+        if (batchNo) batchNo.value = option.dataset.batchNo || '';
     });
 });
 </script>

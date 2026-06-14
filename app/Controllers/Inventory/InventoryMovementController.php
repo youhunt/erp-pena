@@ -172,6 +172,7 @@ class InventoryMovementController extends BaseController
             'location_id' => $this->nullableInt($this->request->getPost('location_id')),
             'item_id' => isset($item['id']) ? (int) $item['id'] : null,
             'item_code' => $itemCode,
+            'batch_no' => trim((string) $this->request->getPost('batch_no')),
             'item_name' => $item['item_name'] ?? $item['name'] ?? trim((string) $this->request->getPost('item_name')) ?: $itemCode,
             'uom_code' => trim((string) ($this->request->getPost('uom_code') ?: ($item['stockuom'] ?? 'PCS'))),
             'qty' => array_key_exists('qty', $overrides) ? $qty : abs($qty),

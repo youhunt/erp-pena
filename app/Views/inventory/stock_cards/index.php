@@ -42,6 +42,10 @@
                 </select>
             </div>
             <div class="col-md-2">
+                <label class="form-label">Batch No</label>
+                <input type="text" name="batch_no" class="form-control" value="<?= esc($filters['batch_no']) ?>" placeholder="All Batches">
+            </div>
+            <div class="col-md-2">
                 <label class="form-label">Warehouse</label>
                 <select name="warehouse_id" class="form-select">
                     <option value="">All Warehouses</option>
@@ -63,11 +67,11 @@
                     <?php endforeach ?>
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-1">
                 <label class="form-label">From</label>
                 <input type="date" name="date_from" class="form-control" value="<?= esc($filters['date_from']) ?>">
             </div>
-            <div class="col-md-2">
+            <div class="col-md-1">
                 <label class="form-label">To</label>
                 <input type="date" name="date_to" class="form-control" value="<?= esc($filters['date_to']) ?>">
             </div>
@@ -83,6 +87,7 @@
                     <tr>
                         <th>Date</th>
                         <th>Item</th>
+                        <th>Batch</th>
                         <th>Warehouse</th>
                         <th>Location</th>
                         <th>Type</th>
@@ -96,7 +101,7 @@
                 <tbody>
                     <tr class="table-light">
                         <td><?= esc($filters['date_from']) ?></td>
-                        <td colspan="5" class="fw-semibold">Opening Balance</td>
+                        <td colspan="6" class="fw-semibold">Opening Balance</td>
                         <td class="text-end">-</td>
                         <td class="text-end">-</td>
                         <td class="text-end fw-semibold"><?= esc(number_format((float) $opening['qty'], 4)) ?></td>
@@ -110,6 +115,7 @@
                                 <div class="fw-semibold"><?= esc($movement['item_code'] ?? '-') ?></div>
                                 <div class="text-muted small"><?= esc($movement['item_name'] ?? '') ?></div>
                             </td>
+                            <td><?= esc(($movement['batch_no'] ?? '') !== '' ? $movement['batch_no'] : '-') ?></td>
                             <td><?= esc($movement['warehouse_code'] ?? '-') ?></td>
                             <td><?= esc($movement['location_code'] ?? '-') ?></td>
                             <td><?= esc($movement['movement_type'] ?? '-') ?></td>
@@ -125,7 +131,7 @@
                     <?php endforeach ?>
 
                     <?php if ($movements === []): ?>
-                        <tr><td colspan="10" class="text-center text-muted py-4">No stock movement found for selected filter.</td></tr>
+                        <tr><td colspan="11" class="text-center text-muted py-4">No stock movement found for selected filter.</td></tr>
                     <?php endif ?>
                 </tbody>
             </table>
