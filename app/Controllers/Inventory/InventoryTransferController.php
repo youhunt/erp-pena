@@ -46,30 +46,8 @@ class InventoryTransferController extends BaseController
 
     public function show(int $id): string
     {
-        $tenant = new TenantContext(session());
-        $db = Database::connect();
-        $builder = $db->table('inventory_transfer_headers h')
-            ->select('h.*, fw.code from_warehouse_code, fw.name from_warehouse_name, fl.code from_location_code, fl.name from_location_name, tw.code to_warehouse_code, tw.name to_warehouse_name, tl.code to_location_code, tl.name to_location_name')
-            ->join('warehouses fw', 'fw.id = h.from_warehouse_id', 'left')
-            ->join('locations fl', 'fl.id = h.from_location_id', 'left')
-            ->join('warehouses tw', 'tw.id = h.to_warehouse_id', 'left')
-            ->join('locations tl', 'tl.id = h.to_location_id', 'left')
-            ->where('h.id', $id)
-            ->where('h.deleted_at', null);
-
-        if ($tenant->activeCompanyId() !== null) {
-            $builder->where('h.company_id', $tenant->activeCompanyId());
-        }
-        if ($tenant->activeSiteId() !== null) {
-            $builder->where('h.site_id', $tenant->activeSiteId());
-        }
-
-        $transfer = $builder->get()->getRowArray();
-        if ($transfer === null) {
-            throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound('Inventory transfer not found.');
-        }
-
-        $lines = $db->table('inventory_transfer_lines')
+        $transfer = $this->transferHeader($id);
+        $lines = Database::connect()->table('inventory_transfer_lines')
             ->where('header_id', $id)
             ->orderBy('line_no', 'ASC')
             ->get()
@@ -101,13 +79,17 @@ class InventoryTransferController extends BaseController
             return redirect()->back()->withInput()->with('error', 'Source and destination cannot be the same.');
         }
 
-        $lines = $this->postedLines($companyId);
+        try {
+            $lines = $this->postedLines($companyId);
+        } catch (RuntimeException $exception) {
+            return redirect()->back()->withInput()->with('error', $exception->getMessage());
+        }
+
         if ($lines === []) {
             return redirect()->back()->withInput()->with('error', 'At least one valid item line is required.');
         }
 
         $db = Database::connect();
-        $stock = new InventoryStockService();
         $now = date('Y-m-d H:i:s');
         $transferNo = trim((string) ($this->request->getPost('transfer_no') ?: $this->nextTransferNo()));
         $transferDate = trim((string) ($this->request->getPost('transfer_date') ?: date('Y-m-d')));
@@ -124,10 +106,8 @@ class InventoryTransferController extends BaseController
                 'from_location_id' => $fromLocationId,
                 'to_warehouse_id' => $toWarehouseId,
                 'to_location_id' => $toLocationId,
-                'status' => 'posted',
+                'status' => 'draft',
                 'notes' => trim((string) $this->request->getPost('notes')),
-                'posted_at' => $now,
-                'posted_by' => auth()->id(),
                 'created_by' => auth()->id(),
                 'updated_by' => auth()->id(),
                 'created_at' => $now,
@@ -140,37 +120,6 @@ class InventoryTransferController extends BaseController
             }
 
             foreach ($lines as $index => $line) {
-                $referenceNo = $transferNo . '-' . str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT);
-                $base = [
-                    'company_id' => $companyId,
-                    'site_id' => $siteId,
-                    'warehouse_id' => $fromWarehouseId,
-                    'location_id' => $fromLocationId,
-                    'item_id' => $line['item_id'],
-                    'item_code' => $line['item_code'],
-                    'item_name' => $line['item_name'],
-                    'uom_code' => $line['uom_code'],
-                    'qty' => $line['qty'],
-                    'unit_cost' => $line['unit_cost'],
-                    'movement_date' => $transferDate . ' 00:00:00',
-                    'reference_type' => 'inventory_transfer',
-                    'reference_id' => $headerId,
-                    'reference_no' => $referenceNo,
-                    'notes' => trim((string) $this->request->getPost('notes')),
-                ];
-
-                $outId = $stock->stockOut($base + [
-                    'movement_type' => 'transfer_out',
-                    'direction' => 'out',
-                ], auth()->id());
-
-                $inId = $stock->stockIn($base + [
-                    'warehouse_id' => $toWarehouseId,
-                    'location_id' => $toLocationId,
-                    'movement_type' => 'transfer_in',
-                    'direction' => 'in',
-                ], auth()->id());
-
                 $db->table('inventory_transfer_lines')->insert([
                     'header_id' => $headerId,
                     'line_no' => $index + 1,
@@ -180,8 +129,6 @@ class InventoryTransferController extends BaseController
                     'uom_code' => $line['uom_code'],
                     'qty' => $line['qty'],
                     'unit_cost' => $line['unit_cost'],
-                    'transfer_out_movement_id' => $outId,
-                    'transfer_in_movement_id' => $inId,
                     'notes' => $line['notes'],
                     'created_at' => $now,
                     'updated_at' => $now,
@@ -189,7 +136,7 @@ class InventoryTransferController extends BaseController
             }
 
             if ($db->transStatus() === false) {
-                throw new RuntimeException('Failed to save inventory transfer document.');
+                throw new RuntimeException('Failed to save inventory transfer draft.');
             }
 
             $db->transCommit();
@@ -198,7 +145,173 @@ class InventoryTransferController extends BaseController
             return redirect()->back()->withInput()->with('error', $exception->getMessage());
         }
 
-        return redirect()->to('/inventory/transfers/' . $headerId)->with('message', 'Inventory transfer posted.');
+        return redirect()->to('/inventory/transfers/' . $headerId)->with('message', 'Inventory transfer draft saved.');
+    }
+
+    public function submit(int $id)
+    {
+        try {
+            $transfer = $this->transferHeader($id);
+            if ((string) $transfer['status'] !== 'draft') {
+                throw new RuntimeException('Only draft transfer can be submitted.');
+            }
+
+            Database::connect()->table('inventory_transfer_headers')
+                ->where('id', $id)
+                ->update([
+                    'status' => 'submitted',
+                    'updated_by' => auth()->id(),
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+        } catch (Throwable $exception) {
+            return redirect()->back()->with('error', $exception->getMessage());
+        }
+
+        return redirect()->to('/inventory/transfers/' . $id)->with('message', 'Inventory transfer submitted.');
+    }
+
+    public function post(int $id)
+    {
+        $db = Database::connect();
+        $stock = new InventoryStockService();
+        $now = date('Y-m-d H:i:s');
+        $db->transBegin();
+
+        try {
+            $transfer = $this->transferHeader($id);
+            if (! in_array((string) $transfer['status'], ['draft', 'submitted'], true)) {
+                throw new RuntimeException('Only draft or submitted transfer can be posted.');
+            }
+
+            $lines = $db->table('inventory_transfer_lines')
+                ->where('header_id', $id)
+                ->orderBy('line_no', 'ASC')
+                ->get()
+                ->getResultArray();
+
+            if ($lines === []) {
+                throw new RuntimeException('Cannot post transfer without lines.');
+            }
+
+            foreach ($lines as $line) {
+                if (! empty($line['transfer_out_movement_id']) || ! empty($line['transfer_in_movement_id'])) {
+                    throw new RuntimeException('Transfer line has already been posted.');
+                }
+
+                $referenceNo = $transfer['transfer_no'] . '-' . str_pad((string) $line['line_no'], 3, '0', STR_PAD_LEFT);
+                $base = [
+                    'company_id' => (int) $transfer['company_id'],
+                    'site_id' => $transfer['site_id'] !== null ? (int) $transfer['site_id'] : null,
+                    'warehouse_id' => $transfer['from_warehouse_id'] !== null ? (int) $transfer['from_warehouse_id'] : null,
+                    'location_id' => $transfer['from_location_id'] !== null ? (int) $transfer['from_location_id'] : null,
+                    'item_id' => $line['item_id'] !== null ? (int) $line['item_id'] : null,
+                    'item_code' => $line['item_code'],
+                    'item_name' => $line['item_name'],
+                    'uom_code' => $line['uom_code'],
+                    'qty' => (float) $line['qty'],
+                    'unit_cost' => (float) $line['unit_cost'],
+                    'movement_date' => $transfer['transfer_date'],
+                    'reference_type' => 'inventory_transfer',
+                    'reference_id' => $id,
+                    'reference_no' => $referenceNo,
+                    'notes' => trim((string) ($transfer['notes'] ?? '')),
+                ];
+
+                $outId = $stock->stockOut($base + [
+                    'movement_type' => 'transfer_out',
+                    'direction' => 'out',
+                ], auth()->id());
+
+                $inId = $stock->stockIn($base + [
+                    'warehouse_id' => $transfer['to_warehouse_id'] !== null ? (int) $transfer['to_warehouse_id'] : null,
+                    'location_id' => $transfer['to_location_id'] !== null ? (int) $transfer['to_location_id'] : null,
+                    'movement_type' => 'transfer_in',
+                    'direction' => 'in',
+                ], auth()->id());
+
+                $db->table('inventory_transfer_lines')
+                    ->where('id', $line['id'])
+                    ->update([
+                        'transfer_out_movement_id' => $outId,
+                        'transfer_in_movement_id' => $inId,
+                        'updated_at' => $now,
+                    ]);
+            }
+
+            $db->table('inventory_transfer_headers')
+                ->where('id', $id)
+                ->update([
+                    'status' => 'posted',
+                    'posted_at' => $now,
+                    'posted_by' => auth()->id(),
+                    'updated_by' => auth()->id(),
+                    'updated_at' => $now,
+                ]);
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to post inventory transfer.');
+            }
+
+            $db->transCommit();
+        } catch (Throwable $exception) {
+            $db->transRollback();
+            return redirect()->back()->with('error', $exception->getMessage());
+        }
+
+        return redirect()->to('/inventory/transfers/' . $id)->with('message', 'Inventory transfer posted.');
+    }
+
+    public function cancel(int $id)
+    {
+        try {
+            $transfer = $this->transferHeader($id);
+            if ((string) $transfer['status'] === 'posted') {
+                throw new RuntimeException('Posted transfer cannot be cancelled from this screen. Create reversal transfer instead.');
+            }
+            if ((string) $transfer['status'] === 'cancelled') {
+                throw new RuntimeException('Transfer is already cancelled.');
+            }
+
+            Database::connect()->table('inventory_transfer_headers')
+                ->where('id', $id)
+                ->update([
+                    'status' => 'cancelled',
+                    'updated_by' => auth()->id(),
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+        } catch (Throwable $exception) {
+            return redirect()->back()->with('error', $exception->getMessage());
+        }
+
+        return redirect()->to('/inventory/transfers/' . $id)->with('message', 'Inventory transfer cancelled.');
+    }
+
+    private function transferHeader(int $id): array
+    {
+        $tenant = new TenantContext(session());
+        $db = Database::connect();
+        $builder = $db->table('inventory_transfer_headers h')
+            ->select('h.*, fw.code from_warehouse_code, fw.name from_warehouse_name, fl.code from_location_code, fl.name from_location_name, tw.code to_warehouse_code, tw.name to_warehouse_name, tl.code to_location_code, tl.name to_location_name')
+            ->join('warehouses fw', 'fw.id = h.from_warehouse_id', 'left')
+            ->join('locations fl', 'fl.id = h.from_location_id', 'left')
+            ->join('warehouses tw', 'tw.id = h.to_warehouse_id', 'left')
+            ->join('locations tl', 'tl.id = h.to_location_id', 'left')
+            ->where('h.id', $id)
+            ->where('h.deleted_at', null);
+
+        if ($tenant->activeCompanyId() !== null) {
+            $builder->where('h.company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $builder->where('h.site_id', $tenant->activeSiteId());
+        }
+
+        $transfer = $builder->get()->getRowArray();
+        if ($transfer === null) {
+            throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound('Inventory transfer not found.');
+        }
+
+        return $transfer;
     }
 
     private function postedLines(int $companyId): array
