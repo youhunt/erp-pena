@@ -55,18 +55,20 @@ class InventoryStockService
 
             $direction = (string) $data['direction'];
             $qty = abs((float) $data['qty']);
-            $unitCost = (float) ($data['unit_cost'] ?? 0);
-            $stockValue = round($qty * $unitCost, 2);
-
             $oldQty = (float) $balance['qty_on_hand'];
             $oldValue = (float) $balance['stock_value'];
+            $unitCost = (float) ($data['unit_cost'] ?? 0);
+            $effectiveUnitCost = $direction === 'out' && $unitCost <= 0 && $oldQty > 0
+                ? round($oldValue / $oldQty, 6)
+                : $unitCost;
+            $stockValue = round($qty * $effectiveUnitCost, 2);
             $newQty = $direction === 'in' ? $oldQty + $qty : $oldQty - $qty;
 
             if ($newQty < 0) {
                 throw new RuntimeException('Insufficient stock for item ' . $data['item_code'] . '. Current stock: ' . $oldQty);
             }
 
-            $newValue = $direction === 'in' ? $oldValue + $stockValue : $oldValue - (($oldQty > 0 ? $oldValue / $oldQty : $unitCost) * $qty);
+            $newValue = $direction === 'in' ? $oldValue + $stockValue : $oldValue - $stockValue;
             $newValue = max(0.0, round($newValue, 2));
             $avgCost = $newQty > 0 ? round($newValue / $newQty, 6) : 0.0;
             $reserved = (float) $balance['qty_reserved'];
@@ -91,7 +93,7 @@ class InventoryStockService
                 'movement_type' => $data['movement_type'] ?? ($direction === 'in' ? 'stock_in' : 'stock_out'),
                 'direction' => $direction,
                 'qty' => $qty,
-                'unit_cost' => $unitCost,
+                'unit_cost' => $effectiveUnitCost,
                 'stock_value' => $stockValue,
                 'reference_type' => $data['reference_type'] ?? null,
                 'reference_id' => $data['reference_id'] ?? null,

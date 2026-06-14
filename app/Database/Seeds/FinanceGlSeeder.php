@@ -8,16 +8,20 @@ class FinanceGlSeeder extends Seeder
 {
     public function run(): void
     {
-        $companyId = $this->firstId('companies');
-        if ($companyId === null) {
+        $companies = $this->activeCompanies();
+        if ($companies === []) {
             echo "FinanceGlSeeder skipped: no company found.\n";
             return;
         }
 
         $now = date('Y-m-d H:i:s');
-        $this->seedGlBook($companyId, $now);
-        $this->seedChartAccounts($companyId, $now);
-        $this->seedPostingProfiles($companyId, $now);
+
+        foreach ($companies as $company) {
+            $companyId = (int) $company['id'];
+            $this->seedGlBook($companyId, $now);
+            $this->seedChartAccounts($companyId, $now);
+            $this->seedPostingProfiles($companyId, $now);
+        }
     }
 
     private function seedGlBook(int $companyId, string $now): void
@@ -139,13 +143,17 @@ class FinanceGlSeeder extends Seeder
         }
     }
 
-    private function firstId(string $table): ?int
+    private function activeCompanies(): array
     {
-        if (! $this->db->tableExists($table)) {
-            return null;
+        if (! $this->db->tableExists('companies')) {
+            return [];
         }
 
-        $row = $this->db->table($table)->orderBy('id', 'ASC')->get(1)->getRowArray();
-        return $row !== null ? (int) $row['id'] : null;
+        $builder = $this->db->table('companies')->orderBy('id', 'ASC');
+        if ($this->db->fieldExists('is_active', 'companies')) {
+            $builder->where('is_active', 1);
+        }
+
+        return $builder->get()->getResultArray();
     }
 }

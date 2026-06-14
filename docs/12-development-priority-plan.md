@@ -47,9 +47,9 @@ Acuan utama: `pena_erp_data_dictionary_filled.xlsx`.
 | Phase 1 - Tenant, User, Role, Permission Core | Partial | Role/permission config, user access table, active company/site switcher, user/role page awal |
 | Phase 2 - Setup Master Core | Partial | CRUD generic setup master, wilayah sync, import/export view, menu setup, beberapa schema tambahan |
 | Phase 3 - Partner, Item, Tax, Commercial Master | Partial | Customer, supplier, item, UoM, VAT, item VAT, schema item/customer/supplier diselaraskan dengan Excel |
-| Phase 4 - Inventory Core | Partial | Stock balance, stock movement, stock adjustment, inventory stock service |
+| Phase 4 - Inventory Core | Partial | Stock balance, stock movement, stock adjustment, inventory stock service, average cost movement value |
 | Phase 5 - Purchase Core | Partial | Purchase Order, Purchase Receipt, Purchase Invoice/AP Payable baseline, controller, service, views, schema ensure |
-| Phase 6 - Sales Core | Partial | Sales Order, Allocation Order, Delivery Order, Sales Invoice/AR Receivable baseline, controller, service, views, schema ensure |
+| Phase 6 - Sales Core | Partial | Sales Order, Allocation Order, Delivery Order with COGS posting, Sales Invoice/AR Receivable baseline, controller, service, views, schema ensure |
 | Phase 7 - Finance Backbone | Partial | GL Entry, Posting Profile, dan auto journal untuk AR/AP invoice serta cash/bank settlement baseline sudah tersedia |
 | Phase 8 - AP dan AR | Partial | Sales Invoice/AR Receivable/AR Receipt dan Purchase Invoice/AP Payable/AP Payment baseline sudah ada; aging dan period close belum selesai |
 | Phase 9 - Costing | Pending | Baru rencana/menu placeholder, belum ada item cost engine |
@@ -272,6 +272,7 @@ Yang sudah dikerjakan:
 - Inventory stock service tersedia.
 - Stock balance controller/view tersedia.
 - Stock adjustment form tersedia dan sudah mendukung manual item entry.
+- Stock out memakai average cost saat unit cost tidak diisi, sehingga nilai inventory movement lebih layak untuk COGS.
 
 Sisa pekerjaan:
 - Inventory In Out, Transfer, dan Stock Opname belum lengkap sebagai workflow.
@@ -356,6 +357,7 @@ Yang sudah dikerjakan:
 - SalesOrderController, SalesOrderService, dan views index/form/show tersedia.
 - Menu Sales Order sudah diarahkan ke modul nyata.
 - Delivery Order core tersedia.
+- Delivery Order sudah membuat COGS GL Entry baseline dari nilai stock out.
 - Allocation Order baseline tersedia dan menghasilkan `allocationorder`/`allocationline`.
 - Sales Invoice dari Delivery Order sudah tersedia.
 - AR Receivable otomatis dibuka saat Sales Invoice diposting.

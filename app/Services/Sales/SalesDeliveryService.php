@@ -6,7 +6,10 @@ use App\Models\SalesDeliveryLineModel;
 use App\Models\SalesDeliveryModel;
 use App\Models\SalesOrderLineModel;
 use App\Models\SalesOrderModel;
+use App\Models\InventoryStockMovementModel;
 use App\Services\AuditLogService;
+use App\Services\Finance\GeneralLedgerService;
+use App\Services\Finance\PostingProfileService;
 use App\Services\Inventory\InventoryStockService;
 use Config\Database;
 use RuntimeException;
@@ -42,6 +45,9 @@ class SalesDeliveryService
             $deliveryLineModel = new SalesDeliveryLineModel();
             $soLineModel = new SalesOrderLineModel();
             $stock = new InventoryStockService();
+            $movementModel = new InventoryStockMovementModel();
+            $totalCogs = 0.0;
+            $postedLineCount = 0;
 
             $deliveryId = (int) $deliveryModel->insert($header + [
                 'status' => 'posted',
@@ -80,6 +86,7 @@ class SalesDeliveryService
                     'warehouse_id' => $header['warehouse_id'] ?? null,
                     'location_id' => $header['location_id'] ?? null,
                 ]);
+                $postedLineCount++;
 
                 $newDelivered = (float) ($soLine['qty_delivered'] ?? 0) + $qtyDeliver;
                 $newOutstanding = max(0, $outstanding - $qtyDeliver);
@@ -105,7 +112,7 @@ class SalesDeliveryService
                     ], $userId);
                 }
 
-                $stock->stockOut([
+                $movementId = $stock->stockOut([
                     'company_id' => $header['company_id'],
                     'site_id' => $header['site_id'] ?? null,
                     'warehouse_id' => $header['warehouse_id'] ?? null,
@@ -122,6 +129,18 @@ class SalesDeliveryService
                     'reference_no' => $header['delivery_no'],
                     'notes' => 'Stock out from SO ' . ($so['so_no'] ?? ''),
                 ], $userId);
+
+                $movement = $movementModel->find($movementId);
+                $totalCogs += (float) ($movement['stock_value'] ?? 0);
+            }
+
+            if ($postedLineCount < 1) {
+                throw new RuntimeException('No delivery line can be posted.');
+            }
+
+            $glEntryId = $this->postCogsGl($header, $deliveryId, round($totalCogs, 2), $userId);
+            if ($glEntryId !== null) {
+                $deliveryModel->update($deliveryId, ['gl_entry_id' => $glEntryId]);
             }
 
             $this->refreshSoStatus((int) $so['id'], $userId);
@@ -138,8 +157,8 @@ class SalesDeliveryService
                 'table_name' => 'sales_deliveries',
                 'record_id' => $deliveryId,
                 'record_code' => $header['delivery_no'],
-                'description' => 'Sales delivery posted and stock decreased.',
-                'new_values' => ['header' => $header, 'lines' => $lines],
+                'description' => 'Sales delivery posted, stock decreased, and COGS GL posted.',
+                'new_values' => ['header' => $header, 'lines' => $lines, 'cogs_amount' => $totalCogs, 'gl_entry_id' => $glEntryId],
             ]);
 
             return $deliveryId;
@@ -147,6 +166,42 @@ class SalesDeliveryService
             $db->transRollback();
             throw new RuntimeException($e->getMessage());
         }
+    }
+
+    private function postCogsGl(array $header, int $deliveryId, float $cogsAmount, ?int $userId): ?int
+    {
+        if ($cogsAmount <= 0) {
+            return null;
+        }
+
+        $companyId = (int) $header['company_id'];
+        $profile = new PostingProfileService();
+
+        return (new GeneralLedgerService())->post([
+            'company_id' => $companyId,
+            'site_id' => $header['site_id'] ?? null,
+            'journal_no' => 'GL-' . $header['delivery_no'],
+            'journal_date' => $header['delivery_date'] ?? date('Y-m-d'),
+            'source_module' => 'sales',
+            'source_type' => 'sales_delivery_cogs',
+            'source_id' => $deliveryId,
+            'source_no' => $header['delivery_no'],
+            'description' => 'COGS posting for delivery ' . $header['delivery_no'],
+            'currency_code' => $header['currency_code'] ?? 'IDR',
+        ], [
+            [
+                'account_no' => $profile->account($companyId, 'sales', 'cogs', '5000'),
+                'description' => 'Cost of Goods Sold',
+                'debit' => $cogsAmount,
+                'credit' => 0,
+            ],
+            [
+                'account_no' => $profile->account($companyId, 'sales', 'inventory', '1300'),
+                'description' => 'Inventory',
+                'debit' => 0,
+                'credit' => $cogsAmount,
+            ],
+        ], $userId);
     }
 
     private function refreshSoStatus(int $soId, ?int $userId = null): void

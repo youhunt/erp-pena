@@ -39,6 +39,10 @@ class PostingProfileService
                 'sales_revenue' => '4100',
                 'output_vat' => '2200',
             ],
+            'sales' => [
+                'cogs' => '5000',
+                'inventory' => '1300',
+            ],
             'cashbank' => [
                 'cash_bank' => '1100',
             ],
@@ -55,6 +59,8 @@ class PostingProfileService
             'ar.receivable' => 'Accounts Receivable',
             'ar.sales_revenue' => 'Sales Revenue',
             'ar.output_vat' => 'Output VAT',
+            'sales.cogs' => 'Cost of Goods Sold',
+            'sales.inventory' => 'Inventory',
             'cashbank.cash_bank' => 'Cash and Bank',
             default => ucwords(str_replace('_', ' ', $postingKey)),
         };

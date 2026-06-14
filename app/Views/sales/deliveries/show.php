@@ -18,6 +18,7 @@
                         <tr><th>Date</th><td><?= esc($delivery['delivery_date']) ?></td></tr>
                         <tr><th>SO No</th><td><a href="<?= site_url('sales/orders/' . $delivery['sales_order_id']) ?>"><?= esc($delivery['so_no']) ?></a></td></tr>
                         <tr><th>Customer</th><td><?= esc(($delivery['customer_code'] ?? '-') . ' ' . ($delivery['customer_name'] ?? '')) ?></td></tr>
+                        <tr><th>COGS GL Entry</th><td><?= ! empty($delivery['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $delivery['gl_entry_id']) . '">#' . esc($delivery['gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Posted</th><td><?= esc($delivery['posted_at'] ?? '-') ?></td></tr>
                     </tbody>
                 </table>
