@@ -30,6 +30,7 @@ class PostingProfileService
         return [
             'ap' => [
                 'payable' => '2100',
+                'grni' => '2300',
                 'manual_expense' => '6200',
                 'inventory' => '1300',
                 'input_vat' => '1400',
@@ -53,6 +54,7 @@ class PostingProfileService
     {
         return match ($moduleCode . '.' . $postingKey) {
             'ap.payable' => 'Accounts Payable',
+            'ap.grni' => 'Goods Received Not Invoiced',
             'ap.manual_expense' => 'Manual A/P Expense',
             'ap.inventory' => 'Purchased Inventory',
             'ap.input_vat' => 'Input VAT',

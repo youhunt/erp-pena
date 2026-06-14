@@ -6,7 +6,10 @@ use App\Models\PurchaseOrderLineModel;
 use App\Models\PurchaseOrderModel;
 use App\Models\PurchaseReceiptLineModel;
 use App\Models\PurchaseReceiptModel;
+use App\Models\InventoryStockMovementModel;
 use App\Services\AuditLogService;
+use App\Services\Finance\GeneralLedgerService;
+use App\Services\Finance\PostingProfileService;
 use App\Services\Inventory\InventoryStockService;
 use Config\Database;
 use RuntimeException;
@@ -41,6 +44,9 @@ class PurchaseReceiptService
             $receiptLineModel = new PurchaseReceiptLineModel();
             $poLineModel = new PurchaseOrderLineModel();
             $stock = new InventoryStockService();
+            $movementModel = new InventoryStockMovementModel();
+            $totalInventoryValue = 0.0;
+            $postedLineCount = 0;
 
             $receiptId = (int) $receiptModel->insert($header + [
                 'status' => 'posted',
@@ -79,6 +85,7 @@ class PurchaseReceiptService
                     'warehouse_id' => $header['warehouse_id'] ?? null,
                     'location_id' => $header['location_id'] ?? null,
                 ]);
+                $postedLineCount++;
 
                 $newReceived = (float) ($poLine['qty_received'] ?? 0) + $qtyReceive;
                 $newOutstanding = max(0, $outstanding - $qtyReceive);
@@ -88,7 +95,7 @@ class PurchaseReceiptService
                     'line_status' => $newOutstanding <= 0 ? 'received' : 'partial_received',
                 ]);
 
-                $stock->stockIn([
+                $movementId = $stock->stockIn([
                     'company_id' => $header['company_id'],
                     'site_id' => $header['site_id'] ?? null,
                     'warehouse_id' => $header['warehouse_id'] ?? null,
@@ -105,6 +112,18 @@ class PurchaseReceiptService
                     'reference_no' => $header['receipt_no'],
                     'notes' => 'Stock in from PO ' . ($po['po_no'] ?? ''),
                 ], $userId);
+
+                $movement = $movementModel->find($movementId);
+                $totalInventoryValue += (float) ($movement['stock_value'] ?? 0);
+            }
+
+            if ($postedLineCount < 1) {
+                throw new RuntimeException('No receipt line can be posted.');
+            }
+
+            $glEntryId = $this->postReceiptGl($header, $receiptId, round($totalInventoryValue, 2), $userId);
+            if ($glEntryId !== null) {
+                $receiptModel->update($receiptId, ['gl_entry_id' => $glEntryId]);
             }
 
             $this->refreshPoStatus((int) $po['id'], $userId);
@@ -121,8 +140,8 @@ class PurchaseReceiptService
                 'table_name' => 'purchase_receipts',
                 'record_id' => $receiptId,
                 'record_code' => $header['receipt_no'],
-                'description' => 'Purchase receipt posted and stock increased.',
-                'new_values' => ['header' => $header, 'lines' => $lines],
+                'description' => 'Purchase receipt posted, stock increased, and inventory/GRNI GL posted.',
+                'new_values' => ['header' => $header, 'lines' => $lines, 'inventory_value' => $totalInventoryValue, 'gl_entry_id' => $glEntryId],
             ]);
 
             return $receiptId;
@@ -130,6 +149,42 @@ class PurchaseReceiptService
             $db->transRollback();
             throw new RuntimeException($e->getMessage());
         }
+    }
+
+    private function postReceiptGl(array $header, int $receiptId, float $inventoryValue, ?int $userId): ?int
+    {
+        if ($inventoryValue <= 0) {
+            return null;
+        }
+
+        $companyId = (int) $header['company_id'];
+        $profile = new PostingProfileService();
+
+        return (new GeneralLedgerService())->post([
+            'company_id' => $companyId,
+            'site_id' => $header['site_id'] ?? null,
+            'journal_no' => 'GL-' . $header['receipt_no'],
+            'journal_date' => $header['receipt_date'] ?? date('Y-m-d'),
+            'source_module' => 'purchase',
+            'source_type' => 'purchase_receipt',
+            'source_id' => $receiptId,
+            'source_no' => $header['receipt_no'],
+            'description' => 'Inventory receipt posting ' . $header['receipt_no'],
+            'currency_code' => $header['currency_code'] ?? 'IDR',
+        ], [
+            [
+                'account_no' => $profile->account($companyId, 'ap', 'inventory', '1300'),
+                'description' => 'Purchased Inventory',
+                'debit' => $inventoryValue,
+                'credit' => 0,
+            ],
+            [
+                'account_no' => $profile->account($companyId, 'ap', 'grni', '2300'),
+                'description' => 'Goods Received Not Invoiced',
+                'debit' => 0,
+                'credit' => $inventoryValue,
+            ],
+        ], $userId);
     }
 
     private function refreshPoStatus(int $poId, ?int $userId = null): void

@@ -339,8 +339,8 @@ class PurchaseInvoiceService
             [
                 'account_no' => $sourceType === 'manual_ap_invoice'
                     ? $profile->account($companyId, 'ap', 'manual_expense', '6200')
-                    : $profile->account($companyId, 'ap', 'inventory', '1300'),
-                'description' => $sourceType === 'manual_ap_invoice' ? 'Manual A/P expense' : 'Purchased Inventory',
+                    : $profile->account($companyId, 'ap', 'grni', '2300'),
+                'description' => $sourceType === 'manual_ap_invoice' ? 'Manual A/P expense' : 'Goods Received Not Invoiced',
                 'debit' => $inventoryAmount,
                 'credit' => 0,
             ],

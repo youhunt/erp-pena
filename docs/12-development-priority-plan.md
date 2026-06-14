@@ -48,7 +48,7 @@ Acuan utama: `pena_erp_data_dictionary_filled.xlsx`.
 | Phase 2 - Setup Master Core | Partial | CRUD generic setup master, wilayah sync, import/export view, menu setup, beberapa schema tambahan |
 | Phase 3 - Partner, Item, Tax, Commercial Master | Partial | Customer, supplier, item, UoM, VAT, item VAT, schema item/customer/supplier diselaraskan dengan Excel |
 | Phase 4 - Inventory Core | Partial | Stock balance, stock movement, stock adjustment, inventory stock service, average cost movement value |
-| Phase 5 - Purchase Core | Partial | Purchase Order, Purchase Receipt, Purchase Invoice/AP Payable baseline, controller, service, views, schema ensure |
+| Phase 5 - Purchase Core | Partial | Purchase Order, Purchase Receipt with Inventory/GRNI posting, Purchase Invoice/AP Payable baseline, controller, service, views, schema ensure |
 | Phase 6 - Sales Core | Partial | Sales Order, Allocation Order, Delivery Order with COGS posting, Sales Invoice/AR Receivable baseline, controller, service, views, schema ensure |
 | Phase 7 - Finance Backbone | Partial | GL Entry, Posting Profile, dan auto journal untuk AR/AP invoice serta cash/bank settlement baseline sudah tersedia |
 | Phase 8 - AP dan AR | Partial | Sales Invoice/AR Receivable/AR Receipt dan Purchase Invoice/AP Payable/AP Payment baseline sudah ada; aging dan period close belum selesai |
@@ -313,13 +313,15 @@ Yang sudah dikerjakan:
 - PurchaseOrderController, PurchaseOrderService, dan views index/form/show tersedia.
 - Menu Purchase Order sudah diarahkan ke modul nyata.
 - Purchase Receipt core tersedia sebagai transaksi penerimaan barang.
+- Purchase Receipt sudah membuat Inventory/GRNI GL Entry baseline dari nilai stock in.
 - Purchase Invoice dari Purchase Receipt sudah tersedia.
 - AP Payable otomatis dibuka saat Purchase Invoice diposting.
+- Purchase Invoice dari Receipt sudah membersihkan GRNI ke AP baseline.
 
 Sisa pekerjaan:
 - Purchase intransit dan cost purchase receipt belum ada sebagai workflow penuh.
 - Approval PO dan status lifecycle perlu dipoles.
-- Posting ke GL belum end-to-end.
+- Posting ke GL sudah baseline untuk receipt dan invoice, tetapi belum lengkap untuk landed cost, return, reversal, dan approval.
 - Aging, GL posting, dan A/P period close belum selesai.
 
 ## Phase 6 - Sales Core
