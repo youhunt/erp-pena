@@ -47,7 +47,7 @@ Acuan utama: `pena_erp_data_dictionary_filled.xlsx`.
 | Phase 1 - Tenant, User, Role, Permission Core | Partial | Role/permission config, user access table, active company/site switcher, user/role page awal |
 | Phase 2 - Setup Master Core | Partial | CRUD generic setup master, wilayah sync, import/export view, menu setup, beberapa schema tambahan |
 | Phase 3 - Partner, Item, Tax, Commercial Master | Partial | Customer, supplier, item, UoM, VAT, item VAT, schema item/customer/supplier diselaraskan dengan Excel |
-| Phase 4 - Inventory Core | Partial | Stock balance, stock movement, stock adjustment, inventory stock service, average cost movement value, inventory adjustment GL posting, Inventory Transfer header-line workflow dengan audit status/reversal, inventory period close guard |
+| Phase 4 - Inventory Core | Partial | Stock balance, stock card, stock movement, stock adjustment, inventory stock service, average cost movement value, inventory adjustment GL posting, Inventory Transfer header-line workflow dengan audit status/reversal, inventory period close guard |
 | Phase 5 - Purchase Core | Partial | Purchase Order, Purchase Receipt with Inventory/GRNI posting, Purchase Invoice/AP Payable baseline, controller, service, views, schema ensure |
 | Phase 6 - Sales Core | Partial | Sales Order, Allocation Order, Delivery Order with COGS posting, Sales Invoice/AR Receivable baseline, controller, service, views, schema ensure |
 | Phase 7 - Finance Backbone | Partial | GL Entry, Posting Profile, dan auto journal untuk AR/AP invoice serta cash/bank settlement baseline sudah tersedia |
@@ -277,6 +277,7 @@ Yang sudah dikerjakan:
 - Inventory Transfer sudah menjadi dokumen header-line dengan draft, submit, post, cancel, movement out/in, kolom workflow audit, dan audit log aplikasi.
 - Inventory Transfer posted sudah bisa di-reverse dengan movement balik dari destination ke source serta jejak reversal per line.
 - Inventory stock posting sudah mengecek Period Close module `inventory`, sehingga stok tidak bisa bergerak pada periode inventory yang sudah ditutup.
+- Stock Card sudah tersedia untuk melihat movement kronologis, opening balance, qty in/out, dan running balance per filter item/warehouse/location/tanggal.
 
 Sisa pekerjaan:
 - General stock movement reversal dan period close process checklist belum lengkap.

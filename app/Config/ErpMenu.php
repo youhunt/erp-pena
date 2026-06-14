@@ -66,6 +66,8 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Item Location', 'setup/item-locations', 'inventory.item.view'),
                 $this->leaf('Item UoM Conversion', $this->placeholderRoute('Item UoM Conversion'), 'inventory.item.view'),
                 $this->leaf('Batch Master', $this->placeholderRoute('Batch Master'), 'inventory.item.view'),
+                $this->leaf('Stock Balance', 'inventory/stock-balances', 'inventory.stock.view'),
+                $this->leaf('Stock Card', 'inventory/stock-card', 'inventory.stock.view'),
                 $this->leaf('Inventory In Out', 'inventory/in-out', 'inventory.movement.post'),
                 $this->leaf('Inventory Transfer', 'inventory/transfers', 'inventory.movement.post'),
                 $this->leaf('Inventory Stock Opname', 'inventory/stock-opname', 'inventory.movement.post'),
