@@ -5,6 +5,8 @@ namespace App\Services\Inventory;
 use App\Models\InventoryStockBalanceModel;
 use App\Models\InventoryStockMovementModel;
 use App\Services\AuditLogService;
+use App\Services\Finance\GeneralLedgerService;
+use App\Services\Finance\PostingProfileService;
 use Config\Database;
 use RuntimeException;
 use Throwable;
@@ -103,6 +105,17 @@ class InventoryStockService
                 'created_at' => date('Y-m-d H:i:s'),
             ], true);
 
+            $glEntryId = $this->postAdjustmentGl($data + [
+                'company_id' => $data['company_id'],
+                'site_id' => $data['site_id'] ?? null,
+                'direction' => $direction,
+                'stock_value' => $stockValue,
+                'effective_unit_cost' => $effectiveUnitCost,
+            ], $movementId, $userId);
+            if ($glEntryId !== null) {
+                $movementModel->update($movementId, ['gl_entry_id' => $glEntryId]);
+            }
+
             if ($db->transStatus() === false) {
                 throw new RuntimeException('Failed to post stock movement.');
             }
@@ -120,6 +133,7 @@ class InventoryStockService
                 'new_values' => [
                     'movement' => $data + ['qty' => $qty, 'direction' => $direction],
                     'balance' => ['old_qty' => $oldQty, 'new_qty' => $newQty, 'avg_cost' => $avgCost],
+                    'gl_entry_id' => $glEntryId,
                 ],
             ]);
 
@@ -128,6 +142,54 @@ class InventoryStockService
             $db->transRollback();
             throw new RuntimeException($exception->getMessage());
         }
+    }
+
+    private function postAdjustmentGl(array $data, int $movementId, ?int $userId): ?int
+    {
+        $movementType = (string) ($data['movement_type'] ?? '');
+        if (! in_array($movementType, ['manual_in', 'manual_out', 'stock_adjustment', 'stock_opname', 'inventory_in_out'], true)) {
+            return null;
+        }
+
+        $stockValue = round((float) ($data['stock_value'] ?? 0), 2);
+        if ($stockValue <= 0) {
+            return null;
+        }
+
+        $companyId = (int) $data['company_id'];
+        $isIn = (string) ($data['direction'] ?? '') === 'in';
+        $profile = new PostingProfileService();
+        $inventoryAccount = $profile->account($companyId, 'inventory', 'inventory', '1300');
+        $gainAccount = $profile->account($companyId, 'inventory', 'adjustment_gain', '7000');
+        $lossAccount = $profile->account($companyId, 'inventory', 'adjustment_loss', '8000');
+        $referenceNo = trim((string) ($data['reference_no'] ?? 'INV-' . date('Ymd-His')));
+        $description = trim((string) ($data['notes'] ?? 'Inventory adjustment'));
+
+        return (new GeneralLedgerService())->post([
+            'company_id' => $companyId,
+            'site_id' => $data['site_id'] ?? null,
+            'journal_no' => 'GL-' . $referenceNo,
+            'journal_date' => substr((string) ($data['movement_date'] ?? date('Y-m-d')), 0, 10),
+            'source_module' => 'inventory',
+            'source_type' => $movementType,
+            'source_id' => $movementId,
+            'source_no' => $referenceNo,
+            'description' => $description !== '' ? $description : 'Inventory adjustment ' . $referenceNo,
+            'currency_code' => $data['currency_code'] ?? 'IDR',
+        ], [
+            [
+                'account_no' => $isIn ? $inventoryAccount : $lossAccount,
+                'description' => $isIn ? 'Inventory increase' : 'Inventory adjustment loss',
+                'debit' => $stockValue,
+                'credit' => 0,
+            ],
+            [
+                'account_no' => $isIn ? $gainAccount : $inventoryAccount,
+                'description' => $isIn ? 'Inventory adjustment gain' : 'Inventory decrease',
+                'debit' => 0,
+                'credit' => $stockValue,
+            ],
+        ], $userId);
     }
 
     private function validateMovement(array $data): void

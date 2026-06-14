@@ -44,6 +44,11 @@ class PostingProfileService
                 'cogs' => '5000',
                 'inventory' => '1300',
             ],
+            'inventory' => [
+                'inventory' => '1300',
+                'adjustment_gain' => '7000',
+                'adjustment_loss' => '8000',
+            ],
             'cashbank' => [
                 'cash_bank' => '1100',
             ],
@@ -63,6 +68,9 @@ class PostingProfileService
             'ar.output_vat' => 'Output VAT',
             'sales.cogs' => 'Cost of Goods Sold',
             'sales.inventory' => 'Inventory',
+            'inventory.inventory' => 'Inventory',
+            'inventory.adjustment_gain' => 'Inventory Adjustment Gain',
+            'inventory.adjustment_loss' => 'Inventory Adjustment Loss',
             'cashbank.cash_bank' => 'Cash and Bank',
             default => ucwords(str_replace('_', ' ', $postingKey)),
         };

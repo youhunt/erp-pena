@@ -11,6 +11,7 @@
                         <th>Dir</th>
                         <th class="text-end">Qty</th>
                         <th>Ref</th>
+                        <th>GL</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -25,11 +26,12 @@
                         <td><span class="badge bg-<?= ($movement['direction'] ?? '') === 'in' ? 'success' : 'danger' ?>"><?= esc($movement['direction'] ?? '-') ?></span></td>
                         <td class="text-end"><?= esc(number_format((float) ($movement['qty'] ?? 0), 4)) ?></td>
                         <td><?= esc($movement['reference_no'] ?? '-') ?></td>
+                        <td><?= ! empty($movement['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $movement['gl_entry_id']) . '">#' . esc($movement['gl_entry_id']) . '</a>' : '-' ?></td>
                     </tr>
                 <?php endforeach ?>
 
                 <?php if ($recentMovements === []): ?>
-                    <tr><td colspan="6" class="text-center text-muted py-4">No stock movement yet.</td></tr>
+                    <tr><td colspan="7" class="text-center text-muted py-4">No stock movement yet.</td></tr>
                 <?php endif ?>
                 </tbody>
             </table>

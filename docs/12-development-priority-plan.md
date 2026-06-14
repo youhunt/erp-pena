@@ -47,7 +47,7 @@ Acuan utama: `pena_erp_data_dictionary_filled.xlsx`.
 | Phase 1 - Tenant, User, Role, Permission Core | Partial | Role/permission config, user access table, active company/site switcher, user/role page awal |
 | Phase 2 - Setup Master Core | Partial | CRUD generic setup master, wilayah sync, import/export view, menu setup, beberapa schema tambahan |
 | Phase 3 - Partner, Item, Tax, Commercial Master | Partial | Customer, supplier, item, UoM, VAT, item VAT, schema item/customer/supplier diselaraskan dengan Excel |
-| Phase 4 - Inventory Core | Partial | Stock balance, stock movement, stock adjustment, inventory stock service, average cost movement value |
+| Phase 4 - Inventory Core | Partial | Stock balance, stock movement, stock adjustment, inventory stock service, average cost movement value, inventory adjustment GL posting |
 | Phase 5 - Purchase Core | Partial | Purchase Order, Purchase Receipt with Inventory/GRNI posting, Purchase Invoice/AP Payable baseline, controller, service, views, schema ensure |
 | Phase 6 - Sales Core | Partial | Sales Order, Allocation Order, Delivery Order with COGS posting, Sales Invoice/AR Receivable baseline, controller, service, views, schema ensure |
 | Phase 7 - Finance Backbone | Partial | GL Entry, Posting Profile, dan auto journal untuk AR/AP invoice serta cash/bank settlement baseline sudah tersedia |
@@ -273,10 +273,11 @@ Yang sudah dikerjakan:
 - Stock balance controller/view tersedia.
 - Stock adjustment form tersedia dan sudah mendukung manual item entry.
 - Stock out memakai average cost saat unit cost tidak diisi, sehingga nilai inventory movement lebih layak untuk COGS.
+- Manual Inventory In/Out, Stock Adjustment, dan Stock Opname variance sudah bisa membuat GL Entry adjustment baseline.
 
 Sisa pekerjaan:
-- Inventory In Out, Transfer, dan Stock Opname belum lengkap sebagai workflow.
-- Posting/reversal dan period close belum lengkap.
+- Inventory Transfer belum lengkap sebagai dokumen header-line formal.
+- Reversal dan period close belum lengkap.
 - Integrasi stock ledger dengan PO receipt, DO, POS, dan production masih perlu dipastikan end-to-end.
 
 ## Phase 5 - Purchase Core
