@@ -10,8 +10,10 @@ class InventoryMenuSeeder extends Seeder
     {
         $now = date('Y-m-d H:i:s');
         $inventoryId = $this->menuItem(null, 'Inventory', '#', 'bx-package', null, 35, $now);
-        $this->menuItem($inventoryId, 'Stock Balance', 'inventory/stock-balances', null, 'inventory.stock.view', 10, $now);
-        $this->menuItem($inventoryId, 'Stock Adjustment', 'inventory/stock-adjustment', null, 'inventory.adjustment.create', 20, $now);
+        $this->menuItem($inventoryId, 'Item Master', 'setup/items', null, 'inventory.item.view', 10, $now);
+        $this->menuItem($inventoryId, 'Item Location', 'setup/item-locations', null, 'inventory.item.view', 15, $now);
+        $this->menuItem($inventoryId, 'Stock Balance', 'inventory/stock-balances', null, 'inventory.stock.view', 20, $now);
+        $this->menuItem($inventoryId, 'Stock Adjustment', 'inventory/stock-adjustment', null, 'inventory.adjustment.create', 30, $now);
     }
 
     private function menuItem(?int $parentId, string $label, string $route, ?string $icon, ?string $permission, int $sort, string $now): int

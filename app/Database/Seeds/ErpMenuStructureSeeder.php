@@ -106,6 +106,7 @@ class ErpMenuStructureSeeder extends Seeder
                 'icon' => 'bx-package',
                 'children' => [
                     ['label' => 'Item Master', 'route' => 'setup/items'],
+                    ['label' => 'Item Location', 'route' => 'setup/item-locations'],
                     ['label' => 'Item UoM Conversion', 'route' => 'setup/uom-conversions'],
                     ['label' => 'Batch Master', 'route' => 'modules/batch-master'],
                     ['label' => 'Inventory In Out', 'route' => 'inventory/in-out'],

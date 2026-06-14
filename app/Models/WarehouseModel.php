@@ -10,6 +10,6 @@ class WarehouseModel extends Model
     protected $primaryKey = 'id';
     protected $returnType = 'array';
     protected $useSoftDeletes = true;
-    protected $allowedFields = ['company_id', 'site_id', 'code', 'name', 'description', 'is_active', 'created_by', 'updated_by'];
+    protected $allowedFields = ['company_id', 'site_id', 'department_id', 'code', 'name', 'description', 'is_active', 'created_by', 'updated_by'];
     protected $useTimestamps = true;
 }

@@ -13,6 +13,7 @@ use App\Models\CustomerTermModel;
 use App\Models\CustomerModel;
 use App\Models\DepartmentModel;
 use App\Models\ItemModel;
+use App\Models\ItemLocationModel;
 use App\Models\ItemVatRateModel;
 use App\Models\LocationModel;
 use App\Models\PostalCodeModel;
@@ -46,7 +47,9 @@ class MasterDataController extends BaseController
             'companies' => $this->globalResource('Companies', CompanyModel::class, 'companies', $this->fields(['code' => 'Code*', 'name' => 'Name*', 'legal_name' => 'Legal Name', 'tax_number' => 'Tax Number', 'base_currency' => 'Base Currency', 'address' => 'Address~', 'is_active' => 'Active!'])),
             'sites' => $this->tenantResource('Sites / Branches', SiteModel::class, 'sites', false, $this->fields(['code' => 'Code*', 'name' => 'Name*', 'address' => 'Address~', 'is_active' => 'Active!'])),
             'departments' => $this->tenantResource('Departments', DepartmentModel::class, 'departments', true, $this->simpleFields()),
-            'warehouses' => $this->tenantResource('Warehouses', WarehouseModel::class, 'warehouses', true, $this->simpleFields()),
+            'warehouses' => $this->tenantResource('Warehouses', WarehouseModel::class, 'warehouses', true, [
+                'department_id' => ['label' => 'Department', 'type' => 'select', 'required' => true, 'options_source' => 'departments'],
+            ] + $this->simpleFields()) + ['list_fields' => ['department_id', 'code', 'name', 'description']],
             'locations' => $this->tenantResource('Locations', LocationModel::class, 'locations', true, ['warehouse_id' => ['label' => 'Warehouse', 'type' => 'select', 'required' => true, 'options_source' => 'warehouses']] + $this->simpleFields()),
             'countries' => $this->globalResource('Countries', CountryModel::class, 'countries', $this->fields(['code' => 'Code*', 'name' => 'Name*', 'is_active' => 'Active!'])),
             'provinces' => $this->globalResource('Provinces', ProvinceModel::class, 'provinces', ['parent_id' => ['label' => 'Country', 'type' => 'select', 'options_source' => 'countries']] + $this->fields(['code' => 'Code*', 'name' => 'Name*', 'is_active' => 'Active!'])) + ['sync_action' => 'setup/provinces/sync'],
@@ -68,6 +71,16 @@ class MasterDataController extends BaseController
                 'vat_rate_id' => ['label' => 'VAT', 'type' => 'select', 'options_source' => 'vat_rates', 'required' => true],
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
             ]) + ['display' => ['code' => 'item_id', 'name' => 'vat_rate_id'], 'order_by' => 'id'],
+            'item-locations' => $this->tenantResource('Item Locations', ItemLocationModel::class, 'item_locations', true, [
+                'warehouse_id' => ['label' => 'Warehouse', 'type' => 'select', 'required' => true, 'options_source' => 'warehouses'],
+                'location_id' => ['label' => 'Location', 'type' => 'select', 'required' => true, 'options_source' => 'locations', 'depends_on' => 'warehouse_id', 'options_endpoint' => 'setup/options/locations'],
+                'item_id' => ['label' => 'Item', 'type' => 'select', 'required' => true, 'options_source' => 'items'],
+                'min_qty' => ['label' => 'Min Qty', 'type' => 'number', 'default' => 0],
+                'max_qty' => ['label' => 'Max Qty', 'type' => 'number', 'default' => 0],
+                'reorder_qty' => ['label' => 'Reorder Qty', 'type' => 'number', 'default' => 0],
+                'is_default' => ['label' => 'Default Location', 'type' => 'checkbox', 'default' => 0],
+                'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
+            ], 'inventory.item.view', 'inventory.item.manage') + ['display' => ['code' => 'location_id', 'name' => 'item_id', 'description' => 'warehouse_id'], 'list_fields' => ['warehouse_id', 'location_id', 'item_id', 'item_code', 'is_default'], 'order_by' => 'id'],
             'address-master' => $this->tenantResource('Address Master', AddressModel::class, 'addresses', true, $this->addressFields()) + ['list_fields' => ['code', 'name', 'address_type', 'owner_type', 'address_line1', 'phone', 'mobile']],
             'customer-terms' => $this->tenantResource('Customer Terms', CustomerTermModel::class, 'customer_terms', true, $this->termsFields('Customer'), 'sales.customer.view', 'sales.customer.manage') + ['display' => ['code' => 'terms_code', 'name' => 'terms_name', 'description' => 'terms_days'], 'list_fields' => ['terms_code', 'terms_name', 'terms_days', 'promo_code'], 'order_by' => 'terms_code'],
             'customer-promos' => $this->tenantResource('Customer Promotions', CustomerPromotionModel::class, 'customer_promotions', true, $this->customerPromotionFields(), 'sales.customer.view', 'sales.customer.manage') + ['display' => ['code' => 'promo_code', 'name' => 'promo_description', 'description' => 'customer_name'], 'list_fields' => ['promo_code', 'promo_description', 'customer', 'item_parent', 'promo_type', 'active_date'], 'order_by' => 'promo_code'],
@@ -226,6 +239,37 @@ class MasterDataController extends BaseController
         return $this->response->setJSON($options);
     }
 
+    public function locationOptions()
+    {
+        if (! $this->can('inventory.item.view') && ! $this->can('setup.master.view')) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        $warehouseId = (int) $this->request->getGet('warehouse_id');
+        $model = new LocationModel();
+        $tenant = new TenantContext(session());
+
+        if ($tenant->activeCompanyId() !== null) {
+            $model->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $model->where('site_id', $tenant->activeSiteId());
+        }
+        if ($warehouseId > 0) {
+            $model->where('warehouse_id', $warehouseId);
+        }
+
+        $options = [];
+        foreach ($model->where('is_active', 1)->orderBy('code', 'ASC')->findAll() as $row) {
+            $options[] = [
+                'value' => (string) $row['id'],
+                'label' => trim(($row['code'] ?? $row['id']) . ' - ' . ($row['name'] ?? '')),
+            ];
+        }
+
+        return $this->response->setJSON($options);
+    }
+
     private function setupResource(string $title, string $model, string $table, bool $tenant, bool $site, bool $withRate = false): array
     {
         $fields = $this->fields(['code' => 'Code*', 'name' => 'Name*']);
@@ -315,6 +359,12 @@ class MasterDataController extends BaseController
 
         if ($config['table'] === 'items') {
             $payload += ['code' => $payload['item_code'] ?? null, 'name' => $payload['item_name'] ?? null, 'is_active' => $payload['active'] ?? 1];
+        }
+        if ($config['table'] === 'item_locations') {
+            $item = ! empty($payload['item_id'])
+                ? (new ItemModel())->find((int) $payload['item_id'])
+                : null;
+            $payload['item_code'] = (string) ($item['item_code'] ?? $item['code'] ?? '');
         }
         if ($config['table'] === 'customers') {
             $payload += [
@@ -475,7 +525,9 @@ class MasterDataController extends BaseController
             'provinces' => [ProvinceModel::class, false, false],
             'cities' => [CityModel::class, false, false],
             'postal_codes' => [PostalCodeModel::class, false, false],
+            'departments' => [DepartmentModel::class, true, true],
             'warehouses' => [WarehouseModel::class, true, true],
+            'locations' => [LocationModel::class, true, true],
             'uoms' => [UomModel::class, true, false],
             'items' => [ItemModel::class, true, true],
             'customers' => [CustomerModel::class, true, true],

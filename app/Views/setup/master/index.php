@@ -15,7 +15,9 @@ $fieldLabel = static function (string $field, array $config): string {
 };
 
 $relationTables = [
+    'department_id' => 'departments',
     'warehouse_id' => 'warehouses',
+    'location_id' => 'locations',
     'from_uom_id' => 'uoms',
     'to_uom_id' => 'uoms',
     'stock_uom_id' => 'uoms',
@@ -48,8 +50,8 @@ $relationLabel = static function (string $field, mixed $value) use (&$relationCa
         return $relationCache[$cacheKey] = (string) $value;
     }
 
-    $code = trim((string) ($row['code'] ?? $row['id'] ?? $value));
-    $name = trim((string) ($row['name'] ?? ''));
+    $code = trim((string) ($row['item_code'] ?? $row['customer'] ?? $row['supplier'] ?? $row['terms_code'] ?? $row['promo_code'] ?? $row['code'] ?? $row['id'] ?? $value));
+    $name = trim((string) ($row['item_name'] ?? $row['customern'] ?? $row['supplierna'] ?? $row['terms_name'] ?? $row['promo_description'] ?? $row['name'] ?? ''));
 
     return $relationCache[$cacheKey] = $name !== '' ? $code . ' - ' . $name : $code;
 };

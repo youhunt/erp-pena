@@ -61,6 +61,7 @@ class ErpMenu extends BaseConfig
             ]),
             $this->group('Inventory', 'bx-package', 60, [
                 $this->leaf('Item Master', 'setup/items', 'inventory.item.view'),
+                $this->leaf('Item Location', 'setup/item-locations', 'inventory.item.view'),
                 $this->leaf('Item UoM Conversion', $this->placeholderRoute('Item UoM Conversion'), 'inventory.item.view'),
                 $this->leaf('Batch Master', $this->placeholderRoute('Batch Master'), 'inventory.item.view'),
                 $this->leaf('Inventory In Out', 'inventory/in-out', 'inventory.movement.post'),

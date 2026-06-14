@@ -230,7 +230,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             resetOptions('Loading...');
 
-            fetch(url + '?' + new URLSearchParams({ province_id: parentValue }).toString(), {
+            fetch(url + '?' + new URLSearchParams({ [select.dataset.dependsOn]: parentValue }).toString(), {
                 headers: { 'Accept': 'application/json' }
             })
                 .then(function (response) { return response.json(); })
