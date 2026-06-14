@@ -115,7 +115,7 @@ class InventoryTransferController extends BaseController
         $db->transBegin();
 
         try {
-            $headerId = (int) $db->table('inventory_transfer_headers')->insert([
+            $db->table('inventory_transfer_headers')->insert([
                 'company_id' => $companyId,
                 'site_id' => $siteId,
                 'transfer_no' => $transferNo,
@@ -132,7 +132,12 @@ class InventoryTransferController extends BaseController
                 'updated_by' => auth()->id(),
                 'created_at' => $now,
                 'updated_at' => $now,
-            ], true);
+            ]);
+            $headerId = (int) $db->insertID();
+
+            if ($headerId < 1) {
+                throw new RuntimeException('Failed to create transfer header.');
+            }
 
             foreach ($lines as $index => $line) {
                 $referenceNo = $transferNo . '-' . str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT);
