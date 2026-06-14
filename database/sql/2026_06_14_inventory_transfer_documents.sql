@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS `inventory_transfer_headers` (
   `from_location_id` INT(11) UNSIGNED NULL DEFAULT NULL,
   `to_warehouse_id` INT(11) UNSIGNED NULL DEFAULT NULL,
   `to_location_id` INT(11) UNSIGNED NULL DEFAULT NULL,
-  `status` VARCHAR(20) NOT NULL DEFAULT 'posted',
+  `status` VARCHAR(20) NOT NULL DEFAULT 'draft',
   `notes` TEXT NULL,
   `posted_at` DATETIME NULL DEFAULT NULL,
   `posted_by` INT(11) UNSIGNED NULL DEFAULT NULL,
@@ -58,6 +58,10 @@ CREATE TABLE IF NOT EXISTS `inventory_transfer_lines` (
     FOREIGN KEY (`header_id`) REFERENCES `inventory_transfer_headers` (`id`)
     ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Safe for databases that already created the table using the older default status.
+ALTER TABLE `inventory_transfer_headers`
+  MODIFY `status` VARCHAR(20) NOT NULL DEFAULT 'draft';
 
 SET FOREIGN_KEY_CHECKS = 1;
 
