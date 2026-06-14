@@ -40,22 +40,89 @@ class XlsxSheetReader
 
     private function extractZip(string $zipPath, string $destination): void
     {
-        if (stripos(PHP_OS_FAMILY, 'Windows') !== false) {
-            $command = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath ' . $this->psQuote($zipPath) . ' -DestinationPath ' . $this->psQuote($destination) . ' -Force"';
-            $this->runCommand($command, 'PowerShell Expand-Archive failed. Make sure shell_exec is enabled and PowerShell is available.');
+        if (class_exists(\ZipArchive::class)) {
+            $this->extractWithZipArchive($zipPath, $destination);
             return;
         }
 
-        $command = 'unzip -qq -o ' . escapeshellarg($zipPath) . ' -d ' . escapeshellarg($destination);
-        $this->runCommand($command, 'unzip command failed. Install unzip or enable PHP ZipArchive.');
+        $this->extractWithShellCommand($zipPath, $destination);
+    }
+
+    private function extractWithZipArchive(string $zipPath, string $destination): void
+    {
+        $zip = new \ZipArchive();
+        $result = $zip->open($zipPath);
+        if ($result !== true) {
+            throw new RuntimeException('Unable to open Excel file as ZIP archive. ZipArchive error code: ' . $result);
+        }
+
+        try {
+            for ($index = 0; $index < $zip->numFiles; $index++) {
+                $entryName = $zip->getNameIndex($index);
+                if ($entryName === false || $entryName === '') {
+                    continue;
+                }
+
+                if ($this->isUnsafeZipEntry($entryName)) {
+                    throw new RuntimeException('Unsafe Excel archive entry detected: ' . $entryName);
+                }
+
+                $targetPath = $destination . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $entryName);
+
+                if (str_ends_with($entryName, '/')) {
+                    if (! is_dir($targetPath) && ! mkdir($targetPath, 0777, true) && ! is_dir($targetPath)) {
+                        throw new RuntimeException('Unable to create Excel extraction directory: ' . $entryName);
+                    }
+                    continue;
+                }
+
+                $targetDir = dirname($targetPath);
+                if (! is_dir($targetDir) && ! mkdir($targetDir, 0777, true) && ! is_dir($targetDir)) {
+                    throw new RuntimeException('Unable to create Excel extraction directory: ' . $entryName);
+                }
+
+                $source = $zip->getStream($entryName);
+                if ($source === false) {
+                    throw new RuntimeException('Unable to read Excel archive entry: ' . $entryName);
+                }
+
+                $target = fopen($targetPath, 'wb');
+                if ($target === false) {
+                    fclose($source);
+                    throw new RuntimeException('Unable to write Excel archive entry: ' . $entryName);
+                }
+
+                stream_copy_to_stream($source, $target);
+                fclose($source);
+                fclose($target);
+            }
+        } finally {
+            $zip->close();
+        }
+    }
+
+    private function extractWithShellCommand(string $zipPath, string $destination): void
+    {
+        if (! function_exists('exec')) {
+            throw new RuntimeException('PHP ZipArchive extension is not available and exec() is disabled. Enable PHP zip extension for Excel import.');
+        }
+
+        if (! function_exists('escapeshellarg')) {
+            throw new RuntimeException('PHP ZipArchive extension is not available and escapeshellarg() is disabled. Enable PHP zip extension for Excel import.');
+        }
+
+        if (stripos(PHP_OS_FAMILY, 'Windows') !== false) {
+            $command = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -LiteralPath ' . $this->psQuote($zipPath) . ' -DestinationPath ' . $this->psQuote($destination) . ' -Force"';
+            $this->runCommand($command, 'PowerShell Expand-Archive failed. Enable PHP ZipArchive extension instead.');
+            return;
+        }
+
+        $command = 'unzip -qq -o ' . \escapeshellarg($zipPath) . ' -d ' . \escapeshellarg($destination);
+        $this->runCommand($command, 'unzip command failed. Enable PHP ZipArchive extension instead.');
     }
 
     private function runCommand(string $command, string $errorMessage): void
     {
-        if (! function_exists('shell_exec')) {
-            throw new RuntimeException('shell_exec is disabled. Enable PHP ZipArchive, or allow shell_exec for Excel extraction.');
-        }
-
         $output = [];
         $exitCode = 0;
         exec($command . ' 2>&1', $output, $exitCode);
@@ -67,6 +134,14 @@ class XlsxSheetReader
     private function psQuote(string $path): string
     {
         return "'" . str_replace("'", "''", $path) . "'";
+    }
+
+    private function isUnsafeZipEntry(string $entryName): bool
+    {
+        return str_starts_with($entryName, '/')
+            || str_starts_with($entryName, '\\')
+            || str_contains($entryName, '..')
+            || preg_match('/^[A-Za-z]:/', $entryName) === 1;
     }
 
     private function readSharedStrings(string $path): array
