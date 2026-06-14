@@ -6,7 +6,7 @@
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
             <div>
                 <h4 class="card-title mb-1">New Inventory Transfer</h4>
-                <p class="text-muted mb-0">Create a posted transfer document with header and detail lines.</p>
+                <p class="text-muted mb-0">Create a transfer draft first, then submit or post it from the detail screen.</p>
             </div>
             <a href="<?= site_url('inventory/transfers') ?>" class="btn btn-light">Back</a>
         </div>
@@ -25,7 +25,7 @@
                 </div>
                 <div class="col-md-4 mb-3">
                     <label class="form-label">Status</label>
-                    <input type="text" class="form-control" value="Posted on Save" readonly>
+                    <input type="text" class="form-control" value="Draft on Save" readonly>
                 </div>
             </div>
 
@@ -112,8 +112,8 @@
                 <button type="button" class="btn btn-outline-secondary" onclick="addTransferLine()">
                     <i class="bx bx-plus me-1"></i> Add Line
                 </button>
-                <button type="submit" class="btn btn-primary" onclick="return confirm('Post this inventory transfer document?')">
-                    <i class="bx bx-transfer me-1"></i> Post Transfer
+                <button type="submit" class="btn btn-primary" onclick="return confirm('Save this inventory transfer as draft?')">
+                    <i class="bx bx-save me-1"></i> Save Draft
                 </button>
                 <a href="<?= site_url('inventory/transfers') ?>" class="btn btn-light">Cancel</a>
             </div>
