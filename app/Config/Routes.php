@@ -48,8 +48,10 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('stock-balances', 'Inventory\StockBalanceController::index');
         $routes->get('in-out', 'Inventory\InventoryMovementController::inOut');
         $routes->post('in-out', 'Inventory\InventoryMovementController::storeInOut');
-        $routes->get('transfers', 'Inventory\InventoryMovementController::transfer');
-        $routes->post('transfers', 'Inventory\InventoryMovementController::storeTransfer');
+        $routes->get('transfers', 'Inventory\InventoryTransferController::index');
+        $routes->get('transfers/new', 'Inventory\InventoryTransferController::create');
+        $routes->post('transfers', 'Inventory\InventoryTransferController::store');
+        $routes->get('transfers/(:num)', 'Inventory\InventoryTransferController::show/$1');
         $routes->get('stock-opname', 'Inventory\InventoryMovementController::stockOpname');
         $routes->post('stock-opname', 'Inventory\InventoryMovementController::storeStockOpname');
         $routes->get('stock-adjustment', 'Inventory\StockAdjustmentController::create');
