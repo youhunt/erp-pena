@@ -19,7 +19,7 @@ class CreateInventoryTransferDocuments extends Migration
                 'from_location_id' => ['type' => 'INT', 'constraint' => 11, 'unsigned' => true, 'null' => true],
                 'to_warehouse_id' => ['type' => 'INT', 'constraint' => 11, 'unsigned' => true, 'null' => true],
                 'to_location_id' => ['type' => 'INT', 'constraint' => 11, 'unsigned' => true, 'null' => true],
-                'status' => ['type' => 'VARCHAR', 'constraint' => 20, 'default' => 'posted'],
+                'status' => ['type' => 'VARCHAR', 'constraint' => 20, 'default' => 'draft'],
                 'notes' => ['type' => 'TEXT', 'null' => true],
                 'posted_at' => ['type' => 'DATETIME', 'null' => true],
                 'posted_by' => ['type' => 'INT', 'constraint' => 11, 'unsigned' => true, 'null' => true],
