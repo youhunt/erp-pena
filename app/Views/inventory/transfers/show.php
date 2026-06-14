@@ -31,8 +31,9 @@ $statusClass = match ($status) {
                         <?= csrf_field() ?>
                         <button class="btn btn-success" type="submit" onclick="return confirm('Post this transfer and move stock now?')">Post</button>
                     </form>
-                    <form method="post" action="<?= site_url('inventory/transfers/' . (int) $transfer['id'] . '/cancel') ?>">
+                    <form method="post" action="<?= site_url('inventory/transfers/' . (int) $transfer['id'] . '/cancel') ?>" class="d-flex gap-2">
                         <?= csrf_field() ?>
+                        <input type="text" name="cancel_reason" class="form-control form-control-sm" placeholder="Cancel reason" style="max-width: 180px;">
                         <button class="btn btn-outline-danger" type="submit" onclick="return confirm('Cancel this transfer document?')">Cancel</button>
                     </form>
                 <?php endif ?>
@@ -52,6 +53,25 @@ $statusClass = match ($status) {
                 <span class="badge <?= esc($statusClass) ?>"><?= esc(ucfirst($status)) ?></span>
             </div>
             <div class="col-md-3 mb-3">
+                <div class="text-muted">Created At</div>
+                <div class="fw-semibold"><?= esc($transfer['created_at'] ?? '-') ?></div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="text-muted">Created By</div>
+                <div class="fw-semibold"><?= esc($transfer['created_by'] ?? '-') ?></div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <div class="text-muted">Submitted At</div>
+                <div class="fw-semibold"><?= esc($transfer['submitted_at'] ?? '-') ?></div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="text-muted">Submitted By</div>
+                <div class="fw-semibold"><?= esc($transfer['submitted_by'] ?? '-') ?></div>
+            </div>
+            <div class="col-md-3 mb-3">
                 <div class="text-muted">Posted At</div>
                 <div class="fw-semibold"><?= esc($transfer['posted_at'] ?? '-') ?></div>
             </div>
@@ -60,6 +80,23 @@ $statusClass = match ($status) {
                 <div class="fw-semibold"><?= esc($transfer['posted_by'] ?? '-') ?></div>
             </div>
         </div>
+
+        <?php if ($status === 'cancelled'): ?>
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <div class="text-muted">Cancelled At</div>
+                    <div class="fw-semibold"><?= esc($transfer['cancelled_at'] ?? '-') ?></div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="text-muted">Cancelled By</div>
+                    <div class="fw-semibold"><?= esc($transfer['cancelled_by'] ?? '-') ?></div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <div class="text-muted">Cancel Reason</div>
+                    <div class="fw-semibold"><?= esc($transfer['cancel_reason'] ?? '-') ?></div>
+                </div>
+            </div>
+        <?php endif ?>
 
         <div class="row">
             <div class="col-md-6 mb-3">
