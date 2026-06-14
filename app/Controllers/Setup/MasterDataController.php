@@ -4,6 +4,7 @@ namespace App\Controllers\Setup;
 
 use App\Controllers\BaseController;
 use App\Models\AddressModel;
+use App\Models\BatchMasterModel;
 use App\Models\CityModel;
 use App\Models\CompanyModel;
 use App\Models\CountryModel;
@@ -81,6 +82,17 @@ class MasterDataController extends BaseController
                 'is_default' => ['label' => 'Default Location', 'type' => 'checkbox', 'default' => 0],
                 'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
             ], 'inventory.item.view', 'inventory.item.manage') + ['display' => ['code' => 'location_id', 'name' => 'item_id', 'description' => 'warehouse_id'], 'list_fields' => ['warehouse_id', 'location_id', 'item_id', 'item_code', 'is_default'], 'order_by' => 'id'],
+            'batch-masters' => $this->tenantResource('Batch Master', BatchMasterModel::class, 'batch_masters', true, [
+                'item_id' => ['label' => 'Item', 'type' => 'select', 'required' => true, 'options_source' => 'items'],
+                'batch_no' => ['label' => 'Batch No', 'type' => 'text', 'required' => true],
+                'batch_name' => ['label' => 'Batch Name', 'type' => 'text'],
+                'production_date' => ['label' => 'Production Date', 'type' => 'date'],
+                'expiry_date' => ['label' => 'Expiry Date', 'type' => 'date'],
+                'supplier_lot_no' => ['label' => 'Supplier Lot No', 'type' => 'text'],
+                'manufacturer_lot_no' => ['label' => 'Manufacturer Lot No', 'type' => 'text'],
+                'description' => ['label' => 'Description', 'type' => 'textarea'],
+                'is_active' => ['label' => 'Active', 'type' => 'checkbox', 'default' => 1],
+            ], 'inventory.item.view', 'inventory.item.manage') + ['display' => ['code' => 'batch_no', 'name' => 'batch_name', 'description' => 'item_code'], 'list_fields' => ['item_id', 'item_code', 'batch_no', 'batch_name', 'production_date', 'expiry_date'], 'order_by' => 'batch_no'],
             'address-master' => $this->tenantResource('Address Master', AddressModel::class, 'addresses', true, $this->addressFields()) + ['list_fields' => ['code', 'name', 'address_type', 'owner_type', 'address_line1', 'phone', 'mobile']],
             'customer-terms' => $this->tenantResource('Customer Terms', CustomerTermModel::class, 'customer_terms', true, $this->termsFields('Customer'), 'sales.customer.view', 'sales.customer.manage') + ['display' => ['code' => 'terms_code', 'name' => 'terms_name', 'description' => 'terms_days'], 'list_fields' => ['terms_code', 'terms_name', 'terms_days', 'promo_code'], 'order_by' => 'terms_code'],
             'customer-promos' => $this->tenantResource('Customer Promotions', CustomerPromotionModel::class, 'customer_promotions', true, $this->customerPromotionFields(), 'sales.customer.view', 'sales.customer.manage') + ['display' => ['code' => 'promo_code', 'name' => 'promo_description', 'description' => 'customer_name'], 'list_fields' => ['promo_code', 'promo_description', 'customer', 'item_parent', 'promo_type', 'active_date'], 'order_by' => 'promo_code'],
@@ -361,6 +373,12 @@ class MasterDataController extends BaseController
             $payload += ['code' => $payload['item_code'] ?? null, 'name' => $payload['item_name'] ?? null, 'is_active' => $payload['active'] ?? 1];
         }
         if ($config['table'] === 'item_locations') {
+            $item = ! empty($payload['item_id'])
+                ? (new ItemModel())->find((int) $payload['item_id'])
+                : null;
+            $payload['item_code'] = (string) ($item['item_code'] ?? $item['code'] ?? '');
+        }
+        if ($config['table'] === 'batch_masters') {
             $item = ! empty($payload['item_id'])
                 ? (new ItemModel())->find((int) $payload['item_id'])
                 : null;

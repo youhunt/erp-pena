@@ -46,7 +46,7 @@ Acuan utama: `pena_erp_data_dictionary_filled.xlsx`.
 | Phase 0 - Project Stabilization | Done | CodeIgniter 4, Shield, layout Skote, dynamic menu, migration/seeder, docs, test smoke |
 | Phase 1 - Tenant, User, Role, Permission Core | Partial | Role/permission config, user access table, active company/site switcher, user/role page awal |
 | Phase 2 - Setup Master Core | Partial | CRUD generic setup master, wilayah sync, import/export view, menu setup, beberapa schema tambahan |
-| Phase 3 - Partner, Item, Tax, Commercial Master | Partial | Customer, supplier, item, UoM, VAT, item VAT, schema item/customer/supplier diselaraskan dengan Excel |
+| Phase 3 - Partner, Item, Tax, Commercial Master | Partial | Customer, supplier, item, UoM, VAT, item VAT, Batch Master, schema item/customer/supplier diselaraskan dengan Excel |
 | Phase 4 - Inventory Core | Partial | Stock balance, stock card, stock movement, stock adjustment, inventory stock service, average cost movement value, inventory adjustment GL posting, Inventory Transfer header-line workflow dengan audit status/reversal, inventory period close guard |
 | Phase 5 - Purchase Core | Partial | Purchase Order, Purchase Receipt with Inventory/GRNI posting, Purchase Invoice/AP Payable baseline, controller, service, views, schema ensure |
 | Phase 6 - Sales Core | Partial | Sales Order, Allocation Order, Delivery Order with COGS posting, Sales Invoice/AR Receivable baseline, controller, service, views, schema ensure |
@@ -233,11 +233,12 @@ Yang sudah dikerjakan:
 - Customer dan supplier schema sudah diselaraskan dengan Excel.
 - UoM master code dropdown sudah mulai dipakai untuk item master.
 - Demo master data seeder tersedia.
+- Batch Master sudah punya tabel, model, menu, CRUD generic, dan Excel import/export baseline.
 
 Sisa pekerjaan:
 - Customer Terms, Customer Promo, Customer Address belum menjadi CRUD khusus.
 - Supplier Terms, Supplier Promo, Supplier Address belum menjadi CRUD khusus.
-- Batch Master dan Item UoM Conversion belum menjadi modul lengkap.
+- Batch-aware stock movement dan Item UoM Conversion belum menjadi modul lengkap.
 - Lookup transaksi perlu dibuat lebih nyaman, bukan hanya dropdown sederhana.
 
 ## Phase 4 - Inventory Core
