@@ -11,7 +11,7 @@ class RoleController extends BaseController
 {
     public function index(): string
     {
-        $this->authorize('users.view');
+        $this->authorize('roles.view');
 
         $authGroups = config(AuthGroups::class);
 

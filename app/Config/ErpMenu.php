@@ -31,6 +31,8 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Address Master', 'setup/address-master', 'setup.master.view'),
             ]),
             $this->group('System', 'bx-data', 25, [
+                $this->leaf('User Management', 'admin/users', 'users.view'),
+                $this->leaf('Roles & Permissions', 'admin/roles', 'roles.view'),
                 $this->leaf('Data Import Export', 'system/data-import', 'setup.master.view'),
                 $this->leaf('Excel Import Export', 'system/excel-transfer', 'setup.master.view'),
             ]),

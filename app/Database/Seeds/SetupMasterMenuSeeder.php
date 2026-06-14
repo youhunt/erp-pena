@@ -44,7 +44,8 @@ class SetupMasterMenuSeeder extends Seeder
         ], $now);
 
         $this->menuGroup($setupId, 'System', 50, [
-            ['Users', 'admin/users', 'users.view'],
+            ['User Management', 'admin/users', 'users.view'],
+            ['Roles & Permissions', 'admin/roles', 'roles.view'],
             ['Audit Logs', 'audit-logs', 'audit.logs.view'],
         ], $now);
     }
@@ -74,6 +75,8 @@ class SetupMasterMenuSeeder extends Seeder
             'Item VAT',
             'Address Master',
             'Users',
+            'User Management',
+            'Roles & Permissions',
             'Audit Logs',
         ];
 

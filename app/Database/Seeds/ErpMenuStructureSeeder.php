@@ -73,6 +73,17 @@ class ErpMenuStructureSeeder extends Seeder
                 ],
             ],
             [
+                'label' => 'System',
+                'icon' => 'bx-data',
+                'children' => [
+                    ['label' => 'User Management', 'route' => 'admin/users', 'permission' => 'users.view'],
+                    ['label' => 'Roles & Permissions', 'route' => 'admin/roles', 'permission' => 'roles.view'],
+                    ['label' => 'Data Import Export', 'route' => 'system/data-import', 'permission' => 'setup.master.view'],
+                    ['label' => 'Excel Import Export', 'route' => 'system/excel-transfer', 'permission' => 'setup.master.view'],
+                    ['label' => 'Audit Logs', 'route' => 'audit-logs', 'permission' => 'audit.logs.view'],
+                ],
+            ],
+            [
                 'label' => 'Sales',
                 'icon' => 'bx-cart',
                 'children' => [

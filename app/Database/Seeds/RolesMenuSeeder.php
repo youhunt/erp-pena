@@ -10,10 +10,10 @@ class RolesMenuSeeder extends Seeder
     {
         $now = date('Y-m-d H:i:s');
 
-        $setupId = $this->findOrCreateMenu(null, 'Setup', '#', 'bx-cog', null, 20, $now);
-        $systemId = $this->findOrCreateMenu($setupId, 'System', '#', null, null, 50, $now);
+        $systemId = $this->findOrCreateMenu(null, 'System', '#', 'bx-data', null, 25, $now);
 
-        $this->findOrCreateMenu($systemId, 'Roles & Permissions', 'admin/roles', null, 'users.view', 20, $now);
+        $this->findOrCreateMenu($systemId, 'User Management', 'admin/users', null, 'users.view', 10, $now);
+        $this->findOrCreateMenu($systemId, 'Roles & Permissions', 'admin/roles', null, 'roles.view', 20, $now);
     }
 
     private function findOrCreateMenu(?int $parentId, string $label, string $route, ?string $icon, ?string $permission, int $sort, string $now): int
