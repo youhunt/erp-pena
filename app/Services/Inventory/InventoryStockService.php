@@ -6,6 +6,7 @@ use App\Models\InventoryStockBalanceModel;
 use App\Models\InventoryStockMovementModel;
 use App\Services\AuditLogService;
 use App\Services\Finance\GeneralLedgerService;
+use App\Services\Finance\PeriodCloseService;
 use App\Services\Finance\PostingProfileService;
 use Config\Database;
 use RuntimeException;
@@ -46,6 +47,12 @@ class InventoryStockService
     public function move(array $data, ?int $userId = null): int
     {
         $this->validateMovement($data);
+        (new PeriodCloseService())->assertOpen(
+            'inventory',
+            (int) $data['company_id'],
+            (string) ($data['movement_date'] ?? date('Y-m-d')),
+            ! empty($data['site_id']) ? (int) $data['site_id'] : null
+        );
 
         $db = Database::connect();
         $db->transBegin();
