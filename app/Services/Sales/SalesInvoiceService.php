@@ -95,22 +95,7 @@ class SalesInvoiceService
                 'status' => 'open',
             ]);
 
-            $profile = new PostingProfileService();
-            $glEntryId = (new GeneralLedgerService())->post([
-                'company_id' => $header['company_id'],
-                'site_id' => $header['site_id'] ?? null,
-                'journal_no' => 'GL-' . $header['invoice_no'],
-                'journal_date' => $invoiceDate,
-                'source_module' => 'ar',
-                'source_type' => 'manual_ar_invoice',
-                'source_id' => $invoiceId,
-                'source_no' => $header['invoice_no'],
-                'description' => 'Manual A/R invoice ' . $header['invoice_no'],
-                'currency_code' => $header['currency_code'] ?? 'IDR',
-            ], [
-                ['account_no' => $profile->account((int) $header['company_id'], 'ar', 'receivable', '1200'), 'description' => 'Accounts Receivable', 'debit' => $total, 'credit' => 0],
-                ['account_no' => $profile->account((int) $header['company_id'], 'ar', 'sales_revenue', '4100'), 'description' => 'Sales Revenue', 'debit' => 0, 'credit' => $total],
-            ], $userId);
+            $glEntryId = $this->postSalesInvoiceGl($header, $invoiceId, $invoiceDate, $subtotal, $discount, $tax, $total, $userId, 'manual_ar_invoice');
             $invoiceModel->update($invoiceId, ['gl_entry_id' => $glEntryId]);
 
             if ($db->transStatus() === false) {
@@ -272,6 +257,9 @@ class SalesInvoiceService
                 'status' => 'open',
             ]);
 
+            $glEntryId = $this->postSalesInvoiceGl($header, $invoiceId, $invoiceDate, $subtotal, $discount, $tax, $total, $userId);
+            $invoiceModel->update($invoiceId, ['gl_entry_id' => $glEntryId]);
+
             $deliveryModel->update((int) $delivery['id'], [
                 'status' => 'invoiced',
                 'updated_by' => $userId,
@@ -290,8 +278,8 @@ class SalesInvoiceService
                 'table_name' => 'sales_invoices',
                 'record_id' => $invoiceId,
                 'record_code' => $header['invoice_no'],
-                'description' => 'Sales invoice posted and AR receivable opened.',
-                'new_values' => ['header' => $header, 'lines' => $lines, 'total' => $total],
+                'description' => 'Sales invoice posted, AR receivable opened, and GL posted.',
+                'new_values' => ['header' => $header, 'lines' => $lines, 'total' => $total, 'gl_entry_id' => $glEntryId],
             ]);
 
             return $invoiceId;
@@ -339,6 +327,52 @@ class SalesInvoiceService
         }
 
         return $lines;
+    }
+
+    private function postSalesInvoiceGl(array $header, int $invoiceId, string $invoiceDate, float $subtotal, float $discount, float $tax, float $total, ?int $userId, string $sourceType = 'sales_invoice'): int
+    {
+        $companyId = (int) $header['company_id'];
+        $profile = new PostingProfileService();
+        $revenueAmount = round($subtotal - $discount, 2);
+        $taxAmount = round($tax, 2);
+        $totalAmount = round($total, 2);
+
+        $lines = [
+            [
+                'account_no' => $profile->account($companyId, 'ar', 'receivable', '1200'),
+                'description' => 'Accounts Receivable',
+                'debit' => $totalAmount,
+                'credit' => 0,
+            ],
+            [
+                'account_no' => $profile->account($companyId, 'ar', 'sales_revenue', '4100'),
+                'description' => 'Sales Revenue',
+                'debit' => 0,
+                'credit' => $revenueAmount,
+            ],
+        ];
+
+        if ($taxAmount > 0) {
+            $lines[] = [
+                'account_no' => $profile->account($companyId, 'ar', 'output_vat', '2200'),
+                'description' => 'Output VAT',
+                'debit' => 0,
+                'credit' => $taxAmount,
+            ];
+        }
+
+        return (new GeneralLedgerService())->post([
+            'company_id' => $companyId,
+            'site_id' => $header['site_id'] ?? null,
+            'journal_no' => 'GL-' . $header['invoice_no'],
+            'journal_date' => $invoiceDate,
+            'source_module' => 'ar',
+            'source_type' => $sourceType,
+            'source_id' => $invoiceId,
+            'source_no' => $header['invoice_no'],
+            'description' => ($sourceType === 'manual_ar_invoice' ? 'Manual A/R invoice ' : 'Sales invoice ') . $header['invoice_no'],
+            'currency_code' => $header['currency_code'] ?? 'IDR',
+        ], $lines, $userId);
     }
 
     private function refreshSoStatus(int $soId, ?int $userId = null): void

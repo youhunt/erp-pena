@@ -31,10 +31,13 @@ class PostingProfileService
             'ap' => [
                 'payable' => '2100',
                 'manual_expense' => '6200',
+                'inventory' => '1300',
+                'input_vat' => '1400',
             ],
             'ar' => [
                 'receivable' => '1200',
                 'sales_revenue' => '4100',
+                'output_vat' => '2200',
             ],
             'cashbank' => [
                 'cash_bank' => '1100',
@@ -47,8 +50,11 @@ class PostingProfileService
         return match ($moduleCode . '.' . $postingKey) {
             'ap.payable' => 'Accounts Payable',
             'ap.manual_expense' => 'Manual A/P Expense',
+            'ap.inventory' => 'Purchased Inventory',
+            'ap.input_vat' => 'Input VAT',
             'ar.receivable' => 'Accounts Receivable',
             'ar.sales_revenue' => 'Sales Revenue',
+            'ar.output_vat' => 'Output VAT',
             'cashbank.cash_bank' => 'Cash and Bank',
             default => ucwords(str_replace('_', ' ', $postingKey)),
         };

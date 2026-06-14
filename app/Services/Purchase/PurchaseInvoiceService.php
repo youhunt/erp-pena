@@ -94,22 +94,7 @@ class PurchaseInvoiceService
                 'status' => 'open',
             ]);
 
-            $profile = new PostingProfileService();
-            $glEntryId = (new GeneralLedgerService())->post([
-                'company_id' => $header['company_id'],
-                'site_id' => $header['site_id'] ?? null,
-                'journal_no' => 'GL-' . $header['invoice_no'],
-                'journal_date' => $invoiceDate,
-                'source_module' => 'ap',
-                'source_type' => 'manual_ap_invoice',
-                'source_id' => $invoiceId,
-                'source_no' => $header['invoice_no'],
-                'description' => 'Manual A/P invoice ' . $header['invoice_no'],
-                'currency_code' => $header['currency_code'] ?? 'IDR',
-            ], [
-                ['account_no' => $profile->account((int) $header['company_id'], 'ap', 'manual_expense', '6200'), 'description' => 'Manual A/P expense', 'debit' => $total, 'credit' => 0],
-                ['account_no' => $profile->account((int) $header['company_id'], 'ap', 'payable', '2100'), 'description' => 'Accounts Payable', 'debit' => 0, 'credit' => $total],
-            ], $userId);
+            $glEntryId = $this->postPurchaseInvoiceGl($header, $invoiceId, $invoiceDate, $subtotal, $discount, $tax, $total, $userId, 'manual_ap_invoice');
             $invoiceModel->update($invoiceId, ['gl_entry_id' => $glEntryId]);
 
             if ($db->transStatus() === false) {
@@ -271,6 +256,9 @@ class PurchaseInvoiceService
                 'status' => 'open',
             ]);
 
+            $glEntryId = $this->postPurchaseInvoiceGl($header, $invoiceId, $invoiceDate, $subtotal, $discount, $tax, $total, $userId);
+            $invoiceModel->update($invoiceId, ['gl_entry_id' => $glEntryId]);
+
             $receiptModel->update((int) $receipt['id'], [
                 'status' => 'invoiced',
                 'updated_by' => $userId,
@@ -288,8 +276,8 @@ class PurchaseInvoiceService
                 'table_name' => 'purchase_invoices',
                 'record_id' => $invoiceId,
                 'record_code' => $header['invoice_no'],
-                'description' => 'Purchase invoice posted and AP payable opened.',
-                'new_values' => ['header' => $header, 'lines' => $lines, 'total' => $total],
+                'description' => 'Purchase invoice posted, AP payable opened, and GL posted.',
+                'new_values' => ['header' => $header, 'lines' => $lines, 'total' => $total, 'gl_entry_id' => $glEntryId],
             ]);
 
             return $invoiceId;
@@ -337,5 +325,54 @@ class PurchaseInvoiceService
         }
 
         return $lines;
+    }
+
+    private function postPurchaseInvoiceGl(array $header, int $invoiceId, string $invoiceDate, float $subtotal, float $discount, float $tax, float $total, ?int $userId, string $sourceType = 'purchase_invoice'): int
+    {
+        $companyId = (int) $header['company_id'];
+        $profile = new PostingProfileService();
+        $inventoryAmount = round($subtotal - $discount, 2);
+        $taxAmount = round($tax, 2);
+        $totalAmount = round($total, 2);
+
+        $lines = [
+            [
+                'account_no' => $sourceType === 'manual_ap_invoice'
+                    ? $profile->account($companyId, 'ap', 'manual_expense', '6200')
+                    : $profile->account($companyId, 'ap', 'inventory', '1300'),
+                'description' => $sourceType === 'manual_ap_invoice' ? 'Manual A/P expense' : 'Purchased Inventory',
+                'debit' => $inventoryAmount,
+                'credit' => 0,
+            ],
+        ];
+
+        if ($taxAmount > 0) {
+            $lines[] = [
+                'account_no' => $profile->account($companyId, 'ap', 'input_vat', '1400'),
+                'description' => 'Input VAT',
+                'debit' => $taxAmount,
+                'credit' => 0,
+            ];
+        }
+
+        $lines[] = [
+            'account_no' => $profile->account($companyId, 'ap', 'payable', '2100'),
+            'description' => 'Accounts Payable',
+            'debit' => 0,
+            'credit' => $totalAmount,
+        ];
+
+        return (new GeneralLedgerService())->post([
+            'company_id' => $companyId,
+            'site_id' => $header['site_id'] ?? null,
+            'journal_no' => 'GL-' . $header['invoice_no'],
+            'journal_date' => $invoiceDate,
+            'source_module' => 'ap',
+            'source_type' => $sourceType,
+            'source_id' => $invoiceId,
+            'source_no' => $header['invoice_no'],
+            'description' => ($sourceType === 'manual_ap_invoice' ? 'Manual A/P invoice ' : 'Purchase invoice ') . $header['invoice_no'],
+            'currency_code' => $header['currency_code'] ?? 'IDR',
+        ], $lines, $userId);
     }
 }

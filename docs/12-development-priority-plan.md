@@ -50,7 +50,7 @@ Acuan utama: `pena_erp_data_dictionary_filled.xlsx`.
 | Phase 4 - Inventory Core | Partial | Stock balance, stock movement, stock adjustment, inventory stock service |
 | Phase 5 - Purchase Core | Partial | Purchase Order, Purchase Receipt, Purchase Invoice/AP Payable baseline, controller, service, views, schema ensure |
 | Phase 6 - Sales Core | Partial | Sales Order, Allocation Order, Delivery Order, Sales Invoice/AR Receivable baseline, controller, service, views, schema ensure |
-| Phase 7 - Finance Backbone | Pending | Baru menu dan permission dasar, belum ada GL transaction engine |
+| Phase 7 - Finance Backbone | Partial | GL Entry, Posting Profile, dan auto journal untuk AR/AP invoice serta cash/bank settlement baseline sudah tersedia |
 | Phase 8 - AP dan AR | Partial | Sales Invoice/AR Receivable/AR Receipt dan Purchase Invoice/AP Payable/AP Payment baseline sudah ada; aging dan period close belum selesai |
 | Phase 9 - Costing | Pending | Baru rencana/menu placeholder, belum ada item cost engine |
 | Phase 10 - Planning dan Production | Pending | Baru menu placeholder, belum ada BOM/MRP/work order engine |
@@ -408,11 +408,14 @@ Done jika:
 Yang sudah dikerjakan:
 - Permission dan menu dasar Finance/GL tersedia.
 - Currency model sudah tersedia sebagai master pendukung.
+- GL Entry manual dan Posting Profile tersedia.
+- Manual A/R Invoice, Sales Invoice dari Delivery Order, Manual A/P Invoice, dan Purchase Invoice dari Receipt sudah bisa membuat jurnal GL otomatis.
+- A/R Receipt dan A/P Payment sudah terhubung ke Cash/Bank Entry dan GL Entry.
 
 Sisa pekerjaan:
-- GL Book, GL Column, Account No, Chart of Account belum menjadi CRUD lengkap.
-- GL Entry, recurring, posting, reversal, dan period close belum dibangun.
-- Belum ada journal generation dari transaksi purchase/sales/inventory.
+- GL Book, GL Column, Account No, Chart of Account masih perlu CRUD enterprise-grade yang lebih lengkap.
+- Recurring, reversal, approval journal, dan period close GL perlu diperdalam.
+- Journal generation inventory movement, receipt valuation, COGS, production, POS, dan fixed asset belum selesai.
 
 ## Phase 8 - AP dan AR
 
