@@ -55,6 +55,14 @@ $formatValue = static function (string $field, mixed $value) use ($relationLabel
         return $relation;
     }
 
+    if (in_array($field, ['is_default'], true)) {
+        return (int) $value === 1 ? 'Yes' : 'No';
+    }
+
+    if (in_array($field, ['is_active', 'active'], true)) {
+        return (int) $value === 1 ? 'Active' : 'Inactive';
+    }
+
     if ($value === null || $value === '') {
         return '-';
     }
@@ -68,8 +76,10 @@ $formatValue = static function (string $field, mixed $value) use ($relationLabel
 
 $isCustomer = $resource === 'customers';
 $isSupplier = $resource === 'suppliers';
-$codeField = $isCustomer ? 'customer' : ($isSupplier ? 'supplier' : 'code');
-$nameField = $isCustomer ? 'customern' : ($isSupplier ? 'supplierna' : 'name');
+$displayConfig = $config['display'] ?? [];
+$codeField = $isCustomer ? 'customer' : ($isSupplier ? 'supplier' : (string) ($displayConfig['code'] ?? 'code'));
+$nameField = $isCustomer ? 'customern' : ($isSupplier ? 'supplierna' : (string) ($displayConfig['name'] ?? 'name'));
+$descriptionField = (string) ($displayConfig['description'] ?? '');
 $referenceField = $isCustomer ? 'customerr' : ($isSupplier ? 'supplierref' : null);
 
 $addressGroups = $isCustomer ? [
@@ -99,6 +109,9 @@ $visibleFields = array_filter(
                         <h4 class="card-title mb-1"><?= esc($formatValue($nameField, $row[$nameField] ?? null)) ?></h4>
                         <div class="text-muted">
                             <?= esc($config['title']) ?> / <?= esc($formatValue($codeField, $row[$codeField] ?? null)) ?>
+                            <?php if (! $isCustomer && ! $isSupplier && $descriptionField !== ''): ?>
+                                / <?= esc($formatValue($descriptionField, $row[$descriptionField] ?? null)) ?>
+                            <?php endif ?>
                         </div>
                     </div>
                     <div class="d-flex flex-wrap gap-2">
