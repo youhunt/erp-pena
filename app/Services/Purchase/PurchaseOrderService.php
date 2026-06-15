@@ -34,6 +34,8 @@ class PurchaseOrderService
             $poModel = new PurchaseOrderModel();
             $lineModel = new PurchaseOrderLineModel();
             $status = $header['status'] ?? 'draft';
+            $header['document_no'] = $header['document_no'] ?? $header['po_no'];
+            $header['document_date'] = $header['document_date'] ?? $header['po_date'];
 
             $poModel->insert($header + $totals + [
                 'status' => $status,

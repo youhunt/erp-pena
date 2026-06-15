@@ -35,6 +35,8 @@ class SalesOrderService
             $soModel = new SalesOrderModel();
             $lineModel = new SalesOrderLineModel();
             $status = $header['status'] ?? 'draft';
+            $header['document_no'] = $header['document_no'] ?? $header['so_no'];
+            $header['document_date'] = $header['document_date'] ?? $header['so_date'];
 
             $soModel->insert($header + $totals + [
                 'status' => $status,

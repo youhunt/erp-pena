@@ -13,6 +13,7 @@ class SalesOrderModel extends Model
     protected $useTimestamps = true;
     protected $allowedFields = [
         'company_id', 'site_id', 'company', 'site',
+        'document_no', 'document_date',
         'so_no', 'so_date', 'customer_id', 'customer', 'customer_code', 'customer_name',
         'terms_code', 'currency_code', 'status', 'document_status',
         'subtotal_amount', 'tax_amount', 'discount_amount', 'total_amount',

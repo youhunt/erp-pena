@@ -499,7 +499,14 @@ class OrderImportController extends BaseController
         $db = Database::connect();
         $builder = $db->table($table)
             ->where('company_id', $companyId)
+            ->groupStart()
             ->where($documentField, $documentNo);
+
+        if ($documentField !== 'document_no' && $db->fieldExists('document_no', $table)) {
+            $builder->orWhere('document_no', $documentNo);
+        }
+
+        $builder->groupEnd();
 
         if ($db->fieldExists('deleted_at', $table)) {
             $builder->where('deleted_at', null);

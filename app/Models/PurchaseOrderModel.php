@@ -13,6 +13,7 @@ class PurchaseOrderModel extends Model
     protected $useTimestamps = true;
     protected $allowedFields = [
         'company_id', 'site_id', 'company', 'site',
+        'document_no', 'document_date',
         'po_no', 'po_date', 'supplier_id', 'supplier', 'supplier_code', 'supplier_name',
         'terms_code', 'currency_code', 'status', 'document_status',
         'subtotal_amount', 'tax_amount', 'discount_amount', 'total_amount',
