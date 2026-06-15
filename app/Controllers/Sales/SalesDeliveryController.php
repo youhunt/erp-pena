@@ -19,6 +19,8 @@ class SalesDeliveryController extends BaseController
     {
         $tenant = new TenantContext(session());
         $model = new SalesDeliveryModel();
+        $status = trim((string) $this->request->getGet('status'));
+        $search = trim((string) $this->request->getGet('q'));
 
         if ($tenant->activeCompanyId() !== null) {
             $model->where('company_id', $tenant->activeCompanyId());
@@ -26,10 +28,23 @@ class SalesDeliveryController extends BaseController
         if ($tenant->activeSiteId() !== null) {
             $model->where('site_id', $tenant->activeSiteId());
         }
+        if ($status !== '') {
+            $model->where('status', $status);
+        }
+        if ($search !== '') {
+            $model->groupStart()
+                ->like('delivery_no', $search)
+                ->orLike('so_no', $search)
+                ->orLike('customer_code', $search)
+                ->orLike('customer_name', $search)
+                ->groupEnd();
+        }
 
         return view('sales/deliveries/index', [
             'title' => 'Delivery Orders',
             'deliveries' => $model->orderBy('delivery_date', 'DESC')->orderBy('id', 'DESC')->findAll(100),
+            'filters' => ['status' => $status, 'q' => $search],
+            'statusOptions' => ['posted', 'invoiced'],
         ]);
     }
 

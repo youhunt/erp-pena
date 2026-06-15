@@ -21,6 +21,8 @@ class PurchaseInvoiceController extends BaseController
     {
         $tenant = new TenantContext(session());
         $model = new PurchaseInvoiceModel();
+        $status = trim((string) $this->request->getGet('status'));
+        $search = trim((string) $this->request->getGet('q'));
 
         if ($tenant->activeCompanyId() !== null) {
             $model->where('company_id', $tenant->activeCompanyId());
@@ -28,10 +30,23 @@ class PurchaseInvoiceController extends BaseController
         if ($tenant->activeSiteId() !== null) {
             $model->where('site_id', $tenant->activeSiteId());
         }
+        if ($status !== '') {
+            $model->where('status', $status);
+        }
+        if ($search !== '') {
+            $model->groupStart()
+                ->like('invoice_no', $search)
+                ->orLike('receipt_no', $search)
+                ->orLike('supplier_code', $search)
+                ->orLike('supplier_name', $search)
+                ->groupEnd();
+        }
 
         return view('accounts_payable/purchase_invoices/index', [
             'title' => 'Purchase Invoices',
             'invoices' => $model->orderBy('invoice_date', 'DESC')->orderBy('id', 'DESC')->findAll(100),
+            'filters' => ['status' => $status, 'q' => $search],
+            'statusOptions' => ['open', 'partial', 'paid'],
         ]);
     }
 

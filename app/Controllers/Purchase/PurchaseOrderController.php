@@ -17,6 +17,8 @@ class PurchaseOrderController extends BaseController
     {
         $tenant = new TenantContext(session());
         $orders = new PurchaseOrderModel();
+        $status = trim((string) $this->request->getGet('status'));
+        $search = trim((string) $this->request->getGet('q'));
 
         if ($tenant->activeCompanyId() !== null) {
             $orders->where('company_id', $tenant->activeCompanyId());
@@ -24,10 +26,22 @@ class PurchaseOrderController extends BaseController
         if ($tenant->activeSiteId() !== null) {
             $orders->where('site_id', $tenant->activeSiteId());
         }
+        if ($status !== '') {
+            $orders->where('document_status', $status);
+        }
+        if ($search !== '') {
+            $orders->groupStart()
+                ->like('po_no', $search)
+                ->orLike('supplier_code', $search)
+                ->orLike('supplier_name', $search)
+                ->groupEnd();
+        }
 
         return view('purchase/orders/index', [
             'title' => 'Purchase Orders',
             'orders' => $orders->orderBy('po_date', 'DESC')->orderBy('id', 'DESC')->findAll(100),
+            'filters' => ['status' => $status, 'q' => $search],
+            'statusOptions' => ['draft', 'submitted', 'approved', 'partial_received', 'received', 'closed', 'cancelled'],
         ]);
     }
 

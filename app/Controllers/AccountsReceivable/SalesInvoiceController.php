@@ -21,6 +21,8 @@ class SalesInvoiceController extends BaseController
     {
         $tenant = new TenantContext(session());
         $model = new SalesInvoiceModel();
+        $status = trim((string) $this->request->getGet('status'));
+        $search = trim((string) $this->request->getGet('q'));
 
         if ($tenant->activeCompanyId() !== null) {
             $model->where('company_id', $tenant->activeCompanyId());
@@ -28,10 +30,23 @@ class SalesInvoiceController extends BaseController
         if ($tenant->activeSiteId() !== null) {
             $model->where('site_id', $tenant->activeSiteId());
         }
+        if ($status !== '') {
+            $model->where('status', $status);
+        }
+        if ($search !== '') {
+            $model->groupStart()
+                ->like('invoice_no', $search)
+                ->orLike('delivery_no', $search)
+                ->orLike('customer_code', $search)
+                ->orLike('customer_name', $search)
+                ->groupEnd();
+        }
 
         return view('accounts_receivable/sales_invoices/index', [
             'title' => 'Sales Invoices',
             'invoices' => $model->orderBy('invoice_date', 'DESC')->orderBy('id', 'DESC')->findAll(100),
+            'filters' => ['status' => $status, 'q' => $search],
+            'statusOptions' => ['open', 'partial', 'paid'],
         ]);
     }
 

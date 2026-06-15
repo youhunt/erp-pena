@@ -18,6 +18,26 @@
             </div>
         </div>
 
+        <form method="get" action="<?= site_url('ar/sales-invoices') ?>" class="row g-2 align-items-end mb-4">
+            <div class="col-md-5">
+                <label class="form-label">Search</label>
+                <input type="text" name="q" value="<?= esc($filters['q'] ?? '') ?>" class="form-control" placeholder="Invoice no, delivery no, customer">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Status</option>
+                    <?php foreach ($statusOptions as $option): ?>
+                        <option value="<?= esc($option) ?>" <?= ($filters['status'] ?? '') === $option ? 'selected' : '' ?>><?= esc(ucwords(str_replace('_', ' ', $option))) ?></option>
+                    <?php endforeach ?>
+                </select>
+            </div>
+            <div class="col-md-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary"><i class="bx bx-search me-1"></i> Filter</button>
+                <a href="<?= site_url('ar/sales-invoices') ?>" class="btn btn-light"><i class="bx bx-reset me-1"></i> Reset</a>
+            </div>
+        </form>
+
         <div class="table-responsive">
             <table class="table table-nowrap table-hover align-middle mb-0">
                 <thead class="table-light">
@@ -49,6 +69,9 @@
                         <td><span class="badge bg-<?= ($invoice['status'] ?? '') === 'open' ? 'warning' : 'success' ?>"><?= esc($invoice['status'] ?? '-') ?></span></td>
                         <td class="text-end">
                             <a href="<?= site_url('ar/sales-invoices/' . $invoice['id']) ?>" class="btn btn-sm btn-outline-primary">View</a>
+                            <?php if ((float) ($invoice['outstanding_amount'] ?? 0) > 0): ?>
+                                <a href="<?= site_url('ar/sales-invoices/' . $invoice['id'] . '/receipt') ?>" class="btn btn-sm btn-outline-success">Receive</a>
+                            <?php endif ?>
                         </td>
                     </tr>
                 <?php endforeach ?>

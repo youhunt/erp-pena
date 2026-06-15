@@ -19,6 +19,8 @@ class PurchaseReceiptController extends BaseController
     {
         $tenant = new TenantContext(session());
         $model = new PurchaseReceiptModel();
+        $status = trim((string) $this->request->getGet('status'));
+        $search = trim((string) $this->request->getGet('q'));
 
         if ($tenant->activeCompanyId() !== null) {
             $model->where('company_id', $tenant->activeCompanyId());
@@ -26,10 +28,23 @@ class PurchaseReceiptController extends BaseController
         if ($tenant->activeSiteId() !== null) {
             $model->where('site_id', $tenant->activeSiteId());
         }
+        if ($status !== '') {
+            $model->where('status', $status);
+        }
+        if ($search !== '') {
+            $model->groupStart()
+                ->like('receipt_no', $search)
+                ->orLike('po_no', $search)
+                ->orLike('supplier_code', $search)
+                ->orLike('supplier_name', $search)
+                ->groupEnd();
+        }
 
         return view('purchase/receipts/index', [
             'title' => 'Purchase Receipts',
             'receipts' => $model->orderBy('receipt_date', 'DESC')->orderBy('id', 'DESC')->findAll(100),
+            'filters' => ['status' => $status, 'q' => $search],
+            'statusOptions' => ['posted', 'invoiced'],
         ]);
     }
 

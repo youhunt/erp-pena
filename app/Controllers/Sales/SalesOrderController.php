@@ -17,15 +17,29 @@ class SalesOrderController extends BaseController
     {
         $tenant = new TenantContext(session());
         $orders = new SalesOrderModel();
+        $status = trim((string) $this->request->getGet('status'));
+        $search = trim((string) $this->request->getGet('q'));
         if ($tenant->activeCompanyId() !== null) {
             $orders->where('company_id', $tenant->activeCompanyId());
         }
         if ($tenant->activeSiteId() !== null) {
             $orders->where('site_id', $tenant->activeSiteId());
         }
+        if ($status !== '') {
+            $orders->where('document_status', $status);
+        }
+        if ($search !== '') {
+            $orders->groupStart()
+                ->like('so_no', $search)
+                ->orLike('customer_code', $search)
+                ->orLike('customer_name', $search)
+                ->groupEnd();
+        }
         return view('sales/orders/index', [
             'title' => 'Sales Orders',
             'orders' => $orders->orderBy('so_date', 'DESC')->orderBy('id', 'DESC')->findAll(100),
+            'filters' => ['status' => $status, 'q' => $search],
+            'statusOptions' => ['draft', 'submitted', 'approved', 'reserved', 'partial_delivered', 'delivered', 'invoiced', 'cancelled'],
         ]);
     }
 
