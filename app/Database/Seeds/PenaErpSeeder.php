@@ -106,10 +106,9 @@ class PenaErpSeeder extends Seeder
 
     private function seedMenus(string $now): void
     {
-        $this->db->table('menu_items')->update([
-            'is_active' => 0,
-            'updated_at' => $now,
-        ]);
+        $this->db->disableForeignKeyChecks();
+        $this->db->table('menu_items')->truncate();
+        $this->db->enableForeignKeyChecks();
 
         foreach ((new ErpMenu())->items() as $menu) {
             $this->seedMenuItem(null, $menu, $now);

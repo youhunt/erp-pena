@@ -10,34 +10,7 @@ class ErpMenuStructureSeeder extends Seeder
 
     public function run(): void
     {
-        if (! $this->db->tableExists('menu_items')) {
-            return;
-        }
-
-        $this->now = date('Y-m-d H:i:s');
-
-        // Nonaktifkan dulu semua menu lama agar sidebar mengikuti struktur ERP yang diminta.
-        $this->db->table('menu_items')->update(['is_active' => 0, 'updated_at' => $this->now]);
-
-        $sort = 10;
-        foreach ($this->structure() as $group) {
-            $parentId = $this->menuItem(null, $group['label'], '#', $group['icon'] ?? 'bx-grid-alt', null, $sort);
-            $childSort = 10;
-
-            foreach ($group['children'] as $child) {
-                $this->menuItem(
-                    $parentId,
-                    $child['label'],
-                    $child['route'],
-                    null,
-                    $child['permission'] ?? null,
-                    $childSort
-                );
-                $childSort += 10;
-            }
-
-            $sort += 10;
-        }
+        $this->call(SyncErpMenuSeeder::class);
     }
 
     private function structure(): array
