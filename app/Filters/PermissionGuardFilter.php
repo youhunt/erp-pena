@@ -153,6 +153,7 @@ class PermissionGuardFilter implements FilterInterface
         }
 
         if ($path === 'sales/orders/import'
+            || $path === 'sales/orders/import/commit'
             || $path === 'sales/orders/import-template'
             || $path === 'sales/orders/new'
             || ($path === 'sales/orders' && $method !== 'GET')) {
@@ -169,6 +170,7 @@ class PermissionGuardFilter implements FilterInterface
         }
 
         if ($path === 'purchase/orders/import'
+            || $path === 'purchase/orders/import/commit'
             || $path === 'purchase/orders/import-template'
             || $path === 'purchase/orders/new'
             || ($path === 'purchase/orders' && $method !== 'GET')) {

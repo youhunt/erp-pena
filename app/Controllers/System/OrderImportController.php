@@ -15,6 +15,7 @@ use Throwable;
 class OrderImportController extends BaseController
 {
     private const MAX_UPLOAD_BYTES = 10485760;
+    private const SESSION_KEY = 'order_import_previews';
 
     private const SALES_HEADERS = [
         'so_no',
@@ -80,6 +81,16 @@ class OrderImportController extends BaseController
         return $this->import('purchase');
     }
 
+    public function commitSales()
+    {
+        return $this->commit('sales');
+    }
+
+    public function commitPurchase()
+    {
+        return $this->commit('purchase');
+    }
+
     private function form(string $type): string
     {
         $config = $this->config($type);
@@ -90,8 +101,11 @@ class OrderImportController extends BaseController
             'headers' => $config['headers'],
             'sampleRows' => $config['sampleRows'],
             'importUrl' => $config['importUrl'],
+            'commitUrl' => $config['commitUrl'],
             'templateUrl' => $config['templateUrl'],
             'backUrl' => $config['backUrl'],
+            'previewToken' => $this->request->getGet('preview'),
+            'preview' => $this->previewFromRequest($type),
         ]);
     }
 
@@ -131,14 +145,179 @@ class OrderImportController extends BaseController
         try {
             $rows = $this->readRows($file->getTempName(), strtolower($file->getClientExtension()));
             $records = $this->rowsToRecords($rows, $config['headers']);
-            $result = $this->createDocuments($type, $records, $tenant);
+            $preview = $this->buildPreview($type, $records, $tenant, $file->getClientName());
+            $token = bin2hex(random_bytes(16));
+            $this->storePreview($token, $preview);
         } catch (Throwable $exception) {
             return redirect()->to(site_url($config['importUrl']))->with('error', $exception->getMessage());
         }
 
         return redirect()
+            ->to(site_url($config['importUrl'] . '?preview=' . $token))
+            ->with($preview['errors'] === [] ? 'message' : 'error', $preview['message']);
+    }
+
+    private function commit(string $type)
+    {
+        $config = $this->config($type);
+        $token = trim((string) $this->request->getPost('preview_token'));
+        $preview = $this->getPreview($token);
+        if ($preview === null || ($preview['type'] ?? '') !== $type) {
+            return redirect()->to(site_url($config['importUrl']))->with('error', 'Import preview was not found or has expired. Please upload the file again.');
+        }
+
+        if (($preview['errors'] ?? []) !== []) {
+            return redirect()->to(site_url($config['importUrl'] . '?preview=' . $token))->with('error', 'Cannot post import while preview still has errors.');
+        }
+
+        $tenant = new TenantContext(session());
+        if ((int) ($preview['company_id'] ?? 0) !== (int) $tenant->activeCompanyId()
+            || (string) ($preview['site_id'] ?? '') !== (string) $tenant->activeSiteId()) {
+            return redirect()->to(site_url($config['importUrl']))->with('error', 'Active company/site changed after preview. Please preview the file again.');
+        }
+
+        try {
+            $result = $this->createDocuments($type, $preview['records'] ?? [], $tenant);
+        } catch (Throwable $exception) {
+            return redirect()->to(site_url($config['importUrl'] . '?preview=' . $token))->with('error', $exception->getMessage());
+        }
+
+        $this->clearPreview($token);
+
+        return redirect()
             ->to(site_url($config['backUrl']))
             ->with('message', 'Import selesai. ' . $result['documents'] . ' dokumen dibuat, ' . $result['lines'] . ' line diproses.');
+    }
+
+    private function buildPreview(string $type, array $records, TenantContext $tenant, string $filename): array
+    {
+        if ($records === []) {
+            throw new RuntimeException('No valid order rows found in the uploaded file.');
+        }
+
+        $config = $this->config($type);
+        $groups = [];
+        $errors = [];
+        $validRows = [];
+
+        foreach ($records as $record) {
+            $documentNo = trim((string) ($record[$config['documentField']] ?? ''));
+            if ($documentNo === '') {
+                $errors[] = [
+                    'excel_row' => $record['_excel_row'] ?? '-',
+                    'document_no' => '-',
+                    'item_code' => $record['item_code'] ?? '',
+                    'message' => 'Document number is required.',
+                ];
+                continue;
+            }
+
+            $groups[$documentNo][] = $record;
+        }
+
+        foreach ($groups as $documentNo => $lines) {
+            $consistencyError = $this->documentConsistencyError($lines, $config);
+            if ($consistencyError !== null) {
+                foreach ($lines as $line) {
+                    $errors[] = [
+                        'excel_row' => $line['_excel_row'] ?? '-',
+                        'document_no' => $documentNo,
+                        'item_code' => $line['item_code'] ?? '',
+                        'message' => $consistencyError,
+                    ];
+                }
+                continue;
+            }
+
+            try {
+                $this->assertNotDuplicate($config['table'], $config['documentField'], $documentNo, (int) $tenant->activeCompanyId());
+                $this->normalizeDate($lines[0][$config['dateField']] ?? '', (int) $lines[0]['_excel_row']);
+            } catch (Throwable $exception) {
+                foreach ($lines as $line) {
+                    $errors[] = [
+                        'excel_row' => $line['_excel_row'] ?? '-',
+                        'document_no' => $documentNo,
+                        'item_code' => $line['item_code'] ?? '',
+                        'message' => $exception->getMessage(),
+                    ];
+                }
+                continue;
+            }
+
+            foreach ($lines as $line) {
+                try {
+                    $payload = $this->linePayload($line, $type);
+                    $validRows[] = [
+                        'excel_row' => $line['_excel_row'] ?? '-',
+                        'document_no' => $documentNo,
+                        'partner_code' => $line[$config['partnerCodeField']] ?? '',
+                        'partner_name' => $line[$config['partnerNameField']] ?? '',
+                        'item_code' => $payload['item_code'] ?? '',
+                        'item_name' => $payload['item_name'] ?? '',
+                        'qty' => $payload['qty'] ?? 0,
+                        'uom_code' => $payload['uom_code'] ?? '',
+                        'unit_price' => $payload['unit_price'] ?? 0,
+                    ];
+                } catch (Throwable $exception) {
+                    $errors[] = [
+                        'excel_row' => $line['_excel_row'] ?? '-',
+                        'document_no' => $documentNo,
+                        'item_code' => $line['item_code'] ?? '',
+                        'message' => $exception->getMessage(),
+                    ];
+                }
+            }
+        }
+
+        $documents = count($groups);
+        $validDocuments = count(array_unique(array_column($validRows, 'document_no')));
+        $message = $errors === []
+            ? 'Preview valid. ' . $validDocuments . ' dokumen dan ' . count($validRows) . ' line siap diposting.'
+            : 'Preview menemukan ' . count($errors) . ' error. Perbaiki file lalu upload ulang.';
+
+        return [
+            'type' => $type,
+            'filename' => $filename,
+            'company_id' => $tenant->activeCompanyId(),
+            'site_id' => $tenant->activeSiteId(),
+            'records' => $records,
+            'documents' => $documents,
+            'valid_documents' => $validDocuments,
+            'lines' => count($records),
+            'valid_lines' => count($validRows),
+            'valid_rows' => $validRows,
+            'errors' => $errors,
+            'message' => $message,
+            'created_at' => date('Y-m-d H:i:s'),
+        ];
+    }
+
+    private function documentConsistencyError(array $lines, array $config): ?string
+    {
+        if ($lines === []) {
+            return null;
+        }
+
+        $first = $lines[0];
+        $checks = [
+            $config['dateField'] => 'document date',
+            $config['partnerCodeField'] => 'partner code',
+            $config['partnerNameField'] => 'partner name',
+            'currency_code' => 'currency',
+            'terms_code' => 'terms',
+        ];
+
+        foreach ($lines as $line) {
+            foreach ($checks as $field => $label) {
+                $firstValue = trim((string) ($first[$field] ?? ''));
+                $lineValue = trim((string) ($line[$field] ?? ''));
+                if ($lineValue !== '' && $firstValue !== '' && $firstValue !== $lineValue) {
+                    return 'Rows with the same document number must use the same ' . $label . '.';
+                }
+            }
+        }
+
+        return null;
     }
 
     private function createDocuments(string $type, array $records, TenantContext $tenant): array
@@ -483,6 +662,7 @@ class OrderImportController extends BaseController
                 'sheetName' => 'Sales Order Import',
                 'fileName' => 'sales-order-import-template.xlsx',
                 'importUrl' => 'sales/orders/import',
+                'commitUrl' => 'sales/orders/import/commit',
                 'templateUrl' => 'sales/orders/import-template',
                 'backUrl' => 'sales/orders',
                 'table' => 'sales_orders',
@@ -506,6 +686,7 @@ class OrderImportController extends BaseController
             'sheetName' => 'Purchase Order Import',
             'fileName' => 'purchase-order-import-template.xlsx',
             'importUrl' => 'purchase/orders/import',
+            'commitUrl' => 'purchase/orders/import/commit',
             'templateUrl' => 'purchase/orders/import-template',
             'backUrl' => 'purchase/orders',
             'table' => 'purchase_orders',
@@ -516,5 +697,45 @@ class OrderImportController extends BaseController
             'partnerCodeField' => 'supplier_code',
             'partnerNameField' => 'supplier_name',
         ];
+    }
+
+    private function previewFromRequest(string $type): ?array
+    {
+        $token = trim((string) $this->request->getGet('preview'));
+        if ($token === '') {
+            return null;
+        }
+
+        $preview = $this->getPreview($token);
+        if ($preview === null || ($preview['type'] ?? '') !== $type) {
+            return null;
+        }
+
+        return $preview;
+    }
+
+    private function storePreview(string $token, array $preview): void
+    {
+        $previews = session(self::SESSION_KEY) ?? [];
+        $previews[$token] = $preview;
+        session()->set(self::SESSION_KEY, $previews);
+    }
+
+    private function getPreview(string $token): ?array
+    {
+        if ($token === '') {
+            return null;
+        }
+
+        $previews = session(self::SESSION_KEY) ?? [];
+
+        return is_array($previews[$token] ?? null) ? $previews[$token] : null;
+    }
+
+    private function clearPreview(string $token): void
+    {
+        $previews = session(self::SESSION_KEY) ?? [];
+        unset($previews[$token]);
+        session()->set(self::SESSION_KEY, $previews);
     }
 }

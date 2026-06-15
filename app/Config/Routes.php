@@ -69,6 +69,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('orders/import', 'System\OrderImportController::salesForm');
         $routes->get('orders/import-template', 'System\OrderImportController::salesTemplate');
         $routes->post('orders/import', 'System\OrderImportController::importSales');
+        $routes->post('orders/import/commit', 'System\OrderImportController::commitSales');
         $routes->post('orders', 'Sales\SalesOrderController::store');
         $routes->get('orders/(:num)', 'Sales\SalesOrderController::show/$1');
         $routes->post('orders/(:num)/submit', 'Sales\SalesOrderController::submit/$1');
@@ -104,6 +105,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('orders/import', 'System\OrderImportController::purchaseForm');
         $routes->get('orders/import-template', 'System\OrderImportController::purchaseTemplate');
         $routes->post('orders/import', 'System\OrderImportController::importPurchase');
+        $routes->post('orders/import/commit', 'System\OrderImportController::commitPurchase');
         $routes->post('orders', 'Purchase\PurchaseOrderController::store');
         $routes->get('orders/(:num)', 'Purchase\PurchaseOrderController::show/$1');
         $routes->post('orders/(:num)/submit', 'Purchase\PurchaseOrderController::submit/$1');
