@@ -35,12 +35,16 @@ class PurchaseOrderService
             $lineModel = new PurchaseOrderLineModel();
             $status = $header['status'] ?? 'draft';
 
-            $poId = (int) $poModel->insert($header + $totals + [
+            $poModel->insert($header + $totals + [
                 'status' => $status,
                 'document_status' => $status,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ], true);
+            ]);
+            $poId = (int) $poModel->getInsertID();
+            if ($poId < 1) {
+                throw new RuntimeException('Failed to create purchase order header.');
+            }
 
             $lineNo = 10;
             foreach ($lines as $line) {

@@ -36,12 +36,16 @@ class SalesOrderService
             $lineModel = new SalesOrderLineModel();
             $status = $header['status'] ?? 'draft';
 
-            $soId = (int) $soModel->insert($header + $totals + [
+            $soModel->insert($header + $totals + [
                 'status' => $status,
                 'document_status' => $status,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ], true);
+            ]);
+            $soId = (int) $soModel->getInsertID();
+            if ($soId < 1) {
+                throw new RuntimeException('Failed to create sales order header.');
+            }
 
             $lineNo = 10;
             foreach ($lines as $line) {
