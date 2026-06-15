@@ -57,7 +57,7 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Supplier Address', $this->placeholderRoute('Supplier Address'), 'purchase.supplier.view'),
                 $this->leaf('Purchase Order', 'purchase/orders', 'purchase.po.view'),
                 $this->leaf('Purchase Intransit', $this->placeholderRoute('Purchase Intransit'), 'purchase.po.view'),
-                $this->leaf('Inventory Purchase Receipt', $this->placeholderRoute('Inventory Purchase Receipt'), 'purchase.po.view'),
+                $this->leaf('Inventory Purchase Receipt', 'purchase/receipts', 'purchase.po.view'),
                 $this->leaf('Cost Purchase Receipt', $this->placeholderRoute('Cost Purchase Receipt'), 'purchase.po.view'),
                 $this->leaf('Purchase Period Close', 'period-close/purchase', 'purchase.po.view'),
             ]),
