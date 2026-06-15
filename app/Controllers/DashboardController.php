@@ -33,7 +33,7 @@ class DashboardController extends BaseController
             'Total Invoice' => 'ar/sales-invoices',
             'Pending Approval' => 'dashboard',
             'Pending OCR Review' => 'ai-documents',
-            'Stock Alert' => 'inventory/stock-balances',
+            'Stock Alert' => 'inventory/stock-alerts',
         ];
         $metricMoney = ['Total Sales', 'Total Purchase', 'Total Invoice'];
         $pendingWork = [];
@@ -91,7 +91,7 @@ class DashboardController extends BaseController
                 [
                     'label' => 'Stock Alerts',
                     'count' => $metrics['Stock Alert'],
-                    'route' => 'inventory/stock-balances',
+                    'route' => 'inventory/stock-alerts',
                     'badge' => 'danger',
                 ],
             ];
@@ -259,13 +259,52 @@ class DashboardController extends BaseController
     private function countStockAlerts(TenantContext $tenant): int
     {
         $db = Database::connect();
-        if (! $db->tableExists('inventory_stock_balances')) {
+        if (! $db->tableExists('item_locations')) {
             return 0;
         }
 
-        $builder = $db->table('inventory_stock_balances')
-            ->where('qty_available <=', 0);
-        $this->applyTenantFilters($builder, 'inventory_stock_balances', $tenant);
+        $stockSelect = null;
+        if ($db->tableExists('inventory_stock_balances')) {
+            $stockSelect = $db->table('inventory_stock_balances')
+                ->select('company_id, site_id, warehouse_id, location_id, item_id, SUM(qty_available) AS qty_available')
+                ->groupBy('company_id, site_id, warehouse_id, location_id, item_id')
+                ->getCompiledSelect();
+        }
+
+        $builder = $db->table('item_locations il')
+            ->where('il.deleted_at', null)
+            ->where('il.is_active', 1);
+
+        if ($stockSelect !== null) {
+            $builder->join(
+                '(' . $stockSelect . ') b',
+                'b.company_id = il.company_id AND ' .
+                '(b.site_id <=> il.site_id) AND ' .
+                '(b.warehouse_id <=> il.warehouse_id) AND ' .
+                'b.location_id = il.location_id AND b.item_id = il.item_id',
+                'left',
+                false
+            );
+        }
+
+        if ($tenant->activeCompanyId() !== null) {
+            $builder->where('il.company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $builder->where('il.site_id', $tenant->activeSiteId());
+        }
+
+        $availableExpression = $stockSelect !== null ? 'COALESCE(b.qty_available, 0)' : '0';
+        $builder->groupStart()
+            ->groupStart()
+            ->where('il.min_qty >', 0)
+            ->where($availableExpression . ' < il.min_qty', null, false)
+            ->groupEnd()
+            ->orGroupStart()
+            ->where('il.reorder_qty >', 0)
+            ->where($availableExpression . ' <= il.reorder_qty', null, false)
+            ->groupEnd()
+            ->groupEnd();
 
         return $builder->countAllResults();
     }

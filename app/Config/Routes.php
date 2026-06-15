@@ -46,6 +46,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
 
     $routes->group('inventory', static function (RouteCollection $routes): void {
         $routes->get('stock-balances', 'Inventory\StockBalanceController::index');
+        $routes->get('stock-alerts', 'Inventory\StockAlertController::index');
         $routes->get('stock-card', 'Inventory\StockCardController::index');
         $routes->get('in-out', 'Inventory\InventoryMovementController::inOut');
         $routes->post('in-out', 'Inventory\InventoryMovementController::storeInOut');
