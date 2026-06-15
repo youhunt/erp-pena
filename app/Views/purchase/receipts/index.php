@@ -8,9 +8,17 @@
                 <h4 class="card-title mb-1">Purchase Receipts</h4>
                 <p class="text-muted mb-0">Posted receiving documents that increased inventory stock.</p>
             </div>
-            <a href="<?= site_url('purchase/orders') ?>" class="btn btn-primary">
-                <i class="bx bx-cart me-1"></i> Open Purchase Orders
-            </a>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="<?= site_url('purchase/receipts/import') ?>" class="btn btn-outline-primary">
+                    <i class="bx bx-upload me-1"></i> Import
+                </a>
+                <a href="<?= site_url('purchase/receipts/import-template') ?>" class="btn btn-outline-secondary">
+                    <i class="bx bx-download me-1"></i> Template
+                </a>
+                <a href="<?= site_url('purchase/orders') ?>" class="btn btn-primary">
+                    <i class="bx bx-cart me-1"></i> Open Purchase Orders
+                </a>
+            </div>
         </div>
 
         <div class="table-responsive">

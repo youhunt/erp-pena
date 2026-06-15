@@ -83,6 +83,10 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('orders/(:num)/deliver', 'Sales\SalesDeliveryController::createFromSo/$1');
         $routes->post('orders/(:num)/deliver', 'Sales\SalesDeliveryController::storeFromSo/$1');
         $routes->get('deliveries', 'Sales\SalesDeliveryController::index');
+        $routes->get('deliveries/import', 'System\FulfillmentImportController::salesDeliveryForm');
+        $routes->get('deliveries/import-template', 'System\FulfillmentImportController::salesDeliveryTemplate');
+        $routes->post('deliveries/import', 'System\FulfillmentImportController::importSalesDelivery');
+        $routes->post('deliveries/import/commit', 'System\FulfillmentImportController::commitSalesDelivery');
         $routes->get('deliveries/(:num)', 'Sales\SalesDeliveryController::show/$1');
         $routes->get('deliveries/(:num)/invoice', 'AccountsReceivable\SalesInvoiceController::createFromDelivery/$1');
         $routes->post('deliveries/(:num)/invoice', 'AccountsReceivable\SalesInvoiceController::storeFromDelivery/$1');
@@ -115,6 +119,10 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('orders/(:num)/receive', 'Purchase\PurchaseReceiptController::createFromPo/$1');
         $routes->post('orders/(:num)/receive', 'Purchase\PurchaseReceiptController::storeFromPo/$1');
         $routes->get('receipts', 'Purchase\PurchaseReceiptController::index');
+        $routes->get('receipts/import', 'System\FulfillmentImportController::purchaseReceiptForm');
+        $routes->get('receipts/import-template', 'System\FulfillmentImportController::purchaseReceiptTemplate');
+        $routes->post('receipts/import', 'System\FulfillmentImportController::importPurchaseReceipt');
+        $routes->post('receipts/import/commit', 'System\FulfillmentImportController::commitPurchaseReceipt');
         $routes->get('receipts/(:num)', 'Purchase\PurchaseReceiptController::show/$1');
         $routes->get('receipts/(:num)/invoice', 'AccountsPayable\PurchaseInvoiceController::createFromReceipt/$1');
         $routes->post('receipts/(:num)/invoice', 'AccountsPayable\PurchaseInvoiceController::storeFromReceipt/$1');

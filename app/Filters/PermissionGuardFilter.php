@@ -155,6 +155,9 @@ class PermissionGuardFilter implements FilterInterface
         if ($path === 'sales/orders/import'
             || $path === 'sales/orders/import/commit'
             || $path === 'sales/orders/import-template'
+            || $path === 'sales/deliveries/import'
+            || $path === 'sales/deliveries/import/commit'
+            || $path === 'sales/deliveries/import-template'
             || $path === 'sales/orders/new'
             || ($path === 'sales/orders' && $method !== 'GET')) {
             return 'sales.order.create';
@@ -172,6 +175,9 @@ class PermissionGuardFilter implements FilterInterface
         if ($path === 'purchase/orders/import'
             || $path === 'purchase/orders/import/commit'
             || $path === 'purchase/orders/import-template'
+            || $path === 'purchase/receipts/import'
+            || $path === 'purchase/receipts/import/commit'
+            || $path === 'purchase/receipts/import-template'
             || $path === 'purchase/orders/new'
             || ($path === 'purchase/orders' && $method !== 'GET')) {
             return 'purchase.po.create';
