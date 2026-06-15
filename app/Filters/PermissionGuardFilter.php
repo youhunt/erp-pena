@@ -152,7 +152,10 @@ class PermissionGuardFilter implements FilterInterface
             return 'sales.order.approve';
         }
 
-        if ($path === 'sales/orders/new' || ($path === 'sales/orders' && $method !== 'GET')) {
+        if ($path === 'sales/orders/import'
+            || $path === 'sales/orders/import-template'
+            || $path === 'sales/orders/new'
+            || ($path === 'sales/orders' && $method !== 'GET')) {
             return 'sales.order.create';
         }
 
@@ -165,7 +168,10 @@ class PermissionGuardFilter implements FilterInterface
             return 'purchase.po.approve';
         }
 
-        if ($path === 'purchase/orders/new' || ($path === 'purchase/orders' && $method !== 'GET')) {
+        if ($path === 'purchase/orders/import'
+            || $path === 'purchase/orders/import-template'
+            || $path === 'purchase/orders/new'
+            || ($path === 'purchase/orders' && $method !== 'GET')) {
             return 'purchase.po.create';
         }
 

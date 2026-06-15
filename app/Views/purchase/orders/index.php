@@ -8,9 +8,17 @@
                 <h4 class="card-title mb-1">Purchase Orders</h4>
                 <p class="text-muted mb-0">Manage purchase orders by active company/site.</p>
             </div>
-            <a href="<?= site_url('purchase/orders/new') ?>" class="btn btn-primary">
-                <i class="bx bx-plus me-1"></i> New PO
-            </a>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="<?= site_url('purchase/orders/import') ?>" class="btn btn-outline-primary">
+                    <i class="bx bx-upload me-1"></i> Import
+                </a>
+                <a href="<?= site_url('purchase/orders/import-template') ?>" class="btn btn-outline-secondary">
+                    <i class="bx bx-download me-1"></i> Template
+                </a>
+                <a href="<?= site_url('purchase/orders/new') ?>" class="btn btn-primary">
+                    <i class="bx bx-plus me-1"></i> New PO
+                </a>
+            </div>
         </div>
 
         <div class="table-responsive">
