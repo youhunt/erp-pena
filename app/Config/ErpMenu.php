@@ -35,6 +35,7 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Roles & Permissions', 'admin/roles', 'roles.view'),
                 $this->leaf('Data Import Export', 'system/data-import', 'setup.master.view'),
                 $this->leaf('Excel Import Export', 'system/excel-transfer', 'setup.master.view'),
+                $this->leaf('Audit Logs', 'audit-logs', 'audit.logs.view'),
             ]),
             $this->group('POS', 'bx-store-alt', 30, [
                 $this->leaf('POS Master', $this->placeholderRoute('POS Master'), 'pos.view'),
