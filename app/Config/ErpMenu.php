@@ -99,6 +99,7 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Inventory Purchase Invoice', $this->placeholderRoute('Inventory Purchase Invoice'), 'finance.ap.view'),
                 $this->leaf('Advanced A/P Invoice', $this->placeholderRoute('Advanced A/P Invoice'), 'finance.ap.view'),
                 $this->leaf('Payment Invoice', 'ap/payments', 'finance.ap.view'),
+                $this->leaf('A/P Aging', 'ap/aging', 'finance.ap.view'),
                 $this->leaf('A/P Period Close', 'period-close/ap', 'finance.ap.view'),
             ]),
             $this->group('Accounts Receivable', 'bx-credit-card', 100, [
@@ -109,6 +110,7 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Inventory Sales Invoice', $this->placeholderRoute('Inventory Sales Invoice'), 'finance.ar.view'),
                 $this->leaf('Advanced A/R Receipt', $this->placeholderRoute('Advanced A/R Receipt'), 'finance.ar.view'),
                 $this->leaf('Payment Receipt', 'ar/receipts', 'finance.ar.view'),
+                $this->leaf('A/R Aging', 'ar/aging', 'finance.ar.view'),
                 $this->leaf('A/R Period Close', 'period-close/ar', 'finance.ar.view'),
             ]),
             $this->group('Costing', 'bx-calculator', 110, [

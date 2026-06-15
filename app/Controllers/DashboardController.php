@@ -115,7 +115,7 @@ class DashboardController extends BaseController
                     'label' => 'AP To Pay',
                     'description' => 'Open purchase invoices',
                     'count' => $this->countOpenInvoices('purchase_invoices', $tenant),
-                    'route' => 'ap/purchase-invoices?status=open',
+                    'route' => 'ap/aging',
                     'badge' => 'danger',
                 ],
                 [
@@ -136,7 +136,7 @@ class DashboardController extends BaseController
                     'label' => 'AR To Collect',
                     'description' => 'Open sales invoices',
                     'count' => $this->countOpenInvoices('sales_invoices', $tenant),
-                    'route' => 'ar/sales-invoices?status=open',
+                    'route' => 'ar/aging',
                     'badge' => 'danger',
                 ],
             ];
