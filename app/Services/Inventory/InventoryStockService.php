@@ -2,6 +2,7 @@
 
 namespace App\Services\Inventory;
 
+use App\Models\BatchMasterModel;
 use App\Models\InventoryStockBalanceModel;
 use App\Models\InventoryStockMovementModel;
 use App\Services\AuditLogService;
@@ -47,6 +48,7 @@ class InventoryStockService
     public function move(array $data, ?int $userId = null): int
     {
         $this->validateMovement($data);
+        $this->validateLocationScope($data);
         (new PeriodCloseService())->assertOpen(
             'inventory',
             (int) $data['company_id'],
@@ -127,6 +129,8 @@ class InventoryStockService
             if ($glEntryId !== null) {
                 $movementModel->update($movementId, ['gl_entry_id' => $glEntryId]);
             }
+
+            $this->ensureBatchMaster($data, $userId);
 
             if ($db->transStatus() === false) {
                 throw new RuntimeException('Failed to post stock movement.');
@@ -218,6 +222,94 @@ class InventoryStockService
 
         if ((float) $data['qty'] <= 0) {
             throw new RuntimeException('Stock movement quantity must be greater than zero.');
+        }
+    }
+
+    private function validateLocationScope(array $data): void
+    {
+        $warehouseId = isset($data['warehouse_id']) ? (int) $data['warehouse_id'] : 0;
+        $locationId = isset($data['location_id']) ? (int) $data['location_id'] : 0;
+        if ($warehouseId < 1 || $locationId < 1) {
+            return;
+        }
+
+        $db = Database::connect();
+        if (! $db->tableExists('locations')) {
+            return;
+        }
+
+        $location = $db->table('locations')
+            ->where('id', $locationId)
+            ->get()
+            ->getRowArray();
+        if ($location === null) {
+            throw new RuntimeException('Selected location is not valid.');
+        }
+
+        if (! empty($location['warehouse_id']) && (int) $location['warehouse_id'] !== $warehouseId) {
+            throw new RuntimeException('Selected location does not belong to selected warehouse.');
+        }
+
+        if (! empty($location['company_id']) && (int) $location['company_id'] !== (int) $data['company_id']) {
+            throw new RuntimeException('Selected location does not belong to active company.');
+        }
+
+        if (! empty($data['site_id']) && ! empty($location['site_id']) && (int) $location['site_id'] !== (int) $data['site_id']) {
+            throw new RuntimeException('Selected location does not belong to active site.');
+        }
+    }
+
+    private function ensureBatchMaster(array $data, ?int $userId): void
+    {
+        $batchNo = trim((string) ($data['batch_no'] ?? ''));
+        if ($batchNo === '') {
+            return;
+        }
+
+        $db = Database::connect();
+        if (! $db->tableExists('batch_masters')) {
+            return;
+        }
+
+        $model = new BatchMasterModel();
+        $query = $model->withDeleted()
+            ->where('company_id', (int) $data['company_id'])
+            ->where('item_code', (string) $data['item_code'])
+            ->where('batch_no', $batchNo);
+
+        empty($data['site_id'])
+            ? $query->where('site_id', null)
+            : $query->where('site_id', (int) $data['site_id']);
+
+        $batch = $query->first();
+        if ($batch !== null) {
+            $db->table('batch_masters')
+                ->where('id', (int) $batch['id'])
+                ->update([
+                    'is_active' => 1,
+                    'deleted_at' => null,
+                    'updated_by' => $userId,
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+
+            return;
+        }
+
+        $model->insert([
+            'company_id' => (int) $data['company_id'],
+            'site_id' => ! empty($data['site_id']) ? (int) $data['site_id'] : null,
+            'item_id' => ! empty($data['item_id']) ? (int) $data['item_id'] : null,
+            'item_code' => (string) $data['item_code'],
+            'batch_no' => $batchNo,
+            'batch_name' => $batchNo,
+            'description' => 'Auto-created from inventory movement ' . (string) ($data['reference_no'] ?? ''),
+            'is_active' => 1,
+            'created_by' => $userId,
+            'updated_by' => $userId,
+        ]);
+
+        if ((int) $model->getInsertID() < 1) {
+            throw new RuntimeException('Failed to create batch master.');
         }
     }
 

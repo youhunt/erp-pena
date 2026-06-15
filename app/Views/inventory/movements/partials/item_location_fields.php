@@ -5,20 +5,27 @@
 
 <div class="row">
     <div class="col-md-6 mb-3">
+        <label class="form-label">Movement Date</label>
+        <input type="datetime-local" name="movement_date" class="form-control" value="<?= esc(old('movement_date', date('Y-m-d\TH:i'))) ?>" required>
+    </div>
+    <div class="col-md-6 mb-3">
         <label class="form-label">Warehouse</label>
         <select name="warehouse_id" class="form-select">
             <option value="">No Warehouse</option>
             <?php foreach ($warehouses as $warehouse): ?>
-                <option value="<?= (int) $warehouse['id'] ?>"><?= esc(($warehouse['code'] ?? $warehouse['id']) . ' - ' . ($warehouse['name'] ?? '-')) ?></option>
+                <option value="<?= (int) $warehouse['id'] ?>" <?= old('warehouse_id') == (string) $warehouse['id'] ? 'selected' : '' ?>><?= esc(($warehouse['code'] ?? $warehouse['id']) . ' - ' . ($warehouse['name'] ?? '-')) ?></option>
             <?php endforeach ?>
         </select>
     </div>
+</div>
+
+<div class="row">
     <div class="col-md-6 mb-3">
         <label class="form-label">Location</label>
         <select name="location_id" class="form-select">
             <option value="">No Location</option>
             <?php foreach ($locations as $location): ?>
-                <option value="<?= (int) $location['id'] ?>"><?= esc(($location['code'] ?? $location['id']) . ' - ' . ($location['name'] ?? '-')) ?></option>
+                <option value="<?= (int) $location['id'] ?>" data-warehouse-id="<?= esc((string) ($location['warehouse_id'] ?? '')) ?>" <?= old('location_id') == (string) $location['id'] ? 'selected' : '' ?>><?= esc(($location['code'] ?? $location['id']) . ' - ' . ($location['name'] ?? '-')) ?></option>
             <?php endforeach ?>
         </select>
     </div>
@@ -66,6 +73,29 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form').forEach(function (form) {
+        const warehouse = form.querySelector('[name="warehouse_id"]');
+        const location = form.querySelector('[name="location_id"]');
+        if (!warehouse || !location) return;
+
+        const filterLocations = function () {
+            const selectedWarehouse = warehouse.value || '';
+            location.querySelectorAll('option').forEach(function (option) {
+                if (!option.value) return;
+
+                const optionWarehouse = option.dataset.warehouseId || '';
+                const visible = selectedWarehouse === '' || optionWarehouse === '' || optionWarehouse === selectedWarehouse;
+                option.hidden = !visible;
+                if (!visible && option.selected) {
+                    location.value = '';
+                }
+            });
+        };
+
+        warehouse.addEventListener('change', filterLocations);
+        filterLocations();
+    });
+
     document.querySelectorAll('.inventory-item-select').forEach(function (select) {
         select.addEventListener('change', function () {
             const option = select.options[select.selectedIndex];

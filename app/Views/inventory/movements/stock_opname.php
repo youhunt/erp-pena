@@ -6,7 +6,7 @@
         <div class="card">
             <div class="card-body">
                 <h4 class="card-title mb-1">Inventory Stock Opname</h4>
-                <p class="text-muted mb-4">Post physical count variance against current system quantity.</p>
+                <p class="text-muted mb-4">Post physical count variance against current stock ledger quantity.</p>
 
                 <form method="post" action="<?= site_url('inventory/stock-opname') ?>">
                     <?= csrf_field() ?>
@@ -42,7 +42,7 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">System Qty</label>
-                            <input type="number" step="0.0001" name="system_qty" id="systemQty" class="form-control text-end" required value="<?= esc(old('system_qty', '0')) ?>">
+                            <input type="number" step="0.0001" name="system_qty" id="systemQty" class="form-control text-end" readonly value="<?= esc(old('system_qty', '0')) ?>">
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Counted Qty</label>
@@ -87,7 +87,10 @@ document.addEventListener('DOMContentLoaded', function () {
         const warehouse = document.querySelector('[name="warehouse_id"]');
         const location = document.querySelector('[name="location_id"]');
         const batchNo = document.querySelector('[name="batch_no"]');
-        if (warehouse) warehouse.value = option.dataset.warehouseId || '';
+        if (warehouse) {
+            warehouse.value = option.dataset.warehouseId || '';
+            warehouse.dispatchEvent(new Event('change'));
+        }
         if (location) location.value = option.dataset.locationId || '';
         if (batchNo) batchNo.value = option.dataset.batchNo || '';
     });

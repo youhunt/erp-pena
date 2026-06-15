@@ -121,20 +121,23 @@ class InventoryMovementController extends BaseController
             return redirect()->back()->withInput()->with('error', 'Active company is required.');
         }
 
-        $systemQty = (float) $this->request->getPost('system_qty');
         $countedQty = (float) $this->request->getPost('counted_qty');
-        $variance = $countedQty - $systemQty;
-        if ($variance === 0.0) {
-            return redirect()->back()->withInput()->with('error', 'No variance to post.');
-        }
 
         try {
             $payload = $this->movementPayload($companyId, $tenant, [
-                'qty' => $variance,
+                'qty' => 1,
                 'movement_type' => 'stock_opname',
                 'reference_type' => 'stock_opname',
                 'reference_no' => trim((string) ($this->request->getPost('reference_no') ?: 'OPN-' . date('Ymd-His'))),
             ]);
+            $systemQty = $this->currentStockQty($payload);
+            $variance = $countedQty - $systemQty;
+            if (abs($variance) < 0.0000001) {
+                return redirect()->back()->withInput()->with('error', 'No variance to post.');
+            }
+
+            $payload['qty'] = $variance;
+            $payload['notes'] = trim(($payload['notes'] ?? '') . ' System qty: ' . number_format($systemQty, 4, '.', '') . '; counted qty: ' . number_format($countedQty, 4, '.', ''));
             (new InventoryStockService())->adjust($payload, auth()->id());
         } catch (RuntimeException $exception) {
             return redirect()->back()->withInput()->with('error', $exception->getMessage());
@@ -177,9 +180,24 @@ class InventoryMovementController extends BaseController
             'uom_code' => trim((string) ($this->request->getPost('uom_code') ?: ($item['stockuom'] ?? 'PCS'))),
             'qty' => array_key_exists('qty', $overrides) ? $qty : abs($qty),
             'unit_cost' => (float) ($this->request->getPost('unit_cost') ?: ($item['item_price'] ?? 0)),
-            'movement_date' => date('Y-m-d H:i:s'),
+            'movement_date' => $this->movementDate(),
             'notes' => trim((string) $this->request->getPost('notes')),
         ];
+    }
+
+    private function movementDate(): string
+    {
+        $date = trim((string) $this->request->getPost('movement_date'));
+        if ($date === '') {
+            return date('Y-m-d H:i:s');
+        }
+
+        $timestamp = strtotime($date);
+        if ($timestamp === false) {
+            throw new RuntimeException('Movement date is invalid.');
+        }
+
+        return date('Y-m-d H:i:s', $timestamp);
     }
 
     private function formData(string $title): array
@@ -234,6 +252,28 @@ class InventoryMovementController extends BaseController
         }
 
         return $builder->orderBy('b.item_code', 'ASC')->get(100)->getResultArray();
+    }
+
+    private function currentStockQty(array $payload): float
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('inventory_stock_balances')) {
+            return 0.0;
+        }
+
+        $builder = $db->table('inventory_stock_balances')
+            ->selectSum('qty_on_hand', 'qty_on_hand')
+            ->where('company_id', $payload['company_id'])
+            ->where('item_code', $payload['item_code'])
+            ->where('batch_no', trim((string) ($payload['batch_no'] ?? '')));
+
+        foreach (['site_id', 'warehouse_id', 'location_id'] as $field) {
+            empty($payload[$field])
+                ? $builder->where($field, null)
+                : $builder->where($field, (int) $payload[$field]);
+        }
+
+        return (float) ($builder->get()->getRowArray()['qty_on_hand'] ?? 0);
     }
 
     private function recentMovements(array $types): array
