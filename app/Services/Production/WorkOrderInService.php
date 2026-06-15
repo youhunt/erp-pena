@@ -33,14 +33,18 @@ class WorkOrderInService
             $outputModel = new ProductionWorkOrderOutputModel();
             $stock = new InventoryStockService();
 
-            $woId = (int) $woModel->insert($header + [
+            $woModel->insert($header + [
                 'production_type' => 'work_order_in',
                 'status' => 'posted',
                 'posted_at' => date('Y-m-d H:i:s'),
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ], true);
+            ]);
+            $woId = (int) $woModel->getInsertID();
+            if ($woId < 1) {
+                throw new RuntimeException('Failed to create work order in header.');
+            }
 
             $movementId = $stock->stockIn([
                 'company_id' => $header['company_id'],

@@ -48,13 +48,17 @@ class PurchaseReceiptService
             $totalInventoryValue = 0.0;
             $postedLineCount = 0;
 
-            $receiptId = (int) $receiptModel->insert($header + [
+            $receiptModel->insert($header + [
                 'status' => 'posted',
                 'posted_at' => date('Y-m-d H:i:s'),
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ], true);
+            ]);
+            $receiptId = (int) $receiptModel->getInsertID();
+            if ($receiptId < 1) {
+                throw new RuntimeException('Failed to create purchase receipt header.');
+            }
 
             foreach ($lines as $line) {
                 $poLine = $poLineModel->find((int) $line['purchase_order_line_id']);

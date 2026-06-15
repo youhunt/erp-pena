@@ -42,7 +42,7 @@ class GeneralLedgerService
             $entryModel = new GlEntryModel();
             $lineModel = new GlEntryLineModel();
             $journalDate = (string) ($header['journal_date'] ?? date('Y-m-d'));
-            $entryId = (int) $entryModel->insert([
+            $entryModel->insert([
                 'company_id' => $companyId,
                 'site_id' => $header['site_id'] ?? null,
                 'gl_book_id' => $header['gl_book_id'] ?? null,
@@ -63,7 +63,11 @@ class GeneralLedgerService
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ], true);
+            ]);
+            $entryId = (int) $entryModel->getInsertID();
+            if ($entryId < 1) {
+                throw new RuntimeException('Failed to create GL entry header.');
+            }
 
             $lineNo = 10;
             foreach ($lines as $line) {

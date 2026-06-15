@@ -54,7 +54,7 @@ class PurchaseInvoiceService
         try {
             $invoiceDate = (string) ($header['invoice_date'] ?? date('Y-m-d'));
             $dueDate = $header['due_date'] ?? $invoiceDate;
-            $invoiceId = (int) $invoiceModel->insert($header + [
+            $invoiceModel->insert($header + [
                 'invoice_date' => $invoiceDate,
                 'due_date' => $dueDate,
                 'source_type' => 'manual',
@@ -69,7 +69,11 @@ class PurchaseInvoiceService
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ], true);
+            ]);
+            $invoiceId = (int) $invoiceModel->getInsertID();
+            if ($invoiceId < 1) {
+                throw new RuntimeException('Failed to create purchase invoice header.');
+            }
 
             $lineModel = new PurchaseInvoiceLineModel();
             foreach ($lines as $line) {
@@ -212,7 +216,7 @@ class PurchaseInvoiceService
             $invoiceDate = (string) ($header['invoice_date'] ?? date('Y-m-d'));
             $dueDate = $header['due_date'] ?? $invoiceDate;
 
-            $invoiceId = (int) $invoiceModel->insert($header + [
+            $invoiceModel->insert($header + [
                 'invoice_date' => $invoiceDate,
                 'due_date' => $dueDate,
                 'purchase_order_id' => $receipt['purchase_order_id'] ?? null,
@@ -233,7 +237,11 @@ class PurchaseInvoiceService
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ], true);
+            ]);
+            $invoiceId = (int) $invoiceModel->getInsertID();
+            if ($invoiceId < 1) {
+                throw new RuntimeException('Failed to create purchase invoice header.');
+            }
 
             foreach ($lines as $line) {
                 $invoiceLineModel->insert($line + ['purchase_invoice_id' => $invoiceId]);

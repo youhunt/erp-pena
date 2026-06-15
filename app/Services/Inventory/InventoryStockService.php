@@ -89,7 +89,7 @@ class InventoryStockService
                 'stock_value' => $newValue,
             ]);
 
-            $movementId = (int) $movementModel->insert([
+            $movementModel->insert([
                 'company_id' => $data['company_id'],
                 'site_id' => $data['site_id'] ?? null,
                 'warehouse_id' => $data['warehouse_id'] ?? null,
@@ -111,7 +111,11 @@ class InventoryStockService
                 'notes' => $data['notes'] ?? null,
                 'created_by' => $userId,
                 'created_at' => date('Y-m-d H:i:s'),
-            ], true);
+            ]);
+            $movementId = (int) $movementModel->getInsertID();
+            if ($movementId < 1) {
+                throw new RuntimeException('Failed to create inventory stock movement.');
+            }
 
             $glEntryId = $this->postAdjustmentGl($data + [
                 'company_id' => $data['company_id'],
@@ -241,7 +245,7 @@ class InventoryStockService
             return $balance;
         }
 
-        $id = (int) $model->insert([
+        $model->insert([
             'company_id' => $data['company_id'],
             'site_id' => $data['site_id'] ?? null,
             'warehouse_id' => $data['warehouse_id'] ?? null,
@@ -255,7 +259,11 @@ class InventoryStockService
             'qty_available' => 0,
             'avg_cost' => 0,
             'stock_value' => 0,
-        ], true);
+        ]);
+        $id = (int) $model->getInsertID();
+        if ($id < 1) {
+            throw new RuntimeException('Failed to create inventory stock balance.');
+        }
 
         return $model->find($id);
     }

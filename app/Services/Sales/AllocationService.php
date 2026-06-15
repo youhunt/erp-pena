@@ -38,7 +38,8 @@ class AllocationService
 
         try {
             $allocNo = trim((string) ($header['allocnumb'] ?? 'ALC-' . date('Ymd-His')));
-            $allocationId = (int) (new AllocationOrderModel())->insert([
+            $allocationModel = new AllocationOrderModel();
+            $allocationModel->insert([
                 'company_id' => $so['company_id'],
                 'site_id' => $so['site_id'] ?? null,
                 'sales_order_id' => $so['id'],
@@ -58,7 +59,11 @@ class AllocationService
                 'created_by' => (string) ($userId ?? 'system'),
                 'updated_by' => (string) ($userId ?? 'system'),
                 'active' => 1,
-            ], true);
+            ]);
+            $allocationId = (int) $allocationModel->getInsertID();
+            if ($allocationId < 1) {
+                throw new RuntimeException('Failed to create allocation order header.');
+            }
 
             $stock = new InventoryStockService();
             $allocationLineModel = new AllocationLineModel();

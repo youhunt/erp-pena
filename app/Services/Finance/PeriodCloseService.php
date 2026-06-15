@@ -61,7 +61,11 @@ class PeriodCloseService
             $model->update((int) $existing['id'], $payload);
             $periodCloseId = (int) $existing['id'];
         } else {
-            $periodCloseId = (int) $model->insert($payload + ['created_by' => $userId], true);
+            $model->insert($payload + ['created_by' => $userId]);
+            $periodCloseId = (int) $model->getInsertID();
+            if ($periodCloseId < 1) {
+                throw new RuntimeException('Failed to create period close record.');
+            }
         }
 
         $this->audit('period.close', $periodCloseId, $payload, $userId);

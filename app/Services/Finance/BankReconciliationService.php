@@ -59,7 +59,7 @@ class BankReconciliationService
 
         try {
             $reconciliationModel = new BankReconciliationModel();
-            $reconciliationId = (int) $reconciliationModel->insert([
+            $reconciliationModel->insert([
                 'company_id' => $companyId,
                 'site_id' => $data['site_id'] ?? null,
                 'cash_bank_account_id' => (int) $account['id'],
@@ -78,7 +78,11 @@ class BankReconciliationService
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ], true);
+            ]);
+            $reconciliationId = (int) $reconciliationModel->getInsertID();
+            if ($reconciliationId < 1) {
+                throw new RuntimeException('Failed to create bank reconciliation header.');
+            }
 
             foreach ($entries as $entry) {
                 $entryModel->update((int) $entry['id'], [

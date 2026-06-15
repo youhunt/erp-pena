@@ -47,7 +47,7 @@ class SettlementService
 
         try {
             $paymentModel = new ApPaymentModel();
-            $paymentId = (int) $paymentModel->insert($data + [
+            $paymentModel->insert($data + [
                 'purchase_invoice_id' => $payable['purchase_invoice_id'],
                 'invoice_no' => $payable['invoice_no'],
                 'supplier_id' => $payable['supplier_id'] ?? null,
@@ -59,7 +59,11 @@ class SettlementService
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ], true);
+            ]);
+            $paymentId = (int) $paymentModel->getInsertID();
+            if ($paymentId < 1) {
+                throw new RuntimeException('Failed to create A/P payment.');
+            }
 
             $cashBankEntryId = (new CashBankService())->post([
                 'company_id' => $data['company_id'],
@@ -149,7 +153,7 @@ class SettlementService
 
         try {
             $receiptModel = new ArReceiptModel();
-            $receiptId = (int) $receiptModel->insert($data + [
+            $receiptModel->insert($data + [
                 'sales_invoice_id' => $receivable['sales_invoice_id'],
                 'invoice_no' => $receivable['invoice_no'],
                 'customer_id' => $receivable['customer_id'] ?? null,
@@ -161,7 +165,11 @@ class SettlementService
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ], true);
+            ]);
+            $receiptId = (int) $receiptModel->getInsertID();
+            if ($receiptId < 1) {
+                throw new RuntimeException('Failed to create A/R receipt.');
+            }
 
             $cashBankEntryId = (new CashBankService())->post([
                 'company_id' => $data['company_id'],

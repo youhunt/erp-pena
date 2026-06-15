@@ -52,7 +52,7 @@ class WorkOrderService
             $batchQty = max(1.0, (float) ($bom['qty_batch'] ?? 1));
             $scale = $woQty / $batchQty;
 
-            $woId = (int) $woModel->insert($header + [
+            $woModel->insert($header + [
                 'bom_id' => $bom['id'],
                 'routing_id' => $routing['id'] ?? null,
                 'batch_qty' => $batchQty,
@@ -61,7 +61,11 @@ class WorkOrderService
                 'status' => 'draft',
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ], true);
+            ]);
+            $woId = (int) $woModel->getInsertID();
+            if ($woId < 1) {
+                throw new RuntimeException('Failed to create work order header.');
+            }
 
             foreach ((new ProductionBomLineModel())->where('production_bom_id', $bom['id'])->orderBy('child_no', 'ASC')->findAll() as $line) {
                 $qty = round((float) ($line['qty_used'] ?? 0) * $scale, 12);

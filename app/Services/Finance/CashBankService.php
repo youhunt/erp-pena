@@ -55,7 +55,7 @@ class CashBankService
             $accountModel->update((int) $account['id'], ['current_balance' => $newBalance]);
 
             $entryModel = new CashBankEntryModel();
-            $entryId = (int) $entryModel->insert([
+            $entryModel->insert([
                 'company_id' => $companyId,
                 'site_id' => $data['site_id'] ?? null,
                 'cash_bank_account_id' => (int) $account['id'],
@@ -73,7 +73,11 @@ class CashBankService
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ], true);
+            ]);
+            $entryId = (int) $entryModel->getInsertID();
+            if ($entryId < 1) {
+                throw new RuntimeException('Failed to create cash/bank entry.');
+            }
 
             $cashBankGlAccount = trim((string) ($account['gl_account_no'] ?? ''));
             $glEntryId = $this->postGl($data + [

@@ -49,13 +49,17 @@ class SalesDeliveryService
             $totalCogs = 0.0;
             $postedLineCount = 0;
 
-            $deliveryId = (int) $deliveryModel->insert($header + [
+            $deliveryModel->insert($header + [
                 'status' => 'posted',
                 'posted_at' => date('Y-m-d H:i:s'),
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ], true);
+            ]);
+            $deliveryId = (int) $deliveryModel->getInsertID();
+            if ($deliveryId < 1) {
+                throw new RuntimeException('Failed to create sales delivery header.');
+            }
 
             foreach ($lines as $line) {
                 $soLine = $soLineModel->find((int) $line['sales_order_line_id']);
