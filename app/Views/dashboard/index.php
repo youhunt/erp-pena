@@ -27,13 +27,19 @@
 <?php else: ?>
     <div class="row">
         <?php foreach ($metrics as $label => $value): ?>
+            <?php
+                $isMoney = in_array($label, $metricMoney ?? [], true);
+                $displayValue = number_format((float) $value, 0, ',', '.');
+                $route = $metricLinks[$label] ?? 'dashboard';
+            ?>
             <div class="col-xl-2 col-md-4 col-sm-6">
                 <div class="card mini-stats-wid">
                     <div class="card-body">
                         <div class="d-flex">
                             <div class="flex-grow-1">
                                 <p class="text-muted fw-medium mb-2"><?= esc($label) ?></p>
-                                <h4 class="mb-0"><?= esc((string) $value) ?></h4>
+                                <h4 class="mb-0"><?= $isMoney ? 'Rp ' : '' ?><?= esc($displayValue) ?></h4>
+                                <a href="<?= site_url($route) ?>" class="small text-muted">Open</a>
                             </div>
                             <div class="avatar-sm rounded-circle bg-primary align-self-center mini-stat-icon">
                                 <span class="avatar-title rounded-circle bg-primary">
@@ -46,6 +52,30 @@
             </div>
         <?php endforeach ?>
     </div>
+
+    <?php if (! empty($workflowQueues)): ?>
+        <div class="row">
+            <?php foreach ($workflowQueues as $queue): ?>
+                <div class="col-xl-4 col-md-6">
+                    <a href="<?= site_url($queue['route'] ?? 'dashboard') ?>" class="text-reset">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center justify-content-between gap-3">
+                                    <div>
+                                        <h5 class="font-size-15 mb-1"><?= esc($queue['label'] ?? '-') ?></h5>
+                                        <p class="text-muted mb-0"><?= esc($queue['description'] ?? '-') ?></p>
+                                    </div>
+                                    <span class="badge bg-<?= esc($queue['badge'] ?? 'primary') ?> font-size-14">
+                                        <?= esc(number_format((float) ($queue['count'] ?? 0), 0, ',', '.')) ?>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            <?php endforeach ?>
+        </div>
+    <?php endif ?>
 
     <div class="row">
         <div class="col-xl-8">
@@ -98,18 +128,23 @@
                     <div class="table-responsive">
                         <table class="table table-nowrap align-middle mb-0">
                             <tbody>
-                                <tr>
-                                    <td>Approvals</td>
-                                    <td class="text-end"><span class="badge bg-warning">0</span></td>
-                                </tr>
-                                <tr>
-                                    <td>OCR Reviews</td>
-                                    <td class="text-end"><span class="badge bg-info">0</span></td>
-                                </tr>
-                                <tr>
-                                    <td>Stock Alerts</td>
-                                    <td class="text-end"><span class="badge bg-danger">0</span></td>
-                                </tr>
+                                <?php foreach ($pendingWork as $work): ?>
+                                    <tr>
+                                        <td>
+                                            <a href="<?= site_url($work['route'] ?? 'dashboard') ?>" class="text-reset">
+                                                <?= esc($work['label'] ?? '-') ?>
+                                            </a>
+                                        </td>
+                                        <td class="text-end">
+                                            <span class="badge bg-<?= esc($work['badge'] ?? 'secondary') ?>">
+                                                <?= esc(number_format((float) ($work['count'] ?? 0), 0, ',', '.')) ?>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                <?php endforeach ?>
+                                <?php if (empty($pendingWork)): ?>
+                                    <tr><td class="text-center text-muted py-4">No pending work.</td></tr>
+                                <?php endif ?>
                             </tbody>
                         </table>
                     </div>
