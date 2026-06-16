@@ -44,7 +44,7 @@ class SalesDeliveryController extends BaseController
             'title' => 'Delivery Orders',
             'deliveries' => $model->orderBy('delivery_date', 'DESC')->orderBy('id', 'DESC')->findAll(100),
             'filters' => ['status' => $status, 'q' => $search],
-            'statusOptions' => ['posted', 'invoiced'],
+            'statusOptions' => ['posted', 'invoiced', 'reversed'],
         ]);
     }
 
@@ -140,6 +140,30 @@ class SalesDeliveryController extends BaseController
             'delivery' => $delivery,
             'lines' => (new SalesDeliveryLineModel())->where('sales_delivery_id', $id)->orderBy('line_no', 'ASC')->findAll(),
         ]);
+    }
+
+    public function reverse(int $id)
+    {
+        $tenant = new TenantContext(session());
+        $model = new SalesDeliveryModel();
+        if ($tenant->activeCompanyId() !== null) {
+            $model->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $model->where('site_id', $tenant->activeSiteId());
+        }
+        if ($model->find($id) === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        try {
+            $reason = trim((string) $this->request->getPost('reversal_reason')) ?: null;
+            (new SalesDeliveryService())->reverse($id, auth()->id(), $reason);
+        } catch (RuntimeException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->to('/sales/deliveries/' . $id)->with('message', 'Delivery order reversed.');
     }
 
     private function scopedSo(TenantContext $tenant, int $soId): ?array
