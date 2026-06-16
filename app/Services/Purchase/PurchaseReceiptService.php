@@ -4,6 +4,7 @@ namespace App\Services\Purchase;
 
 use App\Models\PurchaseOrderLineModel;
 use App\Models\PurchaseOrderModel;
+use App\Models\PurchaseInvoiceModel;
 use App\Models\PurchaseReceiptLineModel;
 use App\Models\PurchaseReceiptModel;
 use App\Models\InventoryStockMovementModel;
@@ -179,6 +180,12 @@ class PurchaseReceiptService
             }
             if (! empty($receipt['reversed_at'])) {
                 throw new RuntimeException('Purchase receipt has already been reversed.');
+            }
+            $invoice = (new PurchaseInvoiceModel())
+                ->where('purchase_receipt_id', $receiptId)
+                ->first();
+            if ($invoice !== null) {
+                throw new RuntimeException('Purchase receipt already has purchase invoice ' . ($invoice['invoice_no'] ?? '#' . $invoice['id']) . '. Reverse or cancel the invoice first.');
             }
 
             $lines = $receiptLineModel->where('purchase_receipt_id', $receiptId)->orderBy('line_no', 'ASC')->findAll();

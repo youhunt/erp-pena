@@ -4,6 +4,7 @@ namespace App\Services\Sales;
 
 use App\Models\SalesDeliveryLineModel;
 use App\Models\SalesDeliveryModel;
+use App\Models\SalesInvoiceModel;
 use App\Models\SalesOrderLineModel;
 use App\Models\SalesOrderModel;
 use App\Models\InventoryStockMovementModel;
@@ -196,6 +197,12 @@ class SalesDeliveryService
             }
             if (! empty($delivery['reversed_at'])) {
                 throw new RuntimeException('Sales delivery has already been reversed.');
+            }
+            $invoice = (new SalesInvoiceModel())
+                ->where('sales_delivery_id', $deliveryId)
+                ->first();
+            if ($invoice !== null) {
+                throw new RuntimeException('Sales delivery already has sales invoice ' . ($invoice['invoice_no'] ?? '#' . $invoice['id']) . '. Reverse or cancel the invoice first.');
             }
 
             $lines = $deliveryLineModel->where('sales_delivery_id', $deliveryId)->orderBy('line_no', 'ASC')->findAll();
