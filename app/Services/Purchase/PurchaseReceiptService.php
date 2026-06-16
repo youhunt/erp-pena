@@ -75,10 +75,30 @@ class PurchaseReceiptService
                     throw new RuntimeException('Receive qty cannot exceed outstanding qty for item ' . ($poLine['item_code'] ?? '-'));
                 }
 
+                $movementId = $stock->stockIn([
+                    'company_id' => $header['company_id'],
+                    'site_id' => $header['site_id'] ?? null,
+                    'warehouse_id' => $header['warehouse_id'] ?? null,
+                    'location_id' => $header['location_id'] ?? null,
+                    'item_id' => $poLine['item_id'] ?? null,
+                    'item_code' => $poLine['item_code'] ?? '',
+                    'batch_no' => trim((string) ($line['batch_no'] ?? '')),
+                    'item_name' => $poLine['item_name'] ?? null,
+                    'uom_code' => $poLine['uom_code'] ?? 'PCS',
+                    'qty' => $qtyReceive,
+                    'unit_cost' => (float) ($poLine['unit_price'] ?? 0),
+                    'movement_type' => 'purchase_receipt',
+                    'reference_type' => 'purchase_receipt',
+                    'reference_id' => $receiptId,
+                    'reference_no' => $header['receipt_no'],
+                    'notes' => 'Stock in from PO ' . ($po['po_no'] ?? ''),
+                ], $userId);
+
                 $receiptLineModel->insert([
                     'purchase_receipt_id' => $receiptId,
                     'purchase_order_id' => $po['id'],
                     'purchase_order_line_id' => $poLine['id'],
+                    'stock_movement_id' => $movementId,
                     'line_no' => $poLine['line_no'],
                     'item_id' => $poLine['item_id'] ?? null,
                     'item_code' => $poLine['item_code'] ?? null,
@@ -99,25 +119,6 @@ class PurchaseReceiptService
                     'qty_outstanding' => $newOutstanding,
                     'line_status' => $newOutstanding <= 0 ? 'received' : 'partial_received',
                 ]);
-
-                $movementId = $stock->stockIn([
-                    'company_id' => $header['company_id'],
-                    'site_id' => $header['site_id'] ?? null,
-                    'warehouse_id' => $header['warehouse_id'] ?? null,
-                    'location_id' => $header['location_id'] ?? null,
-                    'item_id' => $poLine['item_id'] ?? null,
-                    'item_code' => $poLine['item_code'] ?? '',
-                    'batch_no' => trim((string) ($line['batch_no'] ?? '')),
-                    'item_name' => $poLine['item_name'] ?? null,
-                    'uom_code' => $poLine['uom_code'] ?? 'PCS',
-                    'qty' => $qtyReceive,
-                    'unit_cost' => (float) ($poLine['unit_price'] ?? 0),
-                    'movement_type' => 'purchase_receipt',
-                    'reference_type' => 'purchase_receipt',
-                    'reference_id' => $receiptId,
-                    'reference_no' => $header['receipt_no'],
-                    'notes' => 'Stock in from PO ' . ($po['po_no'] ?? ''),
-                ], $userId);
 
                 $movement = $movementModel->find($movementId);
                 $totalInventoryValue += (float) ($movement['stock_value'] ?? 0);
@@ -155,6 +156,115 @@ class PurchaseReceiptService
             $db->transRollback();
             throw new RuntimeException($e->getMessage());
         }
+    }
+
+    public function reverse(int $receiptId, ?int $userId = null, ?string $reason = null): void
+    {
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            $receiptModel = new PurchaseReceiptModel();
+            $receiptLineModel = new PurchaseReceiptLineModel();
+            $poLineModel = new PurchaseOrderLineModel();
+            $stock = new InventoryStockService();
+            $movementModel = new InventoryStockMovementModel();
+
+            $receipt = $receiptModel->find($receiptId);
+            if ($receipt === null) {
+                throw new RuntimeException('Purchase receipt not found.');
+            }
+            if ((string) ($receipt['status'] ?? '') !== 'posted') {
+                throw new RuntimeException('Only posted purchase receipt can be reversed.');
+            }
+            if (! empty($receipt['reversed_at'])) {
+                throw new RuntimeException('Purchase receipt has already been reversed.');
+            }
+
+            $lines = $receiptLineModel->where('purchase_receipt_id', $receiptId)->orderBy('line_no', 'ASC')->findAll();
+            if ($lines === []) {
+                throw new RuntimeException('Purchase receipt has no lines to reverse.');
+            }
+
+            $now = date('Y-m-d H:i:s');
+            foreach ($lines as $line) {
+                if (! empty($line['reversal_movement_id'])) {
+                    throw new RuntimeException('Purchase receipt line has already been reversed.');
+                }
+
+                $reversalMovementId = $stock->stockOut([
+                    'company_id' => $receipt['company_id'],
+                    'site_id' => $receipt['site_id'] ?? null,
+                    'warehouse_id' => $line['warehouse_id'] ?? $receipt['warehouse_id'] ?? null,
+                    'location_id' => $line['location_id'] ?? $receipt['location_id'] ?? null,
+                    'item_id' => $line['item_id'] ?? null,
+                    'item_code' => $line['item_code'] ?? '',
+                    'batch_no' => trim((string) ($line['batch_no'] ?? '')),
+                    'item_name' => $line['item_name'] ?? null,
+                    'uom_code' => $line['uom_code'] ?? 'PCS',
+                    'qty' => (float) ($line['qty_received'] ?? 0),
+                    'unit_cost' => (float) ($line['unit_cost'] ?? 0),
+                    'movement_type' => 'purchase_receipt_reversal',
+                    'reference_type' => 'purchase_receipt_reversal',
+                    'reference_id' => $receiptId,
+                    'reference_no' => ($receipt['receipt_no'] ?? 'RCPT') . '-REV',
+                    'notes' => trim(($reason ?? '') . ' Reversal for receipt ' . ($receipt['receipt_no'] ?? '')),
+                ], $userId);
+
+                $receiptLineModel->update((int) $line['id'], [
+                    'reversal_movement_id' => $reversalMovementId,
+                    'updated_at' => $now,
+                ]);
+
+                if (! empty($line['purchase_order_line_id'])) {
+                    $poLine = $poLineModel->find((int) $line['purchase_order_line_id']);
+                    if ($poLine !== null) {
+                        $qty = (float) ($line['qty_received'] ?? 0);
+                        $newReceived = max(0, (float) ($poLine['qty_received'] ?? 0) - $qty);
+                        $ordered = (float) ($poLine['qty_ordered'] ?? $poLine['qty'] ?? 0);
+                        $newOutstanding = max(0, $ordered - $newReceived);
+                        $poLineModel->update((int) $poLine['id'], [
+                            'qty_received' => $newReceived,
+                            'qty_outstanding' => $newOutstanding,
+                            'line_status' => $newReceived <= 0 ? 'approved' : ($newOutstanding <= 0 ? 'received' : 'partial_received'),
+                        ]);
+                    }
+                }
+
+                $movementModel->find($reversalMovementId);
+            }
+
+            $receiptModel->update($receiptId, [
+                'status' => 'reversed',
+                'reversed_at' => $now,
+                'reversed_by' => $userId,
+                'reversal_reason' => $reason,
+                'updated_by' => $userId,
+            ]);
+
+            $this->refreshPoStatus((int) ($receipt['purchase_order_id'] ?? 0), $userId);
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to reverse purchase receipt.');
+            }
+
+            $db->transCommit();
+        } catch (Throwable $e) {
+            $db->transRollback();
+            throw new RuntimeException($e->getMessage());
+        }
+
+        (new AuditLogService())->log('purchase.receipt', 'receipt.reverse', [
+            'company_id' => $receipt['company_id'] ?? null,
+            'site_id' => $receipt['site_id'] ?? null,
+            'user_id' => $userId,
+            'table_name' => 'purchase_receipts',
+            'record_id' => $receiptId,
+            'record_code' => $receipt['receipt_no'] ?? null,
+            'description' => 'Purchase receipt reversed and stock decreased.',
+            'old_values' => ['status' => 'posted'],
+            'new_values' => ['status' => 'reversed', 'reason' => $reason],
+        ]);
     }
 
     private function postReceiptGl(array $header, int $receiptId, float $inventoryValue, ?int $userId): ?int
@@ -195,6 +305,10 @@ class PurchaseReceiptService
 
     private function refreshPoStatus(int $poId, ?int $userId = null): void
     {
+        if ($poId < 1) {
+            return;
+        }
+
         $lineModel = new PurchaseOrderLineModel();
         $lines = $lineModel->where('purchase_order_id', $poId)->findAll();
         $totalOutstanding = 0.0;
