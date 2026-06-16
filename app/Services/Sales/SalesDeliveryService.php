@@ -76,23 +76,6 @@ class SalesDeliveryService
                     throw new RuntimeException('Delivery qty cannot exceed outstanding qty for item ' . ($soLine['item_code'] ?? '-'));
                 }
 
-                $deliveryLineModel->insert([
-                    'sales_delivery_id' => $deliveryId,
-                    'sales_order_id' => $so['id'],
-                    'sales_order_line_id' => $soLine['id'],
-                    'line_no' => $soLine['line_no'],
-                    'item_id' => $soLine['item_id'] ?? null,
-                    'item_code' => $soLine['item_code'] ?? null,
-                    'batch_no' => trim((string) ($line['batch_no'] ?? '')),
-                    'item_name' => $soLine['item_name'] ?? null,
-                    'qty_delivered' => $qtyDeliver,
-                    'uom_code' => $soLine['uom_code'] ?? 'PCS',
-                    'unit_price' => $soLine['unit_price'] ?? 0,
-                    'warehouse_id' => $header['warehouse_id'] ?? null,
-                    'location_id' => $header['location_id'] ?? null,
-                ]);
-                $postedLineCount++;
-
                 $newDelivered = (float) ($soLine['qty_delivered'] ?? 0) + $qtyDeliver;
                 $newOutstanding = max(0, $outstanding - $qtyDeliver);
                 $newReserved = max(0, (float) ($soLine['qty_reserved'] ?? 0) - $qtyDeliver);
@@ -139,6 +122,24 @@ class SalesDeliveryService
 
                 $movement = $movementModel->find($movementId);
                 $totalCogs += (float) ($movement['stock_value'] ?? 0);
+
+                $deliveryLineModel->insert([
+                    'sales_delivery_id' => $deliveryId,
+                    'sales_order_id' => $so['id'],
+                    'sales_order_line_id' => $soLine['id'],
+                    'stock_movement_id' => $movementId,
+                    'line_no' => $soLine['line_no'],
+                    'item_id' => $soLine['item_id'] ?? null,
+                    'item_code' => $soLine['item_code'] ?? null,
+                    'batch_no' => trim((string) ($line['batch_no'] ?? '')),
+                    'item_name' => $soLine['item_name'] ?? null,
+                    'qty_delivered' => $qtyDeliver,
+                    'uom_code' => $soLine['uom_code'] ?? 'PCS',
+                    'unit_price' => $soLine['unit_price'] ?? 0,
+                    'warehouse_id' => $header['warehouse_id'] ?? null,
+                    'location_id' => $header['location_id'] ?? null,
+                ]);
+                $postedLineCount++;
             }
 
             if ($postedLineCount < 1) {
@@ -173,6 +174,112 @@ class SalesDeliveryService
             $db->transRollback();
             throw new RuntimeException($e->getMessage());
         }
+    }
+
+    public function reverse(int $deliveryId, ?int $userId = null, ?string $reason = null): void
+    {
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            $deliveryModel = new SalesDeliveryModel();
+            $deliveryLineModel = new SalesDeliveryLineModel();
+            $soLineModel = new SalesOrderLineModel();
+            $stock = new InventoryStockService();
+
+            $delivery = $deliveryModel->find($deliveryId);
+            if ($delivery === null) {
+                throw new RuntimeException('Sales delivery not found.');
+            }
+            if ((string) ($delivery['status'] ?? '') !== 'posted') {
+                throw new RuntimeException('Only posted sales delivery can be reversed.');
+            }
+            if (! empty($delivery['reversed_at'])) {
+                throw new RuntimeException('Sales delivery has already been reversed.');
+            }
+
+            $lines = $deliveryLineModel->where('sales_delivery_id', $deliveryId)->orderBy('line_no', 'ASC')->findAll();
+            if ($lines === []) {
+                throw new RuntimeException('Sales delivery has no lines to reverse.');
+            }
+
+            $now = date('Y-m-d H:i:s');
+            foreach ($lines as $line) {
+                if (! empty($line['reversal_movement_id'])) {
+                    throw new RuntimeException('Sales delivery line has already been reversed.');
+                }
+
+                $reversalMovementId = $stock->stockIn([
+                    'company_id' => $delivery['company_id'],
+                    'site_id' => $delivery['site_id'] ?? null,
+                    'warehouse_id' => $line['warehouse_id'] ?? $delivery['warehouse_id'] ?? null,
+                    'location_id' => $line['location_id'] ?? $delivery['location_id'] ?? null,
+                    'item_id' => $line['item_id'] ?? null,
+                    'item_code' => $line['item_code'] ?? '',
+                    'batch_no' => trim((string) ($line['batch_no'] ?? '')),
+                    'item_name' => $line['item_name'] ?? null,
+                    'uom_code' => $line['uom_code'] ?? 'PCS',
+                    'qty' => (float) ($line['qty_delivered'] ?? 0),
+                    'unit_cost' => 0,
+                    'movement_type' => 'sales_delivery_reversal',
+                    'reference_type' => 'sales_delivery_reversal',
+                    'reference_id' => $deliveryId,
+                    'reference_no' => ($delivery['delivery_no'] ?? 'DO') . '-REV',
+                    'notes' => trim(($reason ?? '') . ' Reversal for delivery ' . ($delivery['delivery_no'] ?? '')),
+                ], $userId);
+
+                $deliveryLineModel->update((int) $line['id'], [
+                    'reversal_movement_id' => $reversalMovementId,
+                    'updated_at' => $now,
+                ]);
+
+                if (! empty($line['sales_order_line_id'])) {
+                    $soLine = $soLineModel->find((int) $line['sales_order_line_id']);
+                    if ($soLine !== null) {
+                        $qty = (float) ($line['qty_delivered'] ?? 0);
+                        $newDelivered = max(0, (float) ($soLine['qty_delivered'] ?? 0) - $qty);
+                        $ordered = (float) ($soLine['qty_ordered'] ?? $soLine['qty'] ?? 0);
+                        $newOutstanding = max(0, $ordered - $newDelivered);
+                        $soLineModel->update((int) $soLine['id'], [
+                            'qty_delivered' => $newDelivered,
+                            'qty_outstanding' => $newOutstanding,
+                            'line_status' => $newDelivered <= 0 ? 'approved' : ($newOutstanding <= 0 ? 'delivered' : 'partial_delivered'),
+                        ]);
+                    }
+                }
+            }
+
+            $deliveryModel->update($deliveryId, [
+                'status' => 'reversed',
+                'reversed_at' => $now,
+                'reversed_by' => $userId,
+                'reversal_reason' => $reason,
+                'updated_by' => $userId,
+            ]);
+
+            $this->refreshSoStatus((int) ($delivery['sales_order_id'] ?? 0), $userId);
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to reverse sales delivery.');
+            }
+
+            $db->transCommit();
+        } catch (Throwable $e) {
+            $db->transRollback();
+            throw new RuntimeException($e->getMessage());
+        }
+
+        (new AuditLogService())->log('sales.delivery', 'delivery.reverse', [
+            'company_id' => $delivery['company_id'] ?? null,
+            'site_id' => $delivery['site_id'] ?? null,
+            'user_id' => $userId,
+            'table_name' => 'sales_deliveries',
+            'record_id' => $deliveryId,
+            'record_code' => $delivery['delivery_no'] ?? null,
+            'description' => 'Sales delivery reversed and stock increased.',
+            'old_values' => ['status' => 'posted'],
+            'new_values' => ['status' => 'reversed', 'reason' => $reason],
+        ]);
     }
 
     private function postCogsGl(array $header, int $deliveryId, float $cogsAmount, ?int $userId): ?int
@@ -213,6 +320,10 @@ class SalesDeliveryService
 
     private function refreshSoStatus(int $soId, ?int $userId = null): void
     {
+        if ($soId < 1) {
+            return;
+        }
+
         $lineModel = new SalesOrderLineModel();
         $lines = $lineModel->where('sales_order_id', $soId)->findAll();
         $totalOutstanding = 0.0;
