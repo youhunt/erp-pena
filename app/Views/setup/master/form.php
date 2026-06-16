@@ -2,9 +2,32 @@
 
 <?= $this->section('content') ?>
 <?php
+use App\Services\TenantContext;
+
 $isEdit = isset($row['id']);
 $action = $isEdit ? site_url("setup/{$resource}/{$row['id']}") : site_url("setup/{$resource}");
 $addressTemplates ??= [];
+
+$tenantContext = new TenantContext(session());
+$activeCompanyId = $tenantContext->activeCompanyId();
+$activeSiteId = $tenantContext->activeSiteId();
+$activeCompanyCode = '';
+$activeSiteCode = '';
+
+if ($activeCompanyId !== null && $activeCompanyId > 0) {
+    $companyRow = db_connect()->table('companies')->select('code')->where('id', $activeCompanyId)->get()->getRowArray();
+    $activeCompanyCode = (string) ($companyRow['code'] ?? '');
+}
+
+if ($activeSiteId !== null && $activeSiteId > 0) {
+    $siteRow = db_connect()->table('sites')->select('code')->where('id', $activeSiteId)->get()->getRowArray();
+    $activeSiteCode = (string) ($siteRow['code'] ?? '');
+}
+
+$tenantFieldDefaults = [
+    'company' => $activeCompanyCode,
+    'site' => $activeSiteCode,
+];
 
 $fieldGroups = [];
 if ($resource === 'customers') {
@@ -29,9 +52,15 @@ if ($resource === 'customers') {
     ];
 }
 
-$renderField = static function (string $name, array $field) use ($row, $addressTemplates): string {
+$renderField = static function (string $name, array $field) use ($row, $addressTemplates, $tenantFieldDefaults): string {
     $value = old($name, $row[$name] ?? ($field['default'] ?? ''));
     $type = $field['type'];
+
+    if (array_key_exists($name, $tenantFieldDefaults)) {
+        $tenantValue = (string) ($value !== '' ? $value : $tenantFieldDefaults[$name]);
+
+        return '<input type="hidden" id="' . esc($name, 'attr') . '" name="' . esc($name, 'attr') . '" value="' . esc($tenantValue, 'attr') . '">';
+    }
 
     ob_start();
     ?>
@@ -105,6 +134,16 @@ $renderField = static function (string $name, array $field) use ($row, $addressT
                         <i class="bx bx-arrow-back me-1"></i> Back
                     </a>
                 </div>
+
+                <?php if (isset($config['fields']['company']) || isset($config['fields']['site'])): ?>
+                    <div class="alert alert-info py-2">
+                        Company/Site mengikuti pilihan aktif di header:
+                        <strong><?= esc($activeCompanyCode ?: '-') ?></strong>
+                        <?php if ($activeSiteCode !== ''): ?>
+                            / <strong><?= esc($activeSiteCode) ?></strong>
+                        <?php endif ?>
+                    </div>
+                <?php endif ?>
 
                 <form action="<?= $action ?>" method="post">
                     <?= csrf_field() ?>
@@ -218,6 +257,16 @@ document.addEventListener('DOMContentLoaded', function () {
             select.appendChild(option);
         }
 
+        function refreshSelect2(element) {
+            if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
+                const $element = jQuery(element);
+                if (!$element.hasClass('select2-hidden-accessible') && window.PenaSelect) {
+                    window.PenaSelect.init(element.parentElement || document);
+                }
+                $element.trigger('change.select2');
+            }
+        }
+
         function loadOptions(keepCurrent) {
             const parentValue = parent.value || '';
             const currentValue = keepCurrent ? (select.dataset.currentValue || select.value || '') : '';
@@ -225,10 +274,12 @@ document.addEventListener('DOMContentLoaded', function () {
             if (parentValue === '') {
                 resetOptions('Select parent first');
                 select.dataset.currentValue = '';
+                refreshSelect2(select);
                 return;
             }
 
             resetOptions('Loading...');
+            refreshSelect2(select);
 
             fetch(url + '?' + new URLSearchParams({ [select.dataset.dependsOn]: parentValue }).toString(), {
                 headers: { 'Accept': 'application/json' }
@@ -248,9 +299,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     });
 
                     select.dataset.currentValue = '';
+                    refreshSelect2(select);
                 })
                 .catch(function () {
                     resetOptions('Unable to load options');
+                    refreshSelect2(select);
                 });
         }
 
@@ -259,6 +312,33 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         loadOptions(true);
+    });
+
+    const nameTargets = {
+        customer: 'customer_name',
+        supplier: 'supplier_name',
+        item_parent: 'item_parent_name',
+        free_item: 'free_item_name'
+    };
+
+    Object.keys(nameTargets).forEach(function (sourceId) {
+        const source = document.getElementById(sourceId);
+        const target = document.getElementById(nameTargets[sourceId]);
+        if (!source || !target) {
+            return;
+        }
+
+        function syncName() {
+            const option = source.options[source.selectedIndex];
+            const label = option ? option.textContent.trim() : '';
+            const parts = label.split(' - ');
+            if (parts.length > 1) {
+                target.value = parts.slice(1).join(' - ').trim();
+            }
+        }
+
+        source.addEventListener('change', syncName);
+        syncName();
     });
 });
 </script>
