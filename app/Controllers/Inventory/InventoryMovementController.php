@@ -231,38 +231,131 @@ class InventoryMovementController extends BaseController
     {
         $tenant = new TenantContext(session());
         $companyId = $tenant->activeCompanyId();
+        $siteId = $tenant->activeSiteId();
         if ($companyId === null || $companyId < 1) {
             return redirect()->back()->withInput()->with('error', 'Active company is required.');
         }
 
-        $countedQty = (float) $this->request->getPost('counted_qty');
+        $db = Database::connect();
+        $db->transBegin();
 
         try {
-            $payload = $this->movementPayload($companyId, $tenant, [
-                'qty' => 1,
+            $referenceNo = trim((string) ($this->request->getPost('reference_no') ?: 'OPN-' . date('Ymd-His')));
+            $movementDate = $this->movementDate();
+            $notes = trim((string) $this->request->getPost('notes'));
+            $base = [
+                'company_id' => $companyId,
+                'site_id' => $siteId,
                 'movement_type' => 'stock_opname',
                 'reference_type' => 'stock_opname',
-                'reference_no' => trim((string) ($this->request->getPost('reference_no') ?: 'OPN-' . date('Ymd-His'))),
-            ]);
-            $this->assertDocumentNoAvailable((int) $payload['company_id'], $payload['site_id'] ?? null, (string) $payload['reference_no']);
-            $systemQty = $this->currentStockQty($payload);
-            $variance = $countedQty - $systemQty;
-            if (abs($variance) < 0.0000001) {
-                return redirect()->back()->withInput()->with('error', 'No variance to post.');
+                'reference_no' => $referenceNo,
+                'movement_date' => $movementDate,
+                'notes' => $notes,
+            ];
+
+            $this->assertDocumentNoAvailable($companyId, $siteId, $referenceNo);
+            $lines = $this->stockOpnameLines($companyId, $base);
+            if ($lines === []) {
+                throw new RuntimeException('No variance to post.');
             }
 
-            $payload['qty'] = $variance;
-            $payload['notes'] = trim(($payload['notes'] ?? '') . ' System qty: ' . number_format($systemQty, 4, '.', '') . '; counted qty: ' . number_format($countedQty, 4, '.', ''));
-            $movementId = (new InventoryStockService())->adjust($payload, auth()->id());
-            $documentId = $this->createPostedDocument($payload + [
+            $directions = array_unique(array_column($lines, 'direction'));
+            $documentDirection = count($directions) === 1 ? (string) $directions[0] : 'mixed';
+
+            $documentModel = new InventoryMovementDocumentModel();
+            $documentModel->insert([
+                'company_id' => $companyId,
+                'site_id' => $siteId,
+                'document_no' => $referenceNo,
+                'document_date' => $movementDate,
                 'document_type' => 'stock_opname',
-                'direction' => $variance > 0 ? 'in' : 'out',
-                'movement_id' => $movementId,
-                'system_qty' => $systemQty,
-                'counted_qty' => $countedQty,
-            ], auth()->id());
-            (new InventoryStockMovementModel())->update($movementId, ['reference_id' => $documentId]);
-        } catch (RuntimeException $exception) {
+                'direction' => $documentDirection,
+                'status' => 'posted',
+                'total_qty' => 0,
+                'total_value' => 0,
+                'notes' => $notes,
+                'posted_at' => date('Y-m-d H:i:s'),
+                'posted_by' => auth()->id(),
+                'created_by' => auth()->id(),
+                'updated_by' => auth()->id(),
+            ]);
+            $documentId = (int) $documentModel->getInsertID();
+            if ($documentId < 1) {
+                throw new RuntimeException('Failed to create stock opname document.');
+            }
+
+            $stock = new InventoryStockService();
+            $movementModel = new InventoryStockMovementModel();
+            $lineModel = new InventoryMovementDocumentLineModel();
+            $totalQty = 0.0;
+            $totalValue = 0.0;
+            $firstWarehouseId = null;
+            $firstLocationId = null;
+
+            foreach ($lines as $index => $line) {
+                $payload = array_merge($base, $line, ['reference_id' => $documentId]);
+                $movementId = $stock->adjust($payload, auth()->id());
+                $movement = $movementModel->find($movementId);
+                if ($movement === null) {
+                    throw new RuntimeException('Stock movement was posted but cannot be found for opname line.');
+                }
+
+                $lineQty = (float) ($movement['qty'] ?? abs((float) $line['qty']));
+                $lineValue = (float) ($movement['stock_value'] ?? 0);
+                $totalQty += $lineQty;
+                $totalValue += $lineValue;
+                $firstWarehouseId ??= $line['warehouse_id'] ?? null;
+                $firstLocationId ??= $line['location_id'] ?? null;
+
+                $lineModel->insert([
+                    'document_id' => $documentId,
+                    'stock_movement_id' => $movementId,
+                    'line_no' => $index + 1,
+                    'item_id' => $line['item_id'] ?? null,
+                    'item_code' => $line['item_code'],
+                    'item_name' => $line['item_name'] ?? null,
+                    'batch_no' => trim((string) ($line['batch_no'] ?? '')),
+                    'uom_code' => $line['uom_code'] ?? 'PCS',
+                    'system_qty' => $line['system_qty'],
+                    'counted_qty' => $line['counted_qty'],
+                    'qty' => $lineQty,
+                    'unit_cost' => (float) ($movement['unit_cost'] ?? $line['unit_cost'] ?? 0),
+                    'stock_value' => $lineValue,
+                    'notes' => $line['notes'] ?? null,
+                ]);
+            }
+
+            $documentModel->update($documentId, [
+                'warehouse_id' => $firstWarehouseId,
+                'location_id' => $firstLocationId,
+                'total_qty' => $totalQty,
+                'total_value' => $totalValue,
+                'updated_by' => auth()->id(),
+            ]);
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to post stock opname document.');
+            }
+
+            $db->transCommit();
+
+            (new AuditLogService())->log('inventory.stock', 'stock_opname.post', [
+                'company_id' => $companyId,
+                'site_id' => $siteId,
+                'user_id' => auth()->id(),
+                'table_name' => 'inventory_movement_documents',
+                'record_id' => $documentId,
+                'record_code' => $referenceNo,
+                'description' => 'Multi-line stock opname document posted.',
+                'new_values' => [
+                    'direction' => $documentDirection,
+                    'line_count' => count($lines),
+                    'total_qty' => $totalQty,
+                    'total_value' => $totalValue,
+                ],
+            ]);
+        } catch (Throwable $exception) {
+            $db->transRollback();
             return redirect()->back()->withInput()->with('error', $exception->getMessage());
         }
 
@@ -425,6 +518,82 @@ class InventoryMovementController extends BaseController
             ->getRowArray() ?: null;
     }
 
+    private function stockOpnameLines(int $companyId, array $base): array
+    {
+        $itemCodes = (array) $this->request->getPost('line_item_code');
+        $itemNames = (array) $this->request->getPost('line_item_name');
+        $warehouseIds = (array) $this->request->getPost('line_warehouse_id');
+        $locationIds = (array) $this->request->getPost('line_location_id');
+        $batchNos = (array) $this->request->getPost('line_batch_no');
+        $uomCodes = (array) $this->request->getPost('line_uom_code');
+        $countedQtys = (array) $this->request->getPost('line_counted_qty');
+        $unitCosts = (array) $this->request->getPost('line_unit_cost');
+        $notes = (array) $this->request->getPost('line_notes');
+
+        $lines = [];
+        $max = max(count($itemCodes), count($countedQtys));
+
+        for ($index = 0; $index < $max; $index++) {
+            $itemCode = trim((string) ($itemCodes[$index] ?? ''));
+            if ($itemCode === '') {
+                continue;
+            }
+
+            $countedQty = (float) ($countedQtys[$index] ?? 0);
+            $item = $this->lookupInventoryItem($companyId, $itemCode);
+            $payload = [
+                'company_id' => $base['company_id'],
+                'site_id' => $base['site_id'] ?? null,
+                'warehouse_id' => $this->nullableInt($warehouseIds[$index] ?? null),
+                'location_id' => $this->nullableInt($locationIds[$index] ?? null),
+                'item_id' => isset($item['id']) ? (int) $item['id'] : null,
+                'item_code' => $itemCode,
+                'batch_no' => trim((string) ($batchNos[$index] ?? '')),
+            ];
+            $systemQty = $this->currentStockQty($payload);
+            $variance = round($countedQty - $systemQty, 12);
+
+            if (abs($variance) < 0.0000001) {
+                continue;
+            }
+
+            $uom = trim((string) ($uomCodes[$index] ?? ''));
+            if ($uom === '') {
+                $uom = (string) ($item['stockuom'] ?? 'PCS');
+            }
+
+            $unitCost = (float) ($unitCosts[$index] ?? 0);
+            if ($unitCost <= 0 && $item !== null) {
+                $unitCost = (float) ($item['item_price'] ?? $item['standard_cost'] ?? 0);
+            }
+
+            $name = trim((string) ($itemNames[$index] ?? ''));
+            if ($name === '') {
+                $name = (string) ($item['item_name'] ?? $item['name'] ?? $itemCode);
+            }
+
+            $lineNote = trim((string) ($notes[$index] ?? ''));
+            $combinedNote = trim((string) ($base['notes'] ?? ''));
+            if ($lineNote !== '') {
+                $combinedNote = trim($combinedNote . ' ' . $lineNote);
+            }
+            $combinedNote = trim($combinedNote . ' System qty: ' . number_format($systemQty, 4, '.', '') . '; counted qty: ' . number_format($countedQty, 4, '.', ''));
+
+            $lines[] = $payload + [
+                'item_name' => $name,
+                'uom_code' => $uom,
+                'qty' => $variance,
+                'unit_cost' => $unitCost,
+                'system_qty' => $systemQty,
+                'counted_qty' => $countedQty,
+                'direction' => $variance > 0 ? 'in' : 'out',
+                'notes' => $combinedNote,
+            ];
+        }
+
+        return $lines;
+    }
+
     private function movementDate(): string
     {
         $date = trim((string) $this->request->getPost('movement_date'));
@@ -481,6 +650,7 @@ class InventoryMovementController extends BaseController
         $db = Database::connect();
         $builder = $db->table('inventory_stock_balances b')
             ->select('b.*, w.code warehouse_code, l.code location_code')
+            ->select('(SELECT i.item_name FROM items i WHERE i.company_id = b.company_id AND i.item_code = b.item_code LIMIT 1) item_name', false)
             ->join('warehouses w', 'w.id = b.warehouse_id', 'left')
             ->join('locations l', 'l.id = b.location_id', 'left')
             ->where('b.qty_on_hand !=', 0);
@@ -514,79 +684,6 @@ class InventoryMovementController extends BaseController
         }
 
         return (float) ($builder->get()->getRowArray()['qty_on_hand'] ?? 0);
-    }
-
-    private function createPostedDocument(array $payload, ?int $userId): int
-    {
-        $movement = (new InventoryStockMovementModel())->find((int) $payload['movement_id']);
-        if ($movement === null) {
-            throw new RuntimeException('Stock movement was posted but cannot be found for document snapshot.');
-        }
-
-        $now = date('Y-m-d H:i:s');
-        $qty = (float) ($movement['qty'] ?? abs((float) $payload['qty']));
-        $stockValue = (float) ($movement['stock_value'] ?? 0);
-        $documentNo = trim((string) ($payload['reference_no'] ?? 'INV-' . date('Ymd-His')));
-
-        $documentModel = new InventoryMovementDocumentModel();
-
-        $documentModel->insert([
-            'company_id' => (int) $payload['company_id'],
-            'site_id' => ! empty($payload['site_id']) ? (int) $payload['site_id'] : null,
-            'document_no' => $documentNo,
-            'document_date' => (string) ($payload['movement_date'] ?? $now),
-            'document_type' => (string) ($payload['document_type'] ?? 'inventory_in_out'),
-            'direction' => $payload['direction'] ?? null,
-            'status' => 'posted',
-            'warehouse_id' => $payload['warehouse_id'] ?? null,
-            'location_id' => $payload['location_id'] ?? null,
-            'total_qty' => $qty,
-            'total_value' => $stockValue,
-            'notes' => $payload['notes'] ?? null,
-            'posted_at' => $now,
-            'posted_by' => $userId,
-            'created_by' => $userId,
-            'updated_by' => $userId,
-        ]);
-        $documentId = (int) $documentModel->getInsertID();
-        if ($documentId < 1) {
-            throw new RuntimeException('Failed to create inventory movement document.');
-        }
-
-        (new InventoryMovementDocumentLineModel())->insert([
-            'document_id' => $documentId,
-            'stock_movement_id' => (int) $payload['movement_id'],
-            'line_no' => 1,
-            'item_id' => $payload['item_id'] ?? null,
-            'item_code' => (string) $payload['item_code'],
-            'item_name' => $payload['item_name'] ?? null,
-            'batch_no' => trim((string) ($payload['batch_no'] ?? '')),
-            'uom_code' => $payload['uom_code'] ?? 'PCS',
-            'system_qty' => $payload['system_qty'] ?? null,
-            'counted_qty' => $payload['counted_qty'] ?? null,
-            'qty' => $qty,
-            'unit_cost' => (float) ($movement['unit_cost'] ?? $payload['unit_cost'] ?? 0),
-            'stock_value' => $stockValue,
-            'notes' => $payload['notes'] ?? null,
-        ]);
-
-        (new AuditLogService())->log('inventory.stock', 'movement_document.post', [
-            'company_id' => $payload['company_id'] ?? null,
-            'site_id' => $payload['site_id'] ?? null,
-            'user_id' => $userId,
-            'table_name' => 'inventory_movement_documents',
-            'record_id' => $documentId,
-            'record_code' => $documentNo,
-            'description' => 'Inventory movement document snapshot created.',
-            'new_values' => [
-                'document_type' => $payload['document_type'] ?? 'inventory_in_out',
-                'movement_id' => $payload['movement_id'],
-                'qty' => $qty,
-                'stock_value' => $stockValue,
-            ],
-        ]);
-
-        return $documentId;
     }
 
     private function assertDocumentNoAvailable(int $companyId, ?int $siteId, string $documentNo): void

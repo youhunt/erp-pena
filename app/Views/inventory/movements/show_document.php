@@ -31,6 +31,7 @@
                         <th>#</th>
                         <th>Item</th>
                         <th>Batch</th>
+                        <th>Dir</th>
                         <th class="text-end">System Qty</th>
                         <th class="text-end">Counted Qty</th>
                         <th class="text-end">Posted Qty</th>
@@ -46,6 +47,7 @@
                         <td><?= esc($line['line_no']) ?></td>
                         <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
                         <td><?= esc(($line['batch_no'] ?? '') !== '' ? $line['batch_no'] : '-') ?></td>
+                        <td><span class="badge bg-<?= ($line['movement_direction'] ?? '') === 'in' ? 'success' : 'danger' ?>"><?= esc($line['movement_direction'] ?? '-') ?></span></td>
                         <td class="text-end"><?= $line['system_qty'] === null ? '-' : esc(number_format((float) $line['system_qty'], 4)) ?></td>
                         <td class="text-end"><?= $line['counted_qty'] === null ? '-' : esc(number_format((float) $line['counted_qty'], 4)) ?></td>
                         <td class="text-end"><?= esc(number_format((float) ($line['qty'] ?? 0), 4)) ?></td>
@@ -57,7 +59,7 @@
                 <?php endforeach ?>
 
                 <?php if ($lines === []): ?>
-                    <tr><td colspan="10" class="text-center text-muted py-4">No line found.</td></tr>
+                    <tr><td colspan="11" class="text-center text-muted py-4">No line found.</td></tr>
                 <?php endif ?>
                 </tbody>
             </table>
