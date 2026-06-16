@@ -106,6 +106,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('sales-invoices/(:num)/receipt', 'AccountsReceivable\ReceiptController::storeFromInvoice/$1');
         $routes->get('receipts', 'AccountsReceivable\ReceiptController::index');
         $routes->get('receipts/(:num)', 'AccountsReceivable\ReceiptController::show/$1');
+        $routes->post('receipts/(:num)/cancel', 'AccountsReceivable\ReceiptController::cancel/$1');
         $routes->get('aging', 'Finance\AgingController::ar');
     });
 
@@ -145,6 +146,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('purchase-invoices/(:num)/payment', 'AccountsPayable\PaymentController::storeFromInvoice/$1');
         $routes->get('payments', 'AccountsPayable\PaymentController::index');
         $routes->get('payments/(:num)', 'AccountsPayable\PaymentController::show/$1');
+        $routes->post('payments/(:num)/cancel', 'AccountsPayable\PaymentController::cancel/$1');
         $routes->get('aging', 'Finance\AgingController::ap');
     });
 

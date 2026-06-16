@@ -94,6 +94,30 @@ class ReceiptController extends BaseController
         ]);
     }
 
+    public function cancel(int $id)
+    {
+        $tenant = new TenantContext(session());
+        $model = new ArReceiptModel();
+        $this->scope($model, $tenant);
+        if ($model->find($id) === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        if (! $this->validate([
+            'cancel_reason' => 'permit_empty|max_length[500]',
+        ])) {
+            return redirect()->back()->with('error', implode(' ', $this->validator->getErrors()));
+        }
+
+        try {
+            (new SettlementService())->cancelArReceipt($id, auth()->id(), trim((string) $this->request->getPost('cancel_reason')) ?: null);
+        } catch (RuntimeException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->to('/ar/receipts/' . $id)->with('message', 'A/R receipt cancelled.');
+    }
+
     private function receivableFromInvoice(TenantContext $tenant, int $invoiceId): ?array
     {
         $model = new ArReceivableModel();

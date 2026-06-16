@@ -94,6 +94,30 @@ class PaymentController extends BaseController
         ]);
     }
 
+    public function cancel(int $id)
+    {
+        $tenant = new TenantContext(session());
+        $model = new ApPaymentModel();
+        $this->scope($model, $tenant);
+        if ($model->find($id) === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        if (! $this->validate([
+            'cancel_reason' => 'permit_empty|max_length[500]',
+        ])) {
+            return redirect()->back()->with('error', implode(' ', $this->validator->getErrors()));
+        }
+
+        try {
+            (new SettlementService())->cancelApPayment($id, auth()->id(), trim((string) $this->request->getPost('cancel_reason')) ?: null);
+        } catch (RuntimeException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->to('/ap/payments/' . $id)->with('message', 'A/P payment cancelled.');
+    }
+
     private function payableFromInvoice(TenantContext $tenant, int $invoiceId): ?array
     {
         $model = new ApPayableModel();

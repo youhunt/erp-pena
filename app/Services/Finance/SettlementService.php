@@ -55,6 +55,7 @@ class SettlementService
                 'supplier_name' => $payable['supplier_name'] ?? null,
                 'currency_code' => $payable['currency_code'] ?? 'IDR',
                 'payment_amount' => $amount,
+                'status' => 'posted',
                 'posted_at' => date('Y-m-d H:i:s'),
                 'posted_by' => $userId,
                 'created_by' => $userId,
@@ -161,6 +162,7 @@ class SettlementService
                 'customer_name' => $receivable['customer_name'] ?? null,
                 'currency_code' => $receivable['currency_code'] ?? 'IDR',
                 'receipt_amount' => $amount,
+                'status' => 'posted',
                 'posted_at' => date('Y-m-d H:i:s'),
                 'posted_by' => $userId,
                 'created_by' => $userId,
@@ -229,6 +231,164 @@ class SettlementService
         }
     }
 
+    public function cancelApPayment(int $paymentId, ?int $userId = null, ?string $reason = null): void
+    {
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            $paymentModel = new ApPaymentModel();
+            $payableModel = new ApPayableModel();
+            $invoiceModel = new PurchaseInvoiceModel();
+            $payment = $paymentModel->find($paymentId);
+            if ($payment === null) {
+                throw new RuntimeException('A/P payment not found.');
+            }
+            if ((string) ($payment['status'] ?? 'posted') === 'cancelled') {
+                throw new RuntimeException('A/P payment has already been cancelled.');
+            }
+
+            $cashBankEntry = ! empty($payment['cash_bank_entry_id'])
+                ? (new CashBankEntryModel())->find((int) $payment['cash_bank_entry_id'])
+                : null;
+            if ($cashBankEntry !== null && (! empty($cashBankEntry['reconciled_at']) || ! empty($cashBankEntry['bank_reconciliation_id']))) {
+                throw new RuntimeException('A/P payment cash/bank entry has been reconciled.');
+            }
+
+            (new PeriodCloseService())->assertOpen('ap', (int) $payment['company_id'], date('Y-m-d'), ! empty($payment['site_id']) ? (int) $payment['site_id'] : null);
+
+            $amount = round((float) ($payment['payment_amount'] ?? 0), 6);
+            $reversalCashBankEntryId = (new CashBankService())->post([
+                'company_id' => $payment['company_id'],
+                'site_id' => $payment['site_id'] ?? null,
+                'entry_no' => $this->cancellationEntryNo('CB-CNL-AP-', (string) ($payment['payment_no'] ?? 'APPAY'), $paymentId),
+                'entry_date' => date('Y-m-d'),
+                'entry_type' => $this->cashBankEntryType((int) $payment['company_id'], (string) $payment['cash_bank_code'], 'in'),
+                'cash_bank_code' => $payment['cash_bank_code'],
+                'currency_code' => $payment['currency_code'] ?? 'IDR',
+                'amount' => $amount,
+                'counter_account_no' => (new PostingProfileService())->account((int) $payment['company_id'], 'ap', 'payable', '2100'),
+                'reference_no' => $payment['payment_no'] ?? null,
+                'description' => 'Cancel A/P payment ' . ($payment['payment_no'] ?? ''),
+            ], $userId);
+            $reversalCashBankEntry = (new CashBankEntryModel())->find($reversalCashBankEntryId);
+
+            $paymentModel->update($paymentId, [
+                'status' => 'cancelled',
+                'cancelled_at' => date('Y-m-d H:i:s'),
+                'cancelled_by' => $userId,
+                'cancel_reason' => $reason,
+                'reversal_cash_bank_entry_id' => $reversalCashBankEntryId,
+                'reversal_gl_entry_id' => $reversalCashBankEntry['gl_entry_id'] ?? null,
+                'updated_by' => $userId,
+            ]);
+
+            $payable = $payableModel->find((int) ($payment['ap_payable_id'] ?? 0));
+            if ($payable !== null) {
+                $this->reopenPayable($payableModel, $invoiceModel, $payable, $amount, $userId);
+            }
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to cancel A/P payment.');
+            }
+            $db->transCommit();
+        } catch (Throwable $e) {
+            $db->transRollback();
+            throw new RuntimeException($e->getMessage());
+        }
+
+        (new AuditLogService())->log('finance.ap', 'ap_payment.cancel', [
+            'company_id' => $payment['company_id'] ?? null,
+            'site_id' => $payment['site_id'] ?? null,
+            'user_id' => $userId,
+            'table_name' => 'ap_payments',
+            'record_id' => $paymentId,
+            'record_code' => $payment['payment_no'] ?? null,
+            'description' => 'A/P payment cancelled and cash/bank reversal posted.',
+            'old_values' => ['status' => $payment['status'] ?? 'posted'],
+            'new_values' => ['status' => 'cancelled', 'reason' => $reason, 'reversal_cash_bank_entry_id' => $reversalCashBankEntryId],
+        ]);
+    }
+
+    public function cancelArReceipt(int $receiptId, ?int $userId = null, ?string $reason = null): void
+    {
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            $receiptModel = new ArReceiptModel();
+            $receivableModel = new ArReceivableModel();
+            $invoiceModel = new SalesInvoiceModel();
+            $receipt = $receiptModel->find($receiptId);
+            if ($receipt === null) {
+                throw new RuntimeException('A/R receipt not found.');
+            }
+            if ((string) ($receipt['status'] ?? 'posted') === 'cancelled') {
+                throw new RuntimeException('A/R receipt has already been cancelled.');
+            }
+
+            $cashBankEntry = ! empty($receipt['cash_bank_entry_id'])
+                ? (new CashBankEntryModel())->find((int) $receipt['cash_bank_entry_id'])
+                : null;
+            if ($cashBankEntry !== null && (! empty($cashBankEntry['reconciled_at']) || ! empty($cashBankEntry['bank_reconciliation_id']))) {
+                throw new RuntimeException('A/R receipt cash/bank entry has been reconciled.');
+            }
+
+            (new PeriodCloseService())->assertOpen('ar', (int) $receipt['company_id'], date('Y-m-d'), ! empty($receipt['site_id']) ? (int) $receipt['site_id'] : null);
+
+            $amount = round((float) ($receipt['receipt_amount'] ?? 0), 6);
+            $reversalCashBankEntryId = (new CashBankService())->post([
+                'company_id' => $receipt['company_id'],
+                'site_id' => $receipt['site_id'] ?? null,
+                'entry_no' => $this->cancellationEntryNo('CB-CNL-AR-', (string) ($receipt['receipt_no'] ?? 'ARREC'), $receiptId),
+                'entry_date' => date('Y-m-d'),
+                'entry_type' => $this->cashBankEntryType((int) $receipt['company_id'], (string) $receipt['cash_bank_code'], 'out'),
+                'cash_bank_code' => $receipt['cash_bank_code'],
+                'currency_code' => $receipt['currency_code'] ?? 'IDR',
+                'amount' => $amount,
+                'counter_account_no' => (new PostingProfileService())->account((int) $receipt['company_id'], 'ar', 'receivable', '1200'),
+                'reference_no' => $receipt['receipt_no'] ?? null,
+                'description' => 'Cancel A/R receipt ' . ($receipt['receipt_no'] ?? ''),
+            ], $userId);
+            $reversalCashBankEntry = (new CashBankEntryModel())->find($reversalCashBankEntryId);
+
+            $receiptModel->update($receiptId, [
+                'status' => 'cancelled',
+                'cancelled_at' => date('Y-m-d H:i:s'),
+                'cancelled_by' => $userId,
+                'cancel_reason' => $reason,
+                'reversal_cash_bank_entry_id' => $reversalCashBankEntryId,
+                'reversal_gl_entry_id' => $reversalCashBankEntry['gl_entry_id'] ?? null,
+                'updated_by' => $userId,
+            ]);
+
+            $receivable = $receivableModel->find((int) ($receipt['ar_receivable_id'] ?? 0));
+            if ($receivable !== null) {
+                $this->reopenReceivable($receivableModel, $invoiceModel, $receivable, $amount, $userId);
+            }
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to cancel A/R receipt.');
+            }
+            $db->transCommit();
+        } catch (Throwable $e) {
+            $db->transRollback();
+            throw new RuntimeException($e->getMessage());
+        }
+
+        (new AuditLogService())->log('finance.ar', 'ar_receipt.cancel', [
+            'company_id' => $receipt['company_id'] ?? null,
+            'site_id' => $receipt['site_id'] ?? null,
+            'user_id' => $userId,
+            'table_name' => 'ar_receipts',
+            'record_id' => $receiptId,
+            'record_code' => $receipt['receipt_no'] ?? null,
+            'description' => 'A/R receipt cancelled and cash/bank reversal posted.',
+            'old_values' => ['status' => $receipt['status'] ?? 'posted'],
+            'new_values' => ['status' => 'cancelled', 'reason' => $reason, 'reversal_cash_bank_entry_id' => $reversalCashBankEntryId],
+        ]);
+    }
+
     private function cashBankEntryType(int $companyId, string $cashBankCode, string $direction): string
     {
         $account = (new CashBankAccountModel())
@@ -244,5 +404,54 @@ class SettlementService
         $accountType = (string) ($account['account_type'] ?? 'bank');
 
         return ($accountType === 'cash' ? 'cash' : 'bank') . '_' . $direction;
+    }
+
+    private function cancellationEntryNo(string $prefix, string $documentNo, int $id): string
+    {
+        $cleanDocumentNo = trim((string) preg_replace('/[^A-Za-z0-9-]+/', '-', $documentNo), '-');
+        $suffix = '-' . $id;
+        $maxDocumentLength = max(1, 60 - strlen($prefix) - strlen($suffix));
+
+        return $prefix . substr($cleanDocumentNo !== '' ? $cleanDocumentNo : 'DOC', 0, $maxDocumentLength) . $suffix;
+    }
+
+    private function reopenPayable(ApPayableModel $payableModel, PurchaseInvoiceModel $invoiceModel, array $payable, float $amount, ?int $userId): void
+    {
+        $invoiceAmount = round((float) ($payable['invoice_amount'] ?? 0), 6);
+        $newPaid = round(max(0, (float) ($payable['paid_amount'] ?? 0) - $amount), 6);
+        $newOutstanding = round(max(0, $invoiceAmount - $newPaid), 6);
+        $newStatus = $newOutstanding <= 0 ? 'paid' : ($newPaid > 0 ? 'partial' : 'open');
+
+        $payableModel->update((int) $payable['id'], [
+            'paid_amount' => $newPaid,
+            'outstanding_amount' => $newOutstanding,
+            'status' => $newStatus,
+        ]);
+        $invoiceModel->update((int) $payable['purchase_invoice_id'], [
+            'paid_amount' => $newPaid,
+            'outstanding_amount' => $newOutstanding,
+            'status' => $newStatus,
+            'updated_by' => $userId,
+        ]);
+    }
+
+    private function reopenReceivable(ArReceivableModel $receivableModel, SalesInvoiceModel $invoiceModel, array $receivable, float $amount, ?int $userId): void
+    {
+        $invoiceAmount = round((float) ($receivable['invoice_amount'] ?? 0), 6);
+        $newPaid = round(max(0, (float) ($receivable['paid_amount'] ?? 0) - $amount), 6);
+        $newOutstanding = round(max(0, $invoiceAmount - $newPaid), 6);
+        $newStatus = $newOutstanding <= 0 ? 'paid' : ($newPaid > 0 ? 'partial' : 'open');
+
+        $receivableModel->update((int) $receivable['id'], [
+            'paid_amount' => $newPaid,
+            'outstanding_amount' => $newOutstanding,
+            'status' => $newStatus,
+        ]);
+        $invoiceModel->update((int) $receivable['sales_invoice_id'], [
+            'paid_amount' => $newPaid,
+            'outstanding_amount' => $newOutstanding,
+            'status' => $newStatus,
+            'updated_by' => $userId,
+        ]);
     }
 }
