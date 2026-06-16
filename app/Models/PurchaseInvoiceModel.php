@@ -17,6 +17,7 @@ class PurchaseInvoiceModel extends Model
         'supplier_id', 'supplier_code', 'supplier_name', 'currency_code', 'status',
         'source_type', 'gl_entry_id', 'subtotal_amount', 'discount_amount', 'tax_amount', 'total_amount',
         'paid_amount', 'outstanding_amount', 'notes', 'posted_at', 'posted_by',
+        'cancelled_at', 'cancelled_by', 'cancel_reason', 'reversal_gl_entry_id',
         'created_by', 'updated_by',
     ];
 }

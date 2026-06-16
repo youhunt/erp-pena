@@ -3,6 +3,8 @@
 namespace App\Services\Sales;
 
 use App\Models\ArReceivableModel;
+use App\Models\ArReceiptModel;
+use App\Models\GlEntryLineModel;
 use App\Models\SalesDeliveryLineModel;
 use App\Models\SalesDeliveryModel;
 use App\Models\SalesInvoiceLineModel;
@@ -144,6 +146,7 @@ class SalesInvoiceService
         $invoiceModel = new SalesInvoiceModel();
         $existing = $invoiceModel
             ->where('sales_delivery_id', (int) $header['sales_delivery_id'])
+            ->where('status !=', 'cancelled')
             ->where('deleted_at', null)
             ->first();
         if ($existing !== null) {
@@ -297,6 +300,118 @@ class SalesInvoiceService
         }
     }
 
+    public function cancel(int $invoiceId, ?int $userId = null, ?string $reason = null): void
+    {
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            $invoiceModel = new SalesInvoiceModel();
+            $receivableModel = new ArReceivableModel();
+            $invoice = $invoiceModel->find($invoiceId);
+            if ($invoice === null) {
+                throw new RuntimeException('Sales invoice not found.');
+            }
+            if ((string) ($invoice['status'] ?? '') === 'cancelled') {
+                throw new RuntimeException('Sales invoice has already been cancelled.');
+            }
+            if ((string) ($invoice['status'] ?? '') !== 'open') {
+                throw new RuntimeException('Only open sales invoice can be cancelled.');
+            }
+            if ((float) ($invoice['paid_amount'] ?? 0) > 0 || (new ArReceiptModel())->where('sales_invoice_id', $invoiceId)->first() !== null) {
+                throw new RuntimeException('Sales invoice already has receipt. Reverse or cancel receipt first.');
+            }
+
+            (new PeriodCloseService())->assertOpen('ar', (int) $invoice['company_id'], (string) ($invoice['invoice_date'] ?? date('Y-m-d')), ! empty($invoice['site_id']) ? (int) $invoice['site_id'] : null);
+
+            $reversalGlEntryId = $this->postGlReversal($invoice, $userId);
+            $now = date('Y-m-d H:i:s');
+            $invoiceModel->update($invoiceId, [
+                'status' => 'cancelled',
+                'outstanding_amount' => 0,
+                'cancelled_at' => $now,
+                'cancelled_by' => $userId,
+                'cancel_reason' => $reason,
+                'reversal_gl_entry_id' => $reversalGlEntryId,
+                'updated_by' => $userId,
+            ]);
+
+            $receivable = $receivableModel->where('sales_invoice_id', $invoiceId)->first();
+            if ($receivable !== null) {
+                $receivableModel->update((int) $receivable['id'], [
+                    'outstanding_amount' => 0,
+                    'status' => 'cancelled',
+                ]);
+            }
+
+            if (! empty($invoice['sales_delivery_id'])) {
+                (new SalesDeliveryModel())->update((int) $invoice['sales_delivery_id'], [
+                    'status' => 'posted',
+                    'updated_by' => $userId,
+                ]);
+                $this->refreshSoStatusAfterCancel((int) ($invoice['sales_order_id'] ?? 0), $userId);
+            }
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to cancel sales invoice.');
+            }
+            $db->transCommit();
+        } catch (Throwable $e) {
+            $db->transRollback();
+            throw new RuntimeException($e->getMessage());
+        }
+
+        (new AuditLogService())->log('finance.ar', 'sales_invoice.cancel', [
+            'company_id' => $invoice['company_id'] ?? null,
+            'site_id' => $invoice['site_id'] ?? null,
+            'user_id' => $userId,
+            'table_name' => 'sales_invoices',
+            'record_id' => $invoiceId,
+            'record_code' => $invoice['invoice_no'] ?? null,
+            'description' => 'Sales invoice cancelled and reversal GL posted.',
+            'old_values' => ['status' => $invoice['status'] ?? null],
+            'new_values' => ['status' => 'cancelled', 'reason' => $reason, 'reversal_gl_entry_id' => $reversalGlEntryId],
+        ]);
+    }
+
+    private function postGlReversal(array $invoice, ?int $userId): ?int
+    {
+        if (empty($invoice['gl_entry_id'])) {
+            return null;
+        }
+
+        $glLines = (new GlEntryLineModel())
+            ->where('gl_entry_id', (int) $invoice['gl_entry_id'])
+            ->orderBy('line_no', 'ASC')
+            ->findAll();
+        if ($glLines === []) {
+            return null;
+        }
+
+        $lines = [];
+        foreach ($glLines as $line) {
+            $lines[] = [
+                'account_no' => $line['account_no'],
+                'description' => 'Cancel ' . ($invoice['invoice_no'] ?? '') . ' - ' . ($line['description'] ?? ''),
+                'debit' => (float) ($line['credit'] ?? 0),
+                'credit' => (float) ($line['debit'] ?? 0),
+            ];
+        }
+
+        return (new GeneralLedgerService())->post([
+            'company_id' => (int) $invoice['company_id'],
+            'site_id' => $invoice['site_id'] ?? null,
+            'journal_no' => 'GL-CNL-' . ($invoice['invoice_no'] ?? $invoice['id']),
+            'journal_date' => $invoice['invoice_date'] ?? date('Y-m-d'),
+            'source_module' => 'ar',
+            'source_type' => 'sales_invoice_cancel',
+            'source_id' => $invoice['id'],
+            'source_no' => $invoice['invoice_no'] ?? null,
+            'description' => 'Cancel sales invoice ' . ($invoice['invoice_no'] ?? ''),
+            'currency_code' => $invoice['currency_code'] ?? 'IDR',
+        ], $lines, $userId);
+    }
+
     private function normalizeManualLines(array $rawLines): array
     {
         $lines = [];
@@ -409,5 +524,31 @@ class SalesInvoiceService
                 'updated_by' => $userId,
             ]);
         }
+    }
+
+    private function refreshSoStatusAfterCancel(int $soId, ?int $userId = null): void
+    {
+        if ($soId <= 0) {
+            return;
+        }
+
+        $lines = (new SalesOrderLineModel())->where('sales_order_id', $soId)->findAll();
+        if ($lines === []) {
+            return;
+        }
+
+        $totalOutstanding = 0.0;
+        $totalDelivered = 0.0;
+        foreach ($lines as $line) {
+            $totalOutstanding += (float) ($line['qty_outstanding'] ?? 0);
+            $totalDelivered += (float) ($line['qty_delivered'] ?? 0);
+        }
+
+        $status = $totalOutstanding <= 0 ? 'delivered' : ($totalDelivered > 0 ? 'partial_delivered' : 'approved');
+        (new SalesOrderModel())->update($soId, [
+            'status' => $status,
+            'document_status' => $status,
+            'updated_by' => $userId,
+        ]);
     }
 }

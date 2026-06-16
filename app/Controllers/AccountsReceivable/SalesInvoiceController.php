@@ -46,7 +46,7 @@ class SalesInvoiceController extends BaseController
             'title' => 'Sales Invoices',
             'invoices' => $model->orderBy('invoice_date', 'DESC')->orderBy('id', 'DESC')->findAll(100),
             'filters' => ['status' => $status, 'q' => $search],
-            'statusOptions' => ['open', 'partial', 'paid'],
+            'statusOptions' => ['open', 'partial', 'paid', 'cancelled'],
         ]);
     }
 
@@ -179,6 +179,35 @@ class SalesInvoiceController extends BaseController
             'lines' => (new SalesInvoiceLineModel())->where('sales_invoice_id', $id)->orderBy('line_no', 'ASC')->findAll(),
             'receivable' => (new ArReceivableModel())->where('sales_invoice_id', $id)->first(),
         ]);
+    }
+
+    public function cancel(int $id)
+    {
+        $tenant = new TenantContext(session());
+        $model = new SalesInvoiceModel();
+        if ($tenant->activeCompanyId() !== null) {
+            $model->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $model->where('site_id', $tenant->activeSiteId());
+        }
+        if ($model->find($id) === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        if (! $this->validate([
+            'cancel_reason' => 'permit_empty|max_length[500]',
+        ])) {
+            return redirect()->back()->with('error', implode(' ', $this->validator->getErrors()));
+        }
+
+        try {
+            (new SalesInvoiceService())->cancel($id, auth()->id(), trim((string) $this->request->getPost('cancel_reason')) ?: null);
+        } catch (RuntimeException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->to('/ar/sales-invoices/' . $id)->with('message', 'Sales invoice cancelled.');
     }
 
     private function scopedDelivery(TenantContext $tenant, int $deliveryId): ?array

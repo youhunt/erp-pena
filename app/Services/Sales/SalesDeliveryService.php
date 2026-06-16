@@ -200,6 +200,7 @@ class SalesDeliveryService
             }
             $invoice = (new SalesInvoiceModel())
                 ->where('sales_delivery_id', $deliveryId)
+                ->where('status !=', 'cancelled')
                 ->first();
             if ($invoice !== null) {
                 throw new RuntimeException('Sales delivery already has sales invoice ' . ($invoice['invoice_no'] ?? '#' . $invoice['id']) . '. Reverse or cancel the invoice first.');

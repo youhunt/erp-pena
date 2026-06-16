@@ -101,6 +101,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('manual-invoices', 'AccountsReceivable\SalesInvoiceController::storeManual');
         $routes->get('sales-invoices', 'AccountsReceivable\SalesInvoiceController::index');
         $routes->get('sales-invoices/(:num)', 'AccountsReceivable\SalesInvoiceController::show/$1');
+        $routes->post('sales-invoices/(:num)/cancel', 'AccountsReceivable\SalesInvoiceController::cancel/$1');
         $routes->get('sales-invoices/(:num)/receipt', 'AccountsReceivable\ReceiptController::createFromInvoice/$1');
         $routes->post('sales-invoices/(:num)/receipt', 'AccountsReceivable\ReceiptController::storeFromInvoice/$1');
         $routes->get('receipts', 'AccountsReceivable\ReceiptController::index');
@@ -139,6 +140,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('manual-invoices', 'AccountsPayable\PurchaseInvoiceController::storeManual');
         $routes->get('purchase-invoices', 'AccountsPayable\PurchaseInvoiceController::index');
         $routes->get('purchase-invoices/(:num)', 'AccountsPayable\PurchaseInvoiceController::show/$1');
+        $routes->post('purchase-invoices/(:num)/cancel', 'AccountsPayable\PurchaseInvoiceController::cancel/$1');
         $routes->get('purchase-invoices/(:num)/payment', 'AccountsPayable\PaymentController::createFromInvoice/$1');
         $routes->post('purchase-invoices/(:num)/payment', 'AccountsPayable\PaymentController::storeFromInvoice/$1');
         $routes->get('payments', 'AccountsPayable\PaymentController::index');

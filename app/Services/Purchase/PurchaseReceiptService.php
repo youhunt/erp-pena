@@ -183,6 +183,7 @@ class PurchaseReceiptService
             }
             $invoice = (new PurchaseInvoiceModel())
                 ->where('purchase_receipt_id', $receiptId)
+                ->where('status !=', 'cancelled')
                 ->first();
             if ($invoice !== null) {
                 throw new RuntimeException('Purchase receipt already has purchase invoice ' . ($invoice['invoice_no'] ?? '#' . $invoice['id']) . '. Reverse or cancel the invoice first.');

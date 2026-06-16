@@ -1,6 +1,18 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php
+$status = (string) ($invoice['status'] ?? 'open');
+$statusClass = match ($status) {
+    'open' => 'bg-success',
+    'partial' => 'bg-info',
+    'paid' => 'bg-primary',
+    'cancelled' => 'bg-danger',
+    default => 'bg-secondary',
+};
+$outstandingAmount = (float) ($receivable['outstanding_amount'] ?? $invoice['outstanding_amount'] ?? 0);
+$paidAmount = (float) ($receivable['paid_amount'] ?? $invoice['paid_amount'] ?? 0);
+?>
 <div class="row">
     <div class="col-xl-4">
         <div class="card">
@@ -10,7 +22,7 @@
                         <h4 class="card-title mb-1">Sales Invoice</h4>
                         <p class="text-muted mb-0"><?= esc($invoice['invoice_no']) ?></p>
                     </div>
-                    <span class="badge bg-warning"><?= esc($invoice['status']) ?></span>
+                    <span class="badge <?= esc($statusClass) ?>"><?= esc($status) ?></span>
                 </div>
                 <table class="table table-sm mb-0">
                     <tbody>
@@ -21,14 +33,26 @@
                         <tr><th>SO No</th><td><?= ! empty($invoice['sales_order_id']) ? '<a href="' . site_url('sales/orders/' . $invoice['sales_order_id']) . '">' . esc($invoice['so_no'] ?? '-') . '</a>' : '-' ?></td></tr>
                         <tr><th>DO No</th><td><?= ! empty($invoice['sales_delivery_id']) ? '<a href="' . site_url('sales/deliveries/' . $invoice['sales_delivery_id']) . '">' . esc($invoice['delivery_no'] ?? '-') . '</a>' : '-' ?></td></tr>
                         <tr><th>GL Entry</th><td><?= ! empty($invoice['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $invoice['gl_entry_id']) . '">#' . esc($invoice['gl_entry_id']) . '</a>' : '-' ?></td></tr>
+                        <tr><th>Reversal GL</th><td><?= ! empty($invoice['reversal_gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $invoice['reversal_gl_entry_id']) . '">#' . esc($invoice['reversal_gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Customer</th><td><?= esc(($invoice['customer_code'] ?? '-') . ' ' . ($invoice['customer_name'] ?? '')) ?></td></tr>
-                        <tr><th>Outstanding</th><td class="fw-semibold"><?= esc(number_format((float) ($receivable['outstanding_amount'] ?? $invoice['outstanding_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr><th>Outstanding</th><td class="fw-semibold"><?= esc(number_format($outstandingAmount, 2)) ?></td></tr>
+                        <?php if ($status === 'cancelled'): ?>
+                            <tr><th>Cancelled</th><td><?= esc($invoice['cancelled_at'] ?? '-') ?></td></tr>
+                            <tr><th>Reason</th><td><?= esc($invoice['cancel_reason'] ?? '-') ?></td></tr>
+                        <?php endif ?>
                     </tbody>
                 </table>
                 <div class="mt-3 d-flex flex-wrap gap-2">
                     <a href="<?= site_url('ar/sales-invoices') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back</a>
-                    <?php if ((float) ($receivable['outstanding_amount'] ?? $invoice['outstanding_amount'] ?? 0) > 0): ?>
+                    <?php if ($status !== 'cancelled' && $outstandingAmount > 0): ?>
                         <a href="<?= site_url('ar/sales-invoices/' . $invoice['id'] . '/receipt') ?>" class="btn btn-primary"><i class="bx bx-money-withdraw me-1"></i> Post Receipt</a>
+                    <?php endif ?>
+                    <?php if ($status === 'open' && $paidAmount <= 0): ?>
+                        <form method="post" action="<?= site_url('ar/sales-invoices/' . (int) $invoice['id'] . '/cancel') ?>" class="d-flex gap-2">
+                            <?= csrf_field() ?>
+                            <input type="text" name="cancel_reason" class="form-control form-control-sm" placeholder="Cancel reason" style="max-width: 170px;">
+                            <button type="submit" class="btn btn-outline-danger" onclick="return confirm('Cancel this sales invoice and post reversal GL?')">Cancel</button>
+                        </form>
                     <?php endif ?>
                 </div>
             </div>

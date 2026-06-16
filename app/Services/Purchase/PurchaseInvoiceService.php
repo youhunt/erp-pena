@@ -3,6 +3,8 @@
 namespace App\Services\Purchase;
 
 use App\Models\ApPayableModel;
+use App\Models\ApPaymentModel;
+use App\Models\GlEntryLineModel;
 use App\Models\PurchaseInvoiceLineModel;
 use App\Models\PurchaseInvoiceModel;
 use App\Models\PurchaseOrderLineModel;
@@ -143,6 +145,7 @@ class PurchaseInvoiceService
         $invoiceModel = new PurchaseInvoiceModel();
         $existing = $invoiceModel
             ->where('purchase_receipt_id', (int) $header['purchase_receipt_id'])
+            ->where('status !=', 'cancelled')
             ->where('deleted_at', null)
             ->first();
         if ($existing !== null) {
@@ -293,6 +296,117 @@ class PurchaseInvoiceService
             $db->transRollback();
             throw new RuntimeException($e->getMessage());
         }
+    }
+
+    public function cancel(int $invoiceId, ?int $userId = null, ?string $reason = null): void
+    {
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            $invoiceModel = new PurchaseInvoiceModel();
+            $payableModel = new ApPayableModel();
+            $invoice = $invoiceModel->find($invoiceId);
+            if ($invoice === null) {
+                throw new RuntimeException('Purchase invoice not found.');
+            }
+            if ((string) ($invoice['status'] ?? '') === 'cancelled') {
+                throw new RuntimeException('Purchase invoice has already been cancelled.');
+            }
+            if ((string) ($invoice['status'] ?? '') !== 'open') {
+                throw new RuntimeException('Only open purchase invoice can be cancelled.');
+            }
+            if ((float) ($invoice['paid_amount'] ?? 0) > 0 || (new ApPaymentModel())->where('purchase_invoice_id', $invoiceId)->first() !== null) {
+                throw new RuntimeException('Purchase invoice already has payment. Reverse or cancel payment first.');
+            }
+
+            (new PeriodCloseService())->assertOpen('ap', (int) $invoice['company_id'], (string) ($invoice['invoice_date'] ?? date('Y-m-d')), ! empty($invoice['site_id']) ? (int) $invoice['site_id'] : null);
+
+            $reversalGlEntryId = $this->postGlReversal($invoice, $userId);
+            $now = date('Y-m-d H:i:s');
+            $invoiceModel->update($invoiceId, [
+                'status' => 'cancelled',
+                'outstanding_amount' => 0,
+                'cancelled_at' => $now,
+                'cancelled_by' => $userId,
+                'cancel_reason' => $reason,
+                'reversal_gl_entry_id' => $reversalGlEntryId,
+                'updated_by' => $userId,
+            ]);
+
+            $payable = $payableModel->where('purchase_invoice_id', $invoiceId)->first();
+            if ($payable !== null) {
+                $payableModel->update((int) $payable['id'], [
+                    'outstanding_amount' => 0,
+                    'status' => 'cancelled',
+                ]);
+            }
+
+            if (! empty($invoice['purchase_receipt_id'])) {
+                (new PurchaseReceiptModel())->update((int) $invoice['purchase_receipt_id'], [
+                    'status' => 'posted',
+                    'updated_by' => $userId,
+                ]);
+            }
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to cancel purchase invoice.');
+            }
+            $db->transCommit();
+        } catch (Throwable $e) {
+            $db->transRollback();
+            throw new RuntimeException($e->getMessage());
+        }
+
+        (new AuditLogService())->log('finance.ap', 'purchase_invoice.cancel', [
+            'company_id' => $invoice['company_id'] ?? null,
+            'site_id' => $invoice['site_id'] ?? null,
+            'user_id' => $userId,
+            'table_name' => 'purchase_invoices',
+            'record_id' => $invoiceId,
+            'record_code' => $invoice['invoice_no'] ?? null,
+            'description' => 'Purchase invoice cancelled and reversal GL posted.',
+            'old_values' => ['status' => $invoice['status'] ?? null],
+            'new_values' => ['status' => 'cancelled', 'reason' => $reason, 'reversal_gl_entry_id' => $reversalGlEntryId],
+        ]);
+    }
+
+    private function postGlReversal(array $invoice, ?int $userId): ?int
+    {
+        if (empty($invoice['gl_entry_id'])) {
+            return null;
+        }
+
+        $glLines = (new GlEntryLineModel())
+            ->where('gl_entry_id', (int) $invoice['gl_entry_id'])
+            ->orderBy('line_no', 'ASC')
+            ->findAll();
+        if ($glLines === []) {
+            return null;
+        }
+
+        $lines = [];
+        foreach ($glLines as $line) {
+            $lines[] = [
+                'account_no' => $line['account_no'],
+                'description' => 'Cancel ' . ($invoice['invoice_no'] ?? '') . ' - ' . ($line['description'] ?? ''),
+                'debit' => (float) ($line['credit'] ?? 0),
+                'credit' => (float) ($line['debit'] ?? 0),
+            ];
+        }
+
+        return (new GeneralLedgerService())->post([
+            'company_id' => (int) $invoice['company_id'],
+            'site_id' => $invoice['site_id'] ?? null,
+            'journal_no' => 'GL-CNL-' . ($invoice['invoice_no'] ?? $invoice['id']),
+            'journal_date' => $invoice['invoice_date'] ?? date('Y-m-d'),
+            'source_module' => 'ap',
+            'source_type' => 'purchase_invoice_cancel',
+            'source_id' => $invoice['id'],
+            'source_no' => $invoice['invoice_no'] ?? null,
+            'description' => 'Cancel purchase invoice ' . ($invoice['invoice_no'] ?? ''),
+            'currency_code' => $invoice['currency_code'] ?? 'IDR',
+        ], $lines, $userId);
     }
 
     private function normalizeManualLines(array $rawLines): array
