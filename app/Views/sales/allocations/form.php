@@ -51,7 +51,7 @@
                             <?php foreach ($lines as $line): ?>
                                 <?php $toAllocate = max(0, (float) ($line['qty_ordered'] ?? $line['qty'] ?? 0) - (float) ($line['qty_reserved'] ?? 0)); ?>
                                 <tr>
-                                    <td><?= esc($line['line_no']) ?></td>
+                                    <td><?= esc($line['so_line'] ?? $line['line_no']) ?></td>
                                     <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
                                     <td class="text-end"><?= esc(number_format((float) ($line['qty_ordered'] ?? $line['qty'] ?? 0), 4)) ?></td>
                                     <td class="text-end"><?= esc(number_format((float) ($line['qty_reserved'] ?? 0), 4)) ?></td>

@@ -298,7 +298,7 @@ class PurchaseInvoiceService
     private function normalizeManualLines(array $rawLines): array
     {
         $lines = [];
-        $lineNo = 10;
+        $lineNo = 1;
 
         foreach ($rawLines as $rawLine) {
             $description = trim((string) ($rawLine['item_name'] ?? $rawLine['description'] ?? ''));
@@ -329,7 +329,7 @@ class PurchaseInvoiceService
                 'line_subtotal' => $lineSubtotal,
                 'line_total' => $lineTotal,
             ];
-            $lineNo += 10;
+            $lineNo++;
         }
 
         return $lines;
