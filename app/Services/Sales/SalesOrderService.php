@@ -26,6 +26,7 @@ class SalesOrderService
         if ($lines === []) {
             throw new RuntimeException('At least one SO line is required.');
         }
+        $lines = $this->normalizeLines($lines);
 
         $totals = $this->calculateTotals($lines);
         $db = Database::connect();
@@ -49,8 +50,8 @@ class SalesOrderService
                 throw new RuntimeException('Failed to create sales order header.');
             }
 
-            $lineNo = 10;
             foreach ($lines as $line) {
+                $lineNo = (int) $line['so_line'];
                 $qty = (float) ($line['qty'] ?? 0);
                 $unitPrice = (float) ($line['unit_price'] ?? 0);
                 $discount = (float) ($line['discount_amount'] ?? 0);
@@ -60,6 +61,7 @@ class SalesOrderService
                 $lineModel->insert([
                     'sales_order_id' => $soId,
                     'line_no' => $lineNo,
+                    'so_line' => $lineNo,
                     'item_id' => $line['item_id'] ?? null,
                     'item_code' => $line['item_code'] ?? null,
                     'item_name' => $line['item_name'] ?? null,
@@ -76,7 +78,6 @@ class SalesOrderService
                     'line_status' => 'open',
                 ]);
 
-                $lineNo += 10;
             }
 
             if ($db->transStatus() === false) {
@@ -211,6 +212,41 @@ class SalesOrderService
             'tax_amount' => $tax,
             'total_amount' => $subtotal - $discount + $tax,
         ];
+    }
+
+    private function normalizeLines(array $lines): array
+    {
+        $normalized = [];
+        $seen = [];
+        $autoLine = 1;
+
+        foreach ($lines as $line) {
+            $displayLine = (int) ($line['so_line'] ?? $line['line_no'] ?? $autoLine);
+            if ($displayLine < 1) {
+                throw new RuntimeException('SO line number must be greater than zero.');
+            }
+            if (isset($seen[$displayLine])) {
+                throw new RuntimeException('Duplicate SO line number: ' . $displayLine);
+            }
+
+            $seen[$displayLine] = true;
+            $line['so_line'] = $displayLine;
+            $line['line_no'] = $displayLine;
+            $normalized[] = $line;
+            $autoLine++;
+        }
+
+        usort($normalized, static fn (array $left, array $right): int => (int) $left['so_line'] <=> (int) $right['so_line']);
+
+        $expected = 1;
+        foreach ($normalized as $line) {
+            if ((int) $line['so_line'] !== $expected) {
+                throw new RuntimeException('SO line numbers must be sequential starting from 1. Expected line ' . $expected . ', got ' . $line['so_line'] . '.');
+            }
+            $expected++;
+        }
+
+        return $normalized;
     }
 
     private function audit(string $action, int $soId, array $header, array $payload, ?int $userId, string $description): void

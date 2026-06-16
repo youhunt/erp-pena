@@ -19,6 +19,7 @@ class OrderImportController extends BaseController
 
     private const SALES_HEADERS = [
         'so_no',
+        'so_line',
         'so_date',
         'customer_code',
         'customer_name',
@@ -36,6 +37,7 @@ class OrderImportController extends BaseController
 
     private const PURCHASE_HEADERS = [
         'po_no',
+        'po_line',
         'po_date',
         'supplier_code',
         'supplier_name',
@@ -250,6 +252,7 @@ class OrderImportController extends BaseController
                     $validRows[] = [
                         'excel_row' => $line['_excel_row'] ?? '-',
                         'document_no' => $documentNo,
+                        'line' => $payload[$config['lineField']] ?? '',
                         'partner_code' => $line[$config['partnerCodeField']] ?? '',
                         'partner_name' => $line[$config['partnerNameField']] ?? '',
                         'item_code' => $payload['item_code'] ?? '',
@@ -315,6 +318,26 @@ class OrderImportController extends BaseController
                     return 'Rows with the same document number must use the same ' . $label . '.';
                 }
             }
+        }
+
+        $lineNumbers = [];
+        foreach ($lines as $line) {
+            $lineNo = (int) ($line[$config['lineField']] ?? 0);
+            if ($lineNo < 1) {
+                return strtoupper($config['lineField']) . ' must be a positive number.';
+            }
+            if (isset($lineNumbers[$lineNo])) {
+                return 'Duplicate ' . strtoupper($config['lineField']) . ': ' . $lineNo . '.';
+            }
+            $lineNumbers[$lineNo] = true;
+        }
+
+        $expected = 1;
+        foreach (array_keys($lineNumbers) as $lineNo) {
+            if ((int) $lineNo !== $expected) {
+                return strtoupper($config['lineField']) . ' must be sequential starting from 1. Expected line ' . $expected . ', got ' . $lineNo . '.';
+            }
+            $expected++;
         }
 
         return null;
@@ -408,6 +431,7 @@ class OrderImportController extends BaseController
         }
 
         return [
+            $type === 'sales' ? 'so_line' : 'po_line' => (int) ($line[$type === 'sales' ? 'so_line' : 'po_line'] ?? 0),
             'item_id' => isset($item['id']) ? (int) $item['id'] : null,
             'item_code' => $code !== '' ? $code : null,
             'item_name' => $name !== '' ? $name : $code,
@@ -663,8 +687,8 @@ class OrderImportController extends BaseController
                 'label' => 'Sales Order',
                 'headers' => self::SALES_HEADERS,
                 'sampleRows' => [
-                    ['SO-IMPORT-001', date('Y-m-d'), 'CUST001', 'PT Contoh Customer', 'NET30', 'IDR', 'Contoh import SO', 'ITEM-0001', 'Kertas A4 80gsm 001', '10', 'PCS', '25000', '0', '0'],
-                    ['SO-IMPORT-001', date('Y-m-d'), 'CUST001', 'PT Contoh Customer', 'NET30', 'IDR', 'Contoh import SO', 'ITEM-0002', 'Pulpen Hitam 002', '5', 'PCS', '5000', '0', '0'],
+                    ['SO-IMPORT-001', '1', date('Y-m-d'), 'CUST001', 'PT Contoh Customer', 'NET30', 'IDR', 'Contoh import SO', 'ITEM-0001', 'Kertas A4 80gsm 001', '10', 'PCS', '25000', '0', '0'],
+                    ['SO-IMPORT-001', '2', date('Y-m-d'), 'CUST001', 'PT Contoh Customer', 'NET30', 'IDR', 'Contoh import SO', 'ITEM-0002', 'Pulpen Hitam 002', '5', 'PCS', '5000', '0', '0'],
                 ],
                 'sheetName' => 'Sales Order Import',
                 'fileName' => 'sales-order-import-template.xlsx',
@@ -674,6 +698,7 @@ class OrderImportController extends BaseController
                 'backUrl' => 'sales/orders',
                 'table' => 'sales_orders',
                 'documentField' => 'so_no',
+                'lineField' => 'so_line',
                 'dateField' => 'so_date',
                 'partnerIdField' => 'customer_id',
                 'partnerLegacyField' => 'customer',
@@ -687,8 +712,8 @@ class OrderImportController extends BaseController
             'label' => 'Purchase Order',
             'headers' => self::PURCHASE_HEADERS,
             'sampleRows' => [
-                ['PO-IMPORT-001', date('Y-m-d'), 'SUP001', 'PT Contoh Supplier', 'NET30', 'IDR', 'Contoh import PO', 'ITEM-0001', 'Kertas A4 80gsm 001', '20', 'PCS', '20000', '0', '0'],
-                ['PO-IMPORT-001', date('Y-m-d'), 'SUP001', 'PT Contoh Supplier', 'NET30', 'IDR', 'Contoh import PO', 'ITEM-0002', 'Pulpen Hitam 002', '12', 'PCS', '4000', '0', '0'],
+                ['PO-IMPORT-001', '1', date('Y-m-d'), 'SUP001', 'PT Contoh Supplier', 'NET30', 'IDR', 'Contoh import PO', 'ITEM-0001', 'Kertas A4 80gsm 001', '20', 'PCS', '20000', '0', '0'],
+                ['PO-IMPORT-001', '2', date('Y-m-d'), 'SUP001', 'PT Contoh Supplier', 'NET30', 'IDR', 'Contoh import PO', 'ITEM-0002', 'Pulpen Hitam 002', '12', 'PCS', '4000', '0', '0'],
             ],
             'sheetName' => 'Purchase Order Import',
             'fileName' => 'purchase-order-import-template.xlsx',
@@ -698,6 +723,7 @@ class OrderImportController extends BaseController
             'backUrl' => 'purchase/orders',
             'table' => 'purchase_orders',
             'documentField' => 'po_no',
+            'lineField' => 'po_line',
             'dateField' => 'po_date',
             'partnerIdField' => 'supplier_id',
             'partnerLegacyField' => 'supplier',

@@ -68,7 +68,7 @@
                         <tbody>
                         <?php foreach ($lines as $line): ?>
                             <tr>
-                                <td><?= esc($line['line_no']) ?></td>
+                                <td><?= esc($line['po_line'] ?? $line['line_no']) ?></td>
                                 <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
                                 <td class="text-end"><?= esc(number_format((float) ($line['qty_ordered'] ?? $line['qty'] ?? 0), 4)) ?></td>
                                 <td class="text-end"><?= esc(number_format((float) ($line['qty_received'] ?? 0), 4)) ?></td>

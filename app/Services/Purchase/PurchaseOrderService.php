@@ -25,6 +25,7 @@ class PurchaseOrderService
         if ($lines === []) {
             throw new RuntimeException('At least one PO line is required.');
         }
+        $lines = $this->normalizeLines($lines);
 
         $totals = $this->calculateTotals($lines);
         $db = Database::connect();
@@ -48,8 +49,8 @@ class PurchaseOrderService
                 throw new RuntimeException('Failed to create purchase order header.');
             }
 
-            $lineNo = 10;
             foreach ($lines as $line) {
+                $lineNo = (int) $line['po_line'];
                 $qty = (float) ($line['qty'] ?? 0);
                 $unitPrice = (float) ($line['unit_price'] ?? 0);
                 $discount = (float) ($line['discount_amount'] ?? 0);
@@ -59,6 +60,7 @@ class PurchaseOrderService
                 $lineModel->insert([
                     'purchase_order_id' => $poId,
                     'line_no' => $lineNo,
+                    'po_line' => $lineNo,
                     'item_id' => $line['item_id'] ?? null,
                     'item_code' => $line['item_code'] ?? null,
                     'item_name' => $line['item_name'] ?? null,
@@ -74,7 +76,6 @@ class PurchaseOrderService
                     'line_status' => 'open',
                 ]);
 
-                $lineNo += 10;
             }
 
             if ($db->transStatus() === false) {
@@ -150,6 +151,41 @@ class PurchaseOrderService
             'tax_amount' => $tax,
             'total_amount' => $subtotal - $discount + $tax,
         ];
+    }
+
+    private function normalizeLines(array $lines): array
+    {
+        $normalized = [];
+        $seen = [];
+        $autoLine = 1;
+
+        foreach ($lines as $line) {
+            $displayLine = (int) ($line['po_line'] ?? $line['line_no'] ?? $autoLine);
+            if ($displayLine < 1) {
+                throw new RuntimeException('PO line number must be greater than zero.');
+            }
+            if (isset($seen[$displayLine])) {
+                throw new RuntimeException('Duplicate PO line number: ' . $displayLine);
+            }
+
+            $seen[$displayLine] = true;
+            $line['po_line'] = $displayLine;
+            $line['line_no'] = $displayLine;
+            $normalized[] = $line;
+            $autoLine++;
+        }
+
+        usort($normalized, static fn (array $left, array $right): int => (int) $left['po_line'] <=> (int) $right['po_line']);
+
+        $expected = 1;
+        foreach ($normalized as $line) {
+            if ((int) $line['po_line'] !== $expected) {
+                throw new RuntimeException('PO line numbers must be sequential starting from 1. Expected line ' . $expected . ', got ' . $line['po_line'] . '.');
+            }
+            $expected++;
+        }
+
+        return $normalized;
     }
 
     private function audit(string $action, int $poId, array $header, array $payload, ?int $userId, string $description): void

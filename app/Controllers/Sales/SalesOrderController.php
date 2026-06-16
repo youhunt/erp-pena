@@ -160,6 +160,7 @@ class SalesOrderController extends BaseController
 
     private function postedLines(): array
     {
+        $soLines = (array) $this->request->getPost('so_line');
         $itemCodes = (array) $this->request->getPost('item_code');
         $itemIds = (array) $this->request->getPost('item_id');
         $itemNames = (array) $this->request->getPost('item_name');
@@ -181,6 +182,7 @@ class SalesOrderController extends BaseController
                 continue;
             }
             $lines[] = [
+                'so_line' => (int) ($soLines[$index] ?? (count($lines) + 1)),
                 'item_id' => (int) ($itemIds[$index] ?? 0) > 0 ? (int) $itemIds[$index] : null,
                 'item_code' => $code !== '' ? $code : null,
                 'item_name' => $name !== '' ? $name : $code,

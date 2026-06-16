@@ -67,6 +67,7 @@
                 <table class="table table-nowrap align-middle" id="soLinesTable">
                     <thead class="table-light">
                         <tr>
+                            <th style="width:80px;">Line</th>
                             <th style="min-width:220px;">Item Code</th>
                             <th style="min-width:220px;">Item Name</th>
                             <th style="width:110px;">Qty</th>
@@ -81,6 +82,7 @@
                     <tbody>
                         <?php for ($i = 0; $i < 3; $i++): ?>
                             <tr>
+                                <td><input type="number" name="so_line[]" class="form-control text-end line-number" min="1" step="1" value="<?= esc((string) ($i + 1)) ?>" required></td>
                                 <td>
                                     <input type="hidden" name="item_id[]" class="item-id">
                                     <select name="item_code[]" class="form-select item-select">
@@ -116,10 +118,10 @@
                         <?php endfor ?>
                     </tbody>
                     <tfoot class="table-light">
-                        <tr><th colspan="7" class="text-end">Subtotal</th><th class="text-end" id="subtotalText">0.00</th><th></th></tr>
-                        <tr><th colspan="7" class="text-end">Discount</th><th class="text-end" id="discountText">0.00</th><th></th></tr>
-                        <tr><th colspan="7" class="text-end">Tax</th><th class="text-end" id="taxText">0.00</th><th></th></tr>
-                        <tr><th colspan="7" class="text-end">Total</th><th class="text-end" id="totalText">0.00</th><th></th></tr>
+                        <tr><th colspan="8" class="text-end">Subtotal</th><th class="text-end" id="subtotalText">0.00</th><th></th></tr>
+                        <tr><th colspan="8" class="text-end">Discount</th><th class="text-end" id="discountText">0.00</th><th></th></tr>
+                        <tr><th colspan="8" class="text-end">Tax</th><th class="text-end" id="taxText">0.00</th><th></th></tr>
+                        <tr><th colspan="8" class="text-end">Total</th><th class="text-end" id="totalText">0.00</th><th></th></tr>
                     </tfoot>
                 </table>
             </div>
@@ -169,6 +171,12 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('totalText').textContent = money(subtotal - discount + tax);
     }
 
+    function renumberLines() {
+        tbody.querySelectorAll('tr').forEach(function (row, index) {
+            row.querySelector('.line-number').value = index + 1;
+        });
+    }
+
     function bindRow(row) {
         row.querySelectorAll('.calc').forEach(input => input.addEventListener('input', recalc));
         row.querySelector('.item-select').addEventListener('change', function () {
@@ -182,6 +190,7 @@ document.addEventListener('DOMContentLoaded', function () {
         row.querySelector('.remove-line').addEventListener('click', function () {
             if (tbody.querySelectorAll('tr').length > 1) {
                 row.remove();
+                renumberLines();
                 recalc();
             }
         });
@@ -200,6 +209,7 @@ document.addEventListener('DOMContentLoaded', function () {
             select.selectedIndex = 0;
         });
         tbody.appendChild(clone);
+        renumberLines();
         bindRow(clone);
         recalc();
     });

@@ -116,6 +116,7 @@
                     <tr>
                         <th>Excel Row</th>
                         <th>Document No</th>
+                        <th>Line</th>
                         <th>Partner</th>
                         <th>Item</th>
                         <th class="text-end">Qty</th>
@@ -128,6 +129,7 @@
                     <tr>
                         <td><?= esc($row['excel_row'] ?? '-') ?></td>
                         <td class="fw-semibold"><?= esc($row['document_no'] ?? '-') ?></td>
+                        <td class="text-end"><?= esc($row['line'] ?? '-') ?></td>
                         <td><?= esc(trim(($row['partner_code'] ?? '') . ' ' . ($row['partner_name'] ?? ''))) ?></td>
                         <td><?= esc(trim(($row['item_code'] ?? '') . ' - ' . ($row['item_name'] ?? ''))) ?></td>
                         <td class="text-end"><?= esc(number_format((float) ($row['qty'] ?? 0), 2)) ?></td>
@@ -138,7 +140,7 @@
 
                 <?php if (($preview['valid_rows'] ?? []) === []): ?>
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">No valid rows.</td>
+                        <td colspan="8" class="text-center text-muted py-4">No valid rows.</td>
                     </tr>
                 <?php endif ?>
                 </tbody>
