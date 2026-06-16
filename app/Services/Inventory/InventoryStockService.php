@@ -179,12 +179,13 @@ class InventoryStockService
         $gainAccount = $profile->account($companyId, 'inventory', 'adjustment_gain', '7000');
         $lossAccount = $profile->account($companyId, 'inventory', 'adjustment_loss', '8000');
         $referenceNo = trim((string) ($data['reference_no'] ?? 'INV-' . date('Ymd-His')));
+        $journalNo = 'GL-' . $referenceNo . '-' . $movementId;
         $description = trim((string) ($data['notes'] ?? 'Inventory adjustment'));
 
         return (new GeneralLedgerService())->post([
             'company_id' => $companyId,
             'site_id' => $data['site_id'] ?? null,
-            'journal_no' => 'GL-' . $referenceNo,
+            'journal_no' => $journalNo,
             'journal_date' => substr((string) ($data['movement_date'] ?? date('Y-m-d')), 0, 10),
             'source_module' => 'inventory',
             'source_type' => $movementType,

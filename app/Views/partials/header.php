@@ -7,6 +7,7 @@
     <link rel="shortcut icon" href="<?= base_url('assets/skote/images/Logo.png') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/skote/css/bootstrap.min.css') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/skote/css/icons.min.css') ?>">
+    <link rel="stylesheet" href="<?= base_url('assets/skote/libs/select2/css/select2.min.css') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/skote/css/app.min.css') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/pena/app.css') ?>">
 </head>

@@ -11,6 +11,7 @@ use App\Services\Inventory\InventoryStockService;
 use App\Services\TenantContext;
 use Config\Database;
 use RuntimeException;
+use Throwable;
 
 class InventoryMovementController extends BaseController
 {
@@ -26,6 +27,7 @@ class InventoryMovementController extends BaseController
     {
         $tenant = new TenantContext(session());
         $companyId = $tenant->activeCompanyId();
+        $siteId = $tenant->activeSiteId();
         if ($companyId === null || $companyId < 1) {
             return redirect()->back()->withInput()->with('error', 'Active company is required.');
         }
@@ -35,23 +37,122 @@ class InventoryMovementController extends BaseController
             return redirect()->back()->withInput()->with('error', 'Direction must be in or out.');
         }
 
+        $db = Database::connect();
+        $db->transBegin();
+
         try {
-            $payload = $this->movementPayload($companyId, $tenant, [
+            $referenceNo = trim((string) ($this->request->getPost('reference_no') ?: 'IO-' . date('Ymd-His')));
+            $movementDate = $this->movementDate();
+            $warehouseId = $this->nullableInt($this->request->getPost('warehouse_id'));
+            $locationId = $this->nullableInt($this->request->getPost('location_id'));
+            $notes = trim((string) $this->request->getPost('notes'));
+            $base = [
+                'company_id' => $companyId,
+                'site_id' => $siteId,
+                'warehouse_id' => $warehouseId,
+                'location_id' => $locationId,
                 'direction' => $direction,
                 'movement_type' => $direction === 'in' ? 'manual_in' : 'manual_out',
                 'reference_type' => 'inventory_in_out',
-                'reference_no' => trim((string) ($this->request->getPost('reference_no') ?: 'IO-' . date('Ymd-His'))),
-            ]);
-            $this->assertDocumentNoAvailable((int) $payload['company_id'], $payload['site_id'] ?? null, (string) $payload['reference_no']);
-            $stock = new InventoryStockService();
-            $movementId = $direction === 'in' ? $stock->stockIn($payload, auth()->id()) : $stock->stockOut($payload, auth()->id());
-            $documentId = $this->createPostedDocument($payload + [
+                'reference_no' => $referenceNo,
+                'movement_date' => $movementDate,
+                'notes' => $notes,
+            ];
+
+            $this->assertDocumentNoAvailable($companyId, $siteId, $referenceNo);
+            $lines = $this->inOutLines($companyId, $base);
+            if ($lines === []) {
+                throw new RuntimeException('At least one valid item line is required.');
+            }
+
+            $documentModel = new InventoryMovementDocumentModel();
+            $documentModel->insert([
+                'company_id' => $companyId,
+                'site_id' => $siteId,
+                'document_no' => $referenceNo,
+                'document_date' => $movementDate,
                 'document_type' => 'inventory_in_out',
                 'direction' => $direction,
-                'movement_id' => $movementId,
-            ], auth()->id());
-            (new InventoryStockMovementModel())->update($movementId, ['reference_id' => $documentId]);
-        } catch (RuntimeException $exception) {
+                'status' => 'posted',
+                'warehouse_id' => $warehouseId,
+                'location_id' => $locationId,
+                'total_qty' => 0,
+                'total_value' => 0,
+                'notes' => $notes,
+                'posted_at' => date('Y-m-d H:i:s'),
+                'posted_by' => auth()->id(),
+                'created_by' => auth()->id(),
+                'updated_by' => auth()->id(),
+            ]);
+            $documentId = (int) $documentModel->getInsertID();
+            if ($documentId < 1) {
+                throw new RuntimeException('Failed to create inventory movement document.');
+            }
+
+            $stock = new InventoryStockService();
+            $movementModel = new InventoryStockMovementModel();
+            $lineModel = new InventoryMovementDocumentLineModel();
+            $totalQty = 0.0;
+            $totalValue = 0.0;
+
+            foreach ($lines as $index => $line) {
+                $payload = array_merge($base, $line, ['reference_id' => $documentId]);
+                $movementId = $direction === 'in' ? $stock->stockIn($payload, auth()->id()) : $stock->stockOut($payload, auth()->id());
+                $movement = $movementModel->find($movementId);
+                if ($movement === null) {
+                    throw new RuntimeException('Stock movement was posted but cannot be found for document line.');
+                }
+
+                $lineQty = (float) ($movement['qty'] ?? $line['qty']);
+                $lineValue = (float) ($movement['stock_value'] ?? 0);
+                $totalQty += $lineQty;
+                $totalValue += $lineValue;
+
+                $lineModel->insert([
+                    'document_id' => $documentId,
+                    'stock_movement_id' => $movementId,
+                    'line_no' => $index + 1,
+                    'item_id' => $line['item_id'] ?? null,
+                    'item_code' => $line['item_code'],
+                    'item_name' => $line['item_name'] ?? null,
+                    'batch_no' => trim((string) ($line['batch_no'] ?? '')),
+                    'uom_code' => $line['uom_code'] ?? 'PCS',
+                    'qty' => $lineQty,
+                    'unit_cost' => (float) ($movement['unit_cost'] ?? $line['unit_cost'] ?? 0),
+                    'stock_value' => $lineValue,
+                    'notes' => $line['notes'] ?? null,
+                ]);
+            }
+
+            $documentModel->update($documentId, [
+                'total_qty' => $totalQty,
+                'total_value' => $totalValue,
+                'updated_by' => auth()->id(),
+            ]);
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to post inventory movement document.');
+            }
+
+            $db->transCommit();
+
+            (new AuditLogService())->log('inventory.stock', 'inventory_in_out.post', [
+                'company_id' => $companyId,
+                'site_id' => $siteId,
+                'user_id' => auth()->id(),
+                'table_name' => 'inventory_movement_documents',
+                'record_id' => $documentId,
+                'record_code' => $referenceNo,
+                'description' => 'Multi-line inventory in/out document posted.',
+                'new_values' => [
+                    'direction' => $direction,
+                    'line_count' => count($lines),
+                    'total_qty' => $totalQty,
+                    'total_value' => $totalValue,
+                ],
+            ]);
+        } catch (Throwable $exception) {
+            $db->transRollback();
             return redirect()->back()->withInput()->with('error', $exception->getMessage());
         }
 
@@ -218,15 +319,7 @@ class InventoryMovementController extends BaseController
             throw new RuntimeException('Item code is required.');
         }
 
-        $db = Database::connect();
-        $item = $db->table('items')
-            ->where('company_id', $companyId)
-            ->groupStart()
-                ->where('item_code', $itemCode)
-                ->orWhere('code', $itemCode)
-            ->groupEnd()
-            ->get()
-            ->getRowArray();
+        $item = $this->lookupInventoryItem($companyId, $itemCode);
 
         return $overrides + [
             'company_id' => $companyId,
@@ -243,6 +336,93 @@ class InventoryMovementController extends BaseController
             'movement_date' => $this->movementDate(),
             'notes' => trim((string) $this->request->getPost('notes')),
         ];
+    }
+
+    private function inOutLines(int $companyId, array $base): array
+    {
+        $itemCodes = (array) $this->request->getPost('line_item_code');
+        $manualCodes = (array) $this->request->getPost('line_manual_item_code');
+        $itemNames = (array) $this->request->getPost('line_item_name');
+        $uomCodes = (array) $this->request->getPost('line_uom_code');
+        $batchNos = (array) $this->request->getPost('line_batch_no');
+        $qtys = (array) $this->request->getPost('line_qty');
+        $unitCosts = (array) $this->request->getPost('line_unit_cost');
+        $notes = (array) $this->request->getPost('line_notes');
+
+        $lines = [];
+        $max = max(count($itemCodes), count($manualCodes), count($qtys));
+        for ($index = 0; $index < $max; $index++) {
+            $itemCode = trim((string) ($itemCodes[$index] ?? ''));
+            if ($itemCode === '') {
+                $itemCode = trim((string) ($manualCodes[$index] ?? ''));
+            }
+
+            $qty = (float) ($qtys[$index] ?? 0);
+            if ($itemCode === '' && $qty <= 0) {
+                continue;
+            }
+            if ($itemCode === '') {
+                throw new RuntimeException('Item code is required on line ' . ($index + 1) . '.');
+            }
+            if ($qty <= 0) {
+                throw new RuntimeException('Qty must be greater than zero on line ' . ($index + 1) . '.');
+            }
+
+            $item = $this->lookupInventoryItem($companyId, $itemCode);
+            $uom = trim((string) ($uomCodes[$index] ?? ''));
+            if ($uom === '') {
+                $uom = (string) ($item['stockuom'] ?? 'PCS');
+            }
+
+            $unitCost = (float) ($unitCosts[$index] ?? 0);
+            if ($unitCost <= 0 && $item !== null) {
+                $unitCost = (float) ($item['item_price'] ?? $item['standard_cost'] ?? 0);
+            }
+
+            $code = $itemCode !== '' ? $itemCode : (string) ($item['item_code'] ?? $item['code'] ?? '');
+            $name = trim((string) ($itemNames[$index] ?? ''));
+            if ($name === '') {
+                $name = (string) ($item['item_name'] ?? $item['name'] ?? $code);
+            }
+
+            $lineNote = trim((string) ($notes[$index] ?? ''));
+            $combinedNote = trim((string) ($base['notes'] ?? ''));
+            if ($lineNote !== '') {
+                $combinedNote = trim($combinedNote . ' ' . $lineNote);
+            }
+
+            $lines[] = [
+                'item_id' => isset($item['id']) ? (int) $item['id'] : null,
+                'item_code' => $code,
+                'batch_no' => trim((string) ($batchNos[$index] ?? '')),
+                'item_name' => $name,
+                'uom_code' => $uom,
+                'qty' => abs($qty),
+                'unit_cost' => $unitCost,
+                'notes' => $combinedNote,
+            ];
+        }
+
+        return $lines;
+    }
+
+    private function lookupInventoryItem(int $companyId, string $itemCode): ?array
+    {
+        $itemCode = trim($itemCode);
+        if ($itemCode === '') {
+            return null;
+        }
+
+        $db = Database::connect();
+
+        return $db->table('items')
+            ->where('company_id', $companyId)
+            ->groupStart()
+                ->where('item_code', $itemCode)
+                ->orWhere('code', $itemCode)
+            ->groupEnd()
+            ->get()
+            ->getRowArray() ?: null;
     }
 
     private function movementDate(): string
