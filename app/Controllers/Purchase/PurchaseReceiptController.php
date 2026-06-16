@@ -44,7 +44,7 @@ class PurchaseReceiptController extends BaseController
             'title' => 'Purchase Receipts',
             'receipts' => $model->orderBy('receipt_date', 'DESC')->orderBy('id', 'DESC')->findAll(100),
             'filters' => ['status' => $status, 'q' => $search],
-            'statusOptions' => ['posted', 'invoiced'],
+            'statusOptions' => ['posted', 'invoiced', 'reversed'],
         ]);
     }
 
@@ -131,6 +131,30 @@ class PurchaseReceiptController extends BaseController
             'receipt' => $receipt,
             'lines' => (new PurchaseReceiptLineModel())->where('purchase_receipt_id', $id)->orderBy('line_no', 'ASC')->findAll(),
         ]);
+    }
+
+    public function reverse(int $id)
+    {
+        $tenant = new TenantContext(session());
+        $model = new PurchaseReceiptModel();
+        if ($tenant->activeCompanyId() !== null) {
+            $model->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $model->where('site_id', $tenant->activeSiteId());
+        }
+        if ($model->find($id) === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        try {
+            $reason = trim((string) $this->request->getPost('reversal_reason')) ?: null;
+            (new PurchaseReceiptService())->reverse($id, auth()->id(), $reason);
+        } catch (RuntimeException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->to('/purchase/receipts/' . $id)->with('message', 'Purchase receipt reversed.');
     }
 
     private function scopedPo(TenantContext $tenant, int $poId): ?array
