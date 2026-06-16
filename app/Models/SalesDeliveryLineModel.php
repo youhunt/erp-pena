@@ -11,8 +11,20 @@ class SalesDeliveryLineModel extends Model
     protected $returnType = 'array';
     protected $useTimestamps = true;
     protected $allowedFields = [
-        'sales_delivery_id', 'sales_order_id', 'sales_order_line_id', 'line_no',
-        'item_id', 'item_code', 'batch_no', 'item_name', 'qty_delivered', 'uom_code',
-        'unit_price', 'warehouse_id', 'location_id',
+        'sales_delivery_id',
+        'sales_order_id',
+        'sales_order_line_id',
+        'stock_movement_id',
+        'reversal_movement_id',
+        'line_no',
+        'item_id',
+        'item_code',
+        'batch_no',
+        'item_name',
+        'qty_delivered',
+        'uom_code',
+        'unit_price',
+        'warehouse_id',
+        'location_id',
     ];
 }
