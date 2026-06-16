@@ -91,6 +91,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('deliveries/import', 'System\FulfillmentImportController::importSalesDelivery');
         $routes->post('deliveries/import/commit', 'System\FulfillmentImportController::commitSalesDelivery');
         $routes->get('deliveries/(:num)', 'Sales\SalesDeliveryController::show/$1');
+        $routes->post('deliveries/(:num)/reverse', 'Sales\SalesDeliveryController::reverse/$1');
         $routes->get('deliveries/(:num)/invoice', 'AccountsReceivable\SalesInvoiceController::createFromDelivery/$1');
         $routes->post('deliveries/(:num)/invoice', 'AccountsReceivable\SalesInvoiceController::storeFromDelivery/$1');
     });
@@ -128,6 +129,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('receipts/import', 'System\FulfillmentImportController::importPurchaseReceipt');
         $routes->post('receipts/import/commit', 'System\FulfillmentImportController::commitPurchaseReceipt');
         $routes->get('receipts/(:num)', 'Purchase\PurchaseReceiptController::show/$1');
+        $routes->post('receipts/(:num)/reverse', 'Purchase\PurchaseReceiptController::reverse/$1');
         $routes->get('receipts/(:num)/invoice', 'AccountsPayable\PurchaseInvoiceController::createFromReceipt/$1');
         $routes->post('receipts/(:num)/invoice', 'AccountsPayable\PurchaseInvoiceController::storeFromReceipt/$1');
     });
