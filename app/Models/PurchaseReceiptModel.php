@@ -15,6 +15,7 @@ class PurchaseReceiptModel extends Model
         'company_id', 'site_id', 'company', 'site', 'receipt_no', 'receipt_date',
         'purchase_order_id', 'po_no', 'supplier_id', 'supplier_code', 'supplier_name',
         'warehouse_id', 'location_id', 'status', 'gl_entry_id', 'notes', 'posted_at', 'posted_by',
+        'reversed_at', 'reversed_by', 'reversal_reason',
         'created_by', 'updated_by',
     ];
 }
