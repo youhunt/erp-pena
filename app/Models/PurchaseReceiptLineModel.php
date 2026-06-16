@@ -11,7 +11,7 @@ class PurchaseReceiptLineModel extends Model
     protected $returnType = 'array';
     protected $useTimestamps = true;
     protected $allowedFields = [
-        'purchase_receipt_id', 'purchase_order_id', 'purchase_order_line_id', 'line_no',
+        'purchase_receipt_id', 'purchase_order_id', 'purchase_order_line_id', 'stock_movement_id', 'reversal_movement_id', 'line_no',
         'item_id', 'item_code', 'batch_no', 'item_name', 'qty_received', 'uom_code', 'unit_cost',
         'warehouse_id', 'location_id',
     ];
