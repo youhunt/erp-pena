@@ -49,14 +49,14 @@ $sites = $activeCompanyId === null ? [] : ($sitesByCompany[(int) $activeCompanyI
             <?php if ($companies !== []): ?>
                 <form class="d-none d-lg-flex align-items-center gap-2 me-3" action="<?= site_url('tenant/switch') ?>" method="post" id="tenantSwitchForm">
                     <?= csrf_field() ?>
-                    <select class="form-select form-select-sm" name="company_id" id="tenantCompanySelect" aria-label="Active company">
+                    <select class="form-select form-select-sm tenant-select" name="company_id" id="tenantCompanySelect" aria-label="Active company" data-placeholder="Company">
                         <?php foreach ($companies as $company): ?>
                             <option value="<?= esc((string) $company['id']) ?>" <?= (int) $company['id'] === (int) $activeCompanyId ? 'selected' : '' ?>>
                                 <?= esc($company['code']) ?>
                             </option>
                         <?php endforeach ?>
                     </select>
-                    <select class="form-select form-select-sm" name="site_id" id="tenantSiteSelect" aria-label="Active site">
+                    <select class="form-select form-select-sm tenant-select" name="site_id" id="tenantSiteSelect" aria-label="Active site" data-placeholder="Site">
                         <option value="">All Sites</option>
                         <?php foreach ($sites as $site): ?>
                             <option value="<?= esc((string) $site['id']) ?>" <?= (int) $site['id'] === (int) $activeSiteId ? 'selected' : '' ?>>
@@ -94,8 +94,35 @@ document.addEventListener('DOMContentLoaded', function () {
     const siteSelect = document.getElementById('tenantSiteSelect');
     const sitesByCompany = <?= json_encode($sitesByCompany, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
+    if (!form || !companySelect || !siteSelect) {
+        return;
+    }
+
+    let isRebuildingSites = false;
+    let isSubmittingTenant = false;
+
+    function syncSelect2(select) {
+        if (window.jQuery && jQuery.fn && jQuery.fn.select2 && jQuery(select).hasClass('select2-hidden-accessible')) {
+            jQuery(select).trigger('change.select2');
+        }
+    }
+
+    function submitTenantSwitch() {
+        if (isSubmittingTenant) {
+            return;
+        }
+
+        isSubmittingTenant = true;
+        if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
+            jQuery(companySelect).select2('close');
+            jQuery(siteSelect).select2('close');
+        }
+        form.submit();
+    }
+
     function rebuildSites(companyId, selectedSiteId) {
-        const sites = sitesByCompany[companyId] || [];
+        isRebuildingSites = true;
+        const sites = sitesByCompany[String(companyId)] || sitesByCompany[companyId] || [];
         siteSelect.innerHTML = '';
 
         const allOption = document.createElement('option');
@@ -103,25 +130,75 @@ document.addEventListener('DOMContentLoaded', function () {
         allOption.textContent = 'All Sites';
         siteSelect.appendChild(allOption);
 
+        let hasSelectedSite = selectedSiteId === '' || selectedSiteId === null;
         sites.forEach(function (site) {
             const option = document.createElement('option');
             option.value = String(site.id);
             option.textContent = site.code;
             if (String(site.id) === String(selectedSiteId)) {
                 option.selected = true;
+                hasSelectedSite = true;
             }
             siteSelect.appendChild(option);
         });
+
+        if (!hasSelectedSite) {
+            siteSelect.value = '';
+        }
+
+        syncSelect2(siteSelect);
+        isRebuildingSites = false;
     }
 
-    companySelect.addEventListener('change', function () {
-        rebuildSites(companySelect.value, '');
-        form.submit();
-    });
+    function bindNativeFallback() {
+        companySelect.addEventListener('change', function () {
+            if (isRebuildingSites) {
+                return;
+            }
+            rebuildSites(companySelect.value, '');
+            submitTenantSwitch();
+        });
 
-    siteSelect.addEventListener('change', function () {
-        form.submit();
-    });
+        siteSelect.addEventListener('change', function () {
+            if (isRebuildingSites) {
+                return;
+            }
+            submitTenantSwitch();
+        });
+    }
+
+    if (window.jQuery) {
+        const $company = jQuery(companySelect);
+        const $site = jQuery(siteSelect);
+
+        if (jQuery.fn && jQuery.fn.select2) {
+            [$company, $site].forEach(function ($select) {
+                if (!$select.hasClass('select2-hidden-accessible')) {
+                    $select.select2({
+                        width: 'resolve',
+                        minimumResultsForSearch: Infinity
+                    });
+                }
+            });
+        }
+
+        $company.off('change.tenantSwitch').on('change.tenantSwitch', function () {
+            if (isRebuildingSites) {
+                return;
+            }
+            rebuildSites(companySelect.value, '');
+            submitTenantSwitch();
+        });
+
+        $site.off('change.tenantSwitch').on('change.tenantSwitch', function () {
+            if (isRebuildingSites) {
+                return;
+            }
+            submitTenantSwitch();
+        });
+    } else {
+        bindNativeFallback();
+    }
 });
 </script>
 <?php endif ?>
