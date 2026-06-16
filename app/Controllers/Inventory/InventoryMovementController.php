@@ -3,6 +3,10 @@
 namespace App\Controllers\Inventory;
 
 use App\Controllers\BaseController;
+use App\Models\InventoryMovementDocumentLineModel;
+use App\Models\InventoryMovementDocumentModel;
+use App\Models\InventoryStockMovementModel;
+use App\Services\AuditLogService;
 use App\Services\Inventory\InventoryStockService;
 use App\Services\TenantContext;
 use Config\Database;
@@ -14,6 +18,7 @@ class InventoryMovementController extends BaseController
     {
         return view('inventory/movements/in_out', $this->formData('Inventory In Out') + [
             'recentMovements' => $this->recentMovements(['manual_in', 'manual_out', 'inventory_in_out']),
+            'recentDocuments' => $this->recentDocuments(['inventory_in_out']),
         ]);
     }
 
@@ -37,8 +42,15 @@ class InventoryMovementController extends BaseController
                 'reference_type' => 'inventory_in_out',
                 'reference_no' => trim((string) ($this->request->getPost('reference_no') ?: 'IO-' . date('Ymd-His'))),
             ]);
+            $this->assertDocumentNoAvailable((int) $payload['company_id'], $payload['site_id'] ?? null, (string) $payload['reference_no']);
             $stock = new InventoryStockService();
-            $direction === 'in' ? $stock->stockIn($payload, auth()->id()) : $stock->stockOut($payload, auth()->id());
+            $movementId = $direction === 'in' ? $stock->stockIn($payload, auth()->id()) : $stock->stockOut($payload, auth()->id());
+            $documentId = $this->createPostedDocument($payload + [
+                'document_type' => 'inventory_in_out',
+                'direction' => $direction,
+                'movement_id' => $movementId,
+            ], auth()->id());
+            (new InventoryStockMovementModel())->update($movementId, ['reference_id' => $documentId]);
         } catch (RuntimeException $exception) {
             return redirect()->back()->withInput()->with('error', $exception->getMessage());
         }
@@ -110,6 +122,7 @@ class InventoryMovementController extends BaseController
         return view('inventory/movements/stock_opname', $this->formData('Inventory Stock Opname') + [
             'balances' => $this->stockBalances(),
             'recentMovements' => $this->recentMovements(['stock_opname']),
+            'recentDocuments' => $this->recentDocuments(['stock_opname']),
         ]);
     }
 
@@ -130,6 +143,7 @@ class InventoryMovementController extends BaseController
                 'reference_type' => 'stock_opname',
                 'reference_no' => trim((string) ($this->request->getPost('reference_no') ?: 'OPN-' . date('Ymd-His'))),
             ]);
+            $this->assertDocumentNoAvailable((int) $payload['company_id'], $payload['site_id'] ?? null, (string) $payload['reference_no']);
             $systemQty = $this->currentStockQty($payload);
             $variance = $countedQty - $systemQty;
             if (abs($variance) < 0.0000001) {
@@ -138,12 +152,58 @@ class InventoryMovementController extends BaseController
 
             $payload['qty'] = $variance;
             $payload['notes'] = trim(($payload['notes'] ?? '') . ' System qty: ' . number_format($systemQty, 4, '.', '') . '; counted qty: ' . number_format($countedQty, 4, '.', ''));
-            (new InventoryStockService())->adjust($payload, auth()->id());
+            $movementId = (new InventoryStockService())->adjust($payload, auth()->id());
+            $documentId = $this->createPostedDocument($payload + [
+                'document_type' => 'stock_opname',
+                'direction' => $variance > 0 ? 'in' : 'out',
+                'movement_id' => $movementId,
+                'system_qty' => $systemQty,
+                'counted_qty' => $countedQty,
+            ], auth()->id());
+            (new InventoryStockMovementModel())->update($movementId, ['reference_id' => $documentId]);
         } catch (RuntimeException $exception) {
             return redirect()->back()->withInput()->with('error', $exception->getMessage());
         }
 
         return redirect()->to('/inventory/stock-opname')->with('message', 'Stock opname variance posted.');
+    }
+
+    public function showDocument(int $id): string
+    {
+        $tenant = new TenantContext(session());
+        $db = Database::connect();
+        $builder = $db->table('inventory_movement_documents d')
+            ->select('d.*, w.code warehouse_code, w.name warehouse_name, l.code location_code, l.name location_name')
+            ->join('warehouses w', 'w.id = d.warehouse_id', 'left')
+            ->join('locations l', 'l.id = d.location_id', 'left')
+            ->where('d.id', $id)
+            ->where('d.deleted_at', null);
+
+        if ($tenant->activeCompanyId() !== null) {
+            $builder->where('d.company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $builder->where('d.site_id', $tenant->activeSiteId());
+        }
+
+        $document = $builder->get()->getRowArray();
+        if ($document === null) {
+            throw new RuntimeException('Inventory movement document not found.');
+        }
+
+        $lines = $db->table('inventory_movement_document_lines l')
+            ->select('l.*, m.gl_entry_id, m.direction movement_direction')
+            ->join('inventory_stock_movements m', 'm.id = l.stock_movement_id', 'left')
+            ->where('l.document_id', $id)
+            ->orderBy('l.line_no', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        return view('inventory/movements/show_document', [
+            'title' => 'Inventory Document ' . $document['document_no'],
+            'document' => $document,
+            'lines' => $lines,
+        ]);
     }
 
     private function movementPayload(int $companyId, TenantContext $tenant, array $overrides = []): array
@@ -276,6 +336,100 @@ class InventoryMovementController extends BaseController
         return (float) ($builder->get()->getRowArray()['qty_on_hand'] ?? 0);
     }
 
+    private function createPostedDocument(array $payload, ?int $userId): int
+    {
+        $movement = (new InventoryStockMovementModel())->find((int) $payload['movement_id']);
+        if ($movement === null) {
+            throw new RuntimeException('Stock movement was posted but cannot be found for document snapshot.');
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $qty = (float) ($movement['qty'] ?? abs((float) $payload['qty']));
+        $stockValue = (float) ($movement['stock_value'] ?? 0);
+        $documentNo = trim((string) ($payload['reference_no'] ?? 'INV-' . date('Ymd-His')));
+
+        $documentModel = new InventoryMovementDocumentModel();
+
+        $documentModel->insert([
+            'company_id' => (int) $payload['company_id'],
+            'site_id' => ! empty($payload['site_id']) ? (int) $payload['site_id'] : null,
+            'document_no' => $documentNo,
+            'document_date' => (string) ($payload['movement_date'] ?? $now),
+            'document_type' => (string) ($payload['document_type'] ?? 'inventory_in_out'),
+            'direction' => $payload['direction'] ?? null,
+            'status' => 'posted',
+            'warehouse_id' => $payload['warehouse_id'] ?? null,
+            'location_id' => $payload['location_id'] ?? null,
+            'total_qty' => $qty,
+            'total_value' => $stockValue,
+            'notes' => $payload['notes'] ?? null,
+            'posted_at' => $now,
+            'posted_by' => $userId,
+            'created_by' => $userId,
+            'updated_by' => $userId,
+        ]);
+        $documentId = (int) $documentModel->getInsertID();
+        if ($documentId < 1) {
+            throw new RuntimeException('Failed to create inventory movement document.');
+        }
+
+        (new InventoryMovementDocumentLineModel())->insert([
+            'document_id' => $documentId,
+            'stock_movement_id' => (int) $payload['movement_id'],
+            'line_no' => 1,
+            'item_id' => $payload['item_id'] ?? null,
+            'item_code' => (string) $payload['item_code'],
+            'item_name' => $payload['item_name'] ?? null,
+            'batch_no' => trim((string) ($payload['batch_no'] ?? '')),
+            'uom_code' => $payload['uom_code'] ?? 'PCS',
+            'system_qty' => $payload['system_qty'] ?? null,
+            'counted_qty' => $payload['counted_qty'] ?? null,
+            'qty' => $qty,
+            'unit_cost' => (float) ($movement['unit_cost'] ?? $payload['unit_cost'] ?? 0),
+            'stock_value' => $stockValue,
+            'notes' => $payload['notes'] ?? null,
+        ]);
+
+        (new AuditLogService())->log('inventory.stock', 'movement_document.post', [
+            'company_id' => $payload['company_id'] ?? null,
+            'site_id' => $payload['site_id'] ?? null,
+            'user_id' => $userId,
+            'table_name' => 'inventory_movement_documents',
+            'record_id' => $documentId,
+            'record_code' => $documentNo,
+            'description' => 'Inventory movement document snapshot created.',
+            'new_values' => [
+                'document_type' => $payload['document_type'] ?? 'inventory_in_out',
+                'movement_id' => $payload['movement_id'],
+                'qty' => $qty,
+                'stock_value' => $stockValue,
+            ],
+        ]);
+
+        return $documentId;
+    }
+
+    private function assertDocumentNoAvailable(int $companyId, ?int $siteId, string $documentNo): void
+    {
+        $documentNo = trim($documentNo);
+        if ($documentNo === '' || ! Database::connect()->tableExists('inventory_movement_documents')) {
+            return;
+        }
+
+        $query = (new InventoryMovementDocumentModel())
+            ->where('company_id', $companyId)
+            ->where('document_no', $documentNo)
+            ->where('deleted_at', null);
+
+        $siteId === null || $siteId < 1
+            ? $query->where('site_id', null)
+            : $query->where('site_id', $siteId);
+
+        if ($query->first() !== null) {
+            throw new RuntimeException('Inventory document number already exists.');
+        }
+    }
+
     private function recentMovements(array $types): array
     {
         $tenant = new TenantContext(session());
@@ -292,6 +446,29 @@ class InventoryMovementController extends BaseController
         }
 
         return $builder->orderBy('id', 'DESC')->get(20)->getResultArray();
+    }
+
+    private function recentDocuments(array $types): array
+    {
+        $tenant = new TenantContext(session());
+        $db = Database::connect();
+        if (! $db->tableExists('inventory_movement_documents')) {
+            return [];
+        }
+
+        $builder = $db->table('inventory_movement_documents')
+            ->where('deleted_at', null);
+        if ($tenant->activeCompanyId() !== null) {
+            $builder->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $builder->where('site_id', $tenant->activeSiteId());
+        }
+        if ($types !== []) {
+            $builder->whereIn('document_type', $types);
+        }
+
+        return $builder->orderBy('id', 'DESC')->get(10)->getResultArray();
     }
 
     private function nullableInt(mixed $value): ?int

@@ -49,6 +49,7 @@
     </div>
 
     <div class="col-xl-7">
+        <?= view('inventory/movements/partials/recent_documents', ['recentDocuments' => $recentDocuments]) ?>
         <?= view('inventory/movements/partials/recent_movements', ['recentMovements' => $recentMovements]) ?>
     </div>
 </div>
