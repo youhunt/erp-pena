@@ -43,6 +43,9 @@ class TenantController extends BaseController
             ],
         ]);
 
-        return redirect()->back()->with('message', 'Active company/site has been changed.');
+        session()->setFlashdata('message', 'Active company/site has been changed.');
+        session()->close();
+
+        return redirect()->to(previous_url() ?: site_url('dashboard'));
     }
 }
