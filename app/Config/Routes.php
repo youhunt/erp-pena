@@ -51,6 +51,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('in-out', 'Inventory\InventoryMovementController::inOut');
         $routes->post('in-out', 'Inventory\InventoryMovementController::storeInOut');
         $routes->get('movement-documents/(:num)', 'Inventory\InventoryMovementController::showDocument/$1');
+        $routes->post('movement-documents/(:num)/reverse', 'Inventory\InventoryMovementDocumentController::reverse/$1');
         $routes->get('transfers', 'Inventory\InventoryTransferController::index');
         $routes->get('transfers/new', 'Inventory\InventoryTransferController::create');
         $routes->post('transfers', 'Inventory\InventoryTransferController::store');
