@@ -49,14 +49,14 @@ $sites = $activeCompanyId === null ? [] : ($sitesByCompany[(int) $activeCompanyI
             <?php if ($companies !== []): ?>
                 <form class="d-none d-lg-flex align-items-center gap-2 me-3" action="<?= site_url('tenant/switch') ?>" method="post" id="tenantSwitchForm">
                     <?= csrf_field() ?>
-                    <select class="form-select form-select-sm tenant-select" name="company_id" id="tenantCompanySelect" aria-label="Active company" data-placeholder="Company">
+                    <select class="form-select form-select-sm select2 tenant-select" name="company_id" id="tenantCompanySelect" aria-label="Active company" data-placeholder="Company">
                         <?php foreach ($companies as $company): ?>
                             <option value="<?= esc((string) $company['id']) ?>" <?= (int) $company['id'] === (int) $activeCompanyId ? 'selected' : '' ?>>
                                 <?= esc($company['code']) ?>
                             </option>
                         <?php endforeach ?>
                     </select>
-                    <select class="form-select form-select-sm tenant-select" name="site_id" id="tenantSiteSelect" aria-label="Active site" data-placeholder="Site">
+                    <select class="form-select form-select-sm select2 tenant-select" name="site_id" id="tenantSiteSelect" aria-label="Active site" data-placeholder="Site">
                         <option value="">All Sites</option>
                         <?php foreach ($sites as $site): ?>
                             <option value="<?= esc((string) $site['id']) ?>" <?= (int) $site['id'] === (int) $activeSiteId ? 'selected' : '' ?>>
@@ -101,9 +101,36 @@ document.addEventListener('DOMContentLoaded', function () {
     let isRebuildingSites = false;
     let isSubmittingTenant = false;
 
-    function syncSelect2(select) {
-        if (window.jQuery && jQuery.fn && jQuery.fn.select2 && jQuery(select).hasClass('select2-hidden-accessible')) {
-            jQuery(select).trigger('change.select2');
+    function ensureTenantSelect2() {
+        if (!window.jQuery || !jQuery.fn || !jQuery.fn.select2) {
+            return;
+        }
+
+        if (window.PenaSelect && typeof window.PenaSelect.init === 'function') {
+            window.PenaSelect.init(form);
+            return;
+        }
+
+        jQuery(form).find('select.form-select').each(function () {
+            const $select = jQuery(this);
+            if (!$select.hasClass('select2-hidden-accessible')) {
+                $select.select2({
+                    width: '100%',
+                    allowClear: !this.required,
+                    placeholder: $select.data('placeholder') || 'Pilih / cari data',
+                    dropdownParent: jQuery(document.body)
+                });
+            }
+        });
+    }
+
+    function refreshTenantSelect2(select) {
+        if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
+            const $select = jQuery(select);
+            if (!$select.hasClass('select2-hidden-accessible')) {
+                ensureTenantSelect2();
+            }
+            $select.trigger('change.select2');
         }
     }
 
@@ -146,7 +173,7 @@ document.addEventListener('DOMContentLoaded', function () {
             siteSelect.value = '';
         }
 
-        syncSelect2(siteSelect);
+        refreshTenantSelect2(siteSelect);
         isRebuildingSites = false;
     }
 
@@ -167,20 +194,11 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    ensureTenantSelect2();
+
     if (window.jQuery) {
         const $company = jQuery(companySelect);
         const $site = jQuery(siteSelect);
-
-        if (jQuery.fn && jQuery.fn.select2) {
-            [$company, $site].forEach(function ($select) {
-                if (!$select.hasClass('select2-hidden-accessible')) {
-                    $select.select2({
-                        width: 'resolve',
-                        minimumResultsForSearch: Infinity
-                    });
-                }
-            });
-        }
 
         $company.off('change.tenantSwitch').on('change.tenantSwitch', function () {
             if (isRebuildingSites) {
