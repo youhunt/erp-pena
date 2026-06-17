@@ -12,7 +12,8 @@ class CustomerTermModel extends Model
     protected $useSoftDeletes = true;
     protected $useTimestamps = true;
     protected $allowedFields = [
-        'company_id', 'site_id', 'company', 'site', 'terms_code', 'terms_name', 'terms_days', 'promo_code',
+        'company_id', 'site_id', 'company', 'site', 'customer', 'customer_name',
+        'terms_code', 'terms_name', 'terms_days', 'promo_code',
         'is_active', 'created_by', 'updated_by', 'deleted_by',
     ];
 }
