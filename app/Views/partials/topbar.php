@@ -7,14 +7,29 @@ $companies = $currentUser === null ? [] : $tenantContext->accessibleCompanies((i
 $activeCompanyId = $tenantContext->activeCompanyId();
 $activeSiteId = $tenantContext->activeSiteId();
 $sitesByCompany = [];
+$activeCompanyCode = '';
+$activeSiteCode = '';
 
 if ($currentUser !== null) {
     foreach ($companies as $company) {
-        $sitesByCompany[(int) $company['id']] = $tenantContext->accessibleSites((int) $currentUser->id, (int) $company['id']);
+        $companyId = (int) $company['id'];
+        $sitesByCompany[$companyId] = $tenantContext->accessibleSites((int) $currentUser->id, $companyId);
+
+        if ($companyId === (int) $activeCompanyId) {
+            $activeCompanyCode = (string) ($company['code'] ?? '');
+        }
     }
 }
 
 $sites = $activeCompanyId === null ? [] : ($sitesByCompany[(int) $activeCompanyId] ?? []);
+foreach ($sites as $site) {
+    if ((int) $site['id'] === (int) $activeSiteId) {
+        $activeSiteCode = (string) ($site['code'] ?? '');
+        break;
+    }
+}
+
+$tenantLabel = trim(($activeCompanyCode ?: 'Company') . ($activeSiteCode !== '' ? ' / ' . $activeSiteCode : ''));
 ?>
 
 <header id="page-topbar">
@@ -45,18 +60,18 @@ $sites = $activeCompanyId === null ? [] : ($sitesByCompany[(int) $activeCompanyI
             </button>
         </div>
 
-        <div class="d-flex">
+        <div class="d-flex align-items-center">
             <?php if ($companies !== []): ?>
-                <form class="d-none d-lg-flex align-items-center gap-2 me-3" action="<?= site_url('tenant/switch') ?>" method="post" id="tenantSwitchForm">
+                <form class="tenant-switch-form d-none d-lg-flex align-items-center gap-2 me-3" action="<?= site_url('tenant/switch') ?>" method="post" id="tenantSwitchFormDesktop" data-auto-submit="1">
                     <?= csrf_field() ?>
-                    <select class="form-select form-select-sm select2 tenant-select" name="company_id" id="tenantCompanySelect" aria-label="Active company" data-placeholder="Company">
+                    <select class="form-select form-select-sm select2 tenant-select" name="company_id" aria-label="Active company" data-placeholder="Company">
                         <?php foreach ($companies as $company): ?>
                             <option value="<?= esc((string) $company['id']) ?>" <?= (int) $company['id'] === (int) $activeCompanyId ? 'selected' : '' ?>>
                                 <?= esc($company['code']) ?>
                             </option>
                         <?php endforeach ?>
                     </select>
-                    <select class="form-select form-select-sm select2 tenant-select" name="site_id" id="tenantSiteSelect" aria-label="Active site" data-placeholder="Site">
+                    <select class="form-select form-select-sm select2 tenant-select" name="site_id" aria-label="Active site" data-placeholder="Site">
                         <option value="">All Sites</option>
                         <?php foreach ($sites as $site): ?>
                             <option value="<?= esc((string) $site['id']) ?>" <?= (int) $site['id'] === (int) $activeSiteId ? 'selected' : '' ?>>
@@ -65,10 +80,54 @@ $sites = $activeCompanyId === null ? [] : ($sitesByCompany[(int) $activeCompanyI
                         <?php endforeach ?>
                     </select>
                 </form>
+
+                <div class="dropdown d-inline-block d-lg-none">
+                    <button type="button" class="btn header-item waves-effect px-2" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" aria-label="Switch tenant">
+                        <i class="bx bx-buildings font-size-22 align-middle"></i>
+                        <span class="badge bg-primary-subtle text-primary ms-1"><?= esc($activeSiteCode !== '' ? $activeSiteCode : ($activeCompanyCode ?: 'Tenant')) ?></span>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end p-3" style="min-width: 290px;" onclick="event.stopPropagation();">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <div>
+                                <div class="fw-semibold">Active Tenant</div>
+                                <div class="text-muted small"><?= esc($tenantLabel) ?></div>
+                            </div>
+                        </div>
+
+                        <form class="tenant-switch-form" action="<?= site_url('tenant/switch') ?>" method="post" id="tenantSwitchFormMobile" data-auto-submit="0">
+                            <?= csrf_field() ?>
+                            <div class="mb-3">
+                                <label class="form-label small mb-1">Company</label>
+                                <select class="form-select form-select-sm select2 tenant-select" name="company_id" aria-label="Active company mobile" data-placeholder="Company">
+                                    <?php foreach ($companies as $company): ?>
+                                        <option value="<?= esc((string) $company['id']) ?>" <?= (int) $company['id'] === (int) $activeCompanyId ? 'selected' : '' ?>>
+                                            <?= esc($company['code']) ?>
+                                        </option>
+                                    <?php endforeach ?>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small mb-1">Site</label>
+                                <select class="form-select form-select-sm select2 tenant-select" name="site_id" aria-label="Active site mobile" data-placeholder="Site">
+                                    <option value="">All Sites</option>
+                                    <?php foreach ($sites as $site): ?>
+                                        <option value="<?= esc((string) $site['id']) ?>" <?= (int) $site['id'] === (int) $activeSiteId ? 'selected' : '' ?>>
+                                            <?= esc($site['code']) ?>
+                                        </option>
+                                    <?php endforeach ?>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm w-100">
+                                <i class="bx bx-check me-1"></i> Apply Tenant
+                            </button>
+                        </form>
+                    </div>
+                </div>
             <?php endif ?>
 
             <div class="dropdown d-inline-block">
-                <button type="button" class="btn header-item waves-effect" id="page-header-user-dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                <button type="button" class="btn header-item waves-effect px-2 px-xl-3" id="page-header-user-dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    <i class="bx bx-user-circle font-size-22 align-middle d-inline-block d-xl-none"></i>
                     <span class="d-none d-xl-inline-block ms-1"><?= esc(auth()->user()?->username ?? 'User') ?></span>
                     <i class="mdi mdi-chevron-down d-none d-xl-inline-block"></i>
                 </button>
@@ -89,19 +148,14 @@ $sites = $activeCompanyId === null ? [] : ($sitesByCompany[(int) $activeCompanyI
 <?php if ($companies !== []): ?>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const form = document.getElementById('tenantSwitchForm');
-    const companySelect = document.getElementById('tenantCompanySelect');
-    const siteSelect = document.getElementById('tenantSiteSelect');
+    const forms = document.querySelectorAll('.tenant-switch-form');
     const sitesByCompany = <?= json_encode($sitesByCompany, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
-    if (!form || !companySelect || !siteSelect) {
+    if (!forms.length) {
         return;
     }
 
-    let isRebuildingSites = false;
-    let isSubmittingTenant = false;
-
-    function ensureTenantSelect2() {
+    function ensureTenantSelect2(form) {
         if (!window.jQuery || !jQuery.fn || !jQuery.fn.select2) {
             return;
         }
@@ -124,31 +178,23 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    function refreshTenantSelect2(select) {
+    function refreshTenantSelect2(form, select) {
         if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
             const $select = jQuery(select);
             if (!$select.hasClass('select2-hidden-accessible')) {
-                ensureTenantSelect2();
+                ensureTenantSelect2(form);
             }
             $select.trigger('change.select2');
         }
     }
 
-    function submitTenantSwitch() {
-        if (isSubmittingTenant) {
+    function rebuildSites(form, companyId, selectedSiteId) {
+        const siteSelect = form.querySelector('select[name="site_id"]');
+        if (!siteSelect) {
             return;
         }
 
-        isSubmittingTenant = true;
-        if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
-            jQuery(companySelect).select2('close');
-            jQuery(siteSelect).select2('close');
-        }
-        form.submit();
-    }
-
-    function rebuildSites(companyId, selectedSiteId) {
-        isRebuildingSites = true;
+        form.dataset.rebuildingSites = '1';
         const sites = sitesByCompany[String(companyId)] || sitesByCompany[companyId] || [];
         siteSelect.innerHTML = '';
 
@@ -173,50 +219,67 @@ document.addEventListener('DOMContentLoaded', function () {
             siteSelect.value = '';
         }
 
-        refreshTenantSelect2(siteSelect);
-        isRebuildingSites = false;
+        refreshTenantSelect2(form, siteSelect);
+        form.dataset.rebuildingSites = '0';
     }
 
-    function bindNativeFallback() {
-        companySelect.addEventListener('change', function () {
-            if (isRebuildingSites) {
-                return;
-            }
-            rebuildSites(companySelect.value, '');
-            submitTenantSwitch();
-        });
+    function submitTenantSwitch(form) {
+        if (form.dataset.submittingTenant === '1') {
+            return;
+        }
 
-        siteSelect.addEventListener('change', function () {
-            if (isRebuildingSites) {
-                return;
-            }
-            submitTenantSwitch();
-        });
+        form.dataset.submittingTenant = '1';
+        if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
+            jQuery(form).find('select.form-select').select2('close');
+        }
+        form.submit();
     }
 
-    ensureTenantSelect2();
+    forms.forEach(function (form) {
+        const companySelect = form.querySelector('select[name="company_id"]');
+        const siteSelect = form.querySelector('select[name="site_id"]');
+        const autoSubmit = form.dataset.autoSubmit === '1';
 
-    if (window.jQuery) {
-        const $company = jQuery(companySelect);
-        const $site = jQuery(siteSelect);
+        if (!companySelect || !siteSelect) {
+            return;
+        }
 
-        $company.off('change.tenantSwitch').on('change.tenantSwitch', function () {
-            if (isRebuildingSites) {
-                return;
-            }
-            rebuildSites(companySelect.value, '');
-            submitTenantSwitch();
-        });
+        ensureTenantSelect2(form);
 
-        $site.off('change.tenantSwitch').on('change.tenantSwitch', function () {
-            if (isRebuildingSites) {
-                return;
-            }
-            submitTenantSwitch();
-        });
-    } else {
-        bindNativeFallback();
-    }
+        if (window.jQuery) {
+            jQuery(companySelect).off('change.tenantSwitch').on('change.tenantSwitch', function () {
+                if (form.dataset.rebuildingSites === '1') {
+                    return;
+                }
+                rebuildSites(form, companySelect.value, '');
+                if (autoSubmit) {
+                    submitTenantSwitch(form);
+                }
+            });
+
+            jQuery(siteSelect).off('change.tenantSwitch').on('change.tenantSwitch', function () {
+                if (form.dataset.rebuildingSites === '1') {
+                    return;
+                }
+                if (autoSubmit) {
+                    submitTenantSwitch(form);
+                }
+            });
+        } else {
+            companySelect.addEventListener('change', function () {
+                rebuildSites(form, companySelect.value, '');
+                if (autoSubmit) {
+                    submitTenantSwitch(form);
+                }
+            });
+
+            siteSelect.addEventListener('change', function () {
+                if (autoSubmit) {
+                    submitTenantSwitch(form);
+                }
+            });
+        }
+    });
 });
 </script>
 <?php endif ?>
