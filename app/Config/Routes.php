@@ -118,6 +118,8 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('orders/import', 'System\OrderImportController::importPurchase');
         $routes->post('orders/import/commit', 'System\OrderImportController::commitPurchase');
         $routes->post('orders', 'Purchase\PurchaseOrderController::store');
+        $routes->get('orders/(:num)/edit', 'Purchase\PurchaseOrderController::edit/$1');
+        $routes->post('orders/(:num)', 'Purchase\PurchaseOrderController::update/$1');
         $routes->get('orders/(:num)', 'Purchase\PurchaseOrderController::show/$1');
         $routes->post('orders/(:num)/submit', 'Purchase\PurchaseOrderController::submit/$1');
         $routes->post('orders/(:num)/approve', 'Purchase\PurchaseOrderController::approve/$1');
