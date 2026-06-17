@@ -42,6 +42,7 @@ $canEditPo = in_array($status, ['draft', 'submitted', 'approved'], true) && ! $h
 
                 <div class="d-flex flex-wrap gap-2 mt-3">
                     <a href="<?= site_url('purchase/orders') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back</a>
+                    <a href="<?= site_url('print/purchase-orders/' . (int) $order['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
                     <?php if ($canEditPo): ?>
                         <a href="<?= site_url('purchase/orders/' . $order['id'] . '/edit') ?>" class="btn btn-outline-primary"><i class="bx bx-edit me-1"></i> Edit</a>
                     <?php endif ?>
