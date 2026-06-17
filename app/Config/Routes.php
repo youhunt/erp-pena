@@ -14,6 +14,13 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->get('audit-logs', 'AuditLogController::index');
     $routes->get('audit-logs/(:num)', 'AuditLogController::show/$1');
 
+    $routes->get('print/purchase-orders/(:num)', 'DocumentPrintController::purchaseOrder/$1');
+    $routes->get('print/sales-orders/(:num)', 'DocumentPrintController::salesOrder/$1');
+    $routes->get('print/purchase-receipts/(:num)', 'DocumentPrintController::purchaseReceipt/$1');
+    $routes->get('print/sales-deliveries/(:num)', 'DocumentPrintController::salesDelivery/$1');
+    $routes->get('print/purchase-invoices/(:num)', 'DocumentPrintController::purchaseInvoice/$1');
+    $routes->get('print/sales-invoices/(:num)', 'DocumentPrintController::salesInvoice/$1');
+
     $routes->group('system', static function (RouteCollection $routes): void {
         $routes->get('data-import', 'System\DataImportController::index');
         $routes->get('data-import/coa/template', 'System\DataImportController::coaTemplate');
