@@ -31,6 +31,7 @@
 
                 <div class="d-flex flex-wrap gap-2 mt-3">
                     <a href="<?= site_url('sales/orders') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back</a>
+                    <a href="<?= site_url('print/sales-orders/' . (int) $order['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
                     <?php if ($status === 'draft'): ?>
                         <form method="post" action="<?= site_url('sales/orders/' . $order['id'] . '/submit') ?>"><?= csrf_field() ?><button class="btn btn-info" onclick="return confirm('Submit this SO?')">Submit</button></form>
                     <?php endif ?>
