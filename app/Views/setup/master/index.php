@@ -3,6 +3,11 @@
 <?= $this->section('content') ?>
 <?php
 $listFields = $config['list_fields'] ?? array_keys($config['fields'] ?? []);
+if ($resource === 'customer-terms') {
+    $listFields = ['customer', 'customer_name', 'terms_code', 'terms_name', 'terms_days', 'promo_code'];
+} elseif ($resource === 'supplier-terms') {
+    $listFields = ['supplier', 'supplier_name', 'terms_code', 'terms_name', 'terms_days', 'promo_code'];
+}
 $listFields = array_values(array_filter($listFields, static fn (string $field): bool => $field !== 'is_active'));
 $listFields = array_slice($listFields, 0, 6);
 
