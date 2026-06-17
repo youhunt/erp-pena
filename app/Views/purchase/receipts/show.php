@@ -37,6 +37,7 @@ $statusClass = match ($status) {
                 </table>
                 <div class="mt-3 d-flex flex-wrap gap-2">
                     <a href="<?= site_url('purchase/orders/' . $receipt['purchase_order_id']) ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to PO</a>
+                    <a href="<?= site_url('print/purchase-receipts/' . (int) $receipt['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
                     <?php if ($status === 'posted'): ?>
                         <a href="<?= site_url('purchase/receipts/' . $receipt['id'] . '/invoice') ?>" class="btn btn-primary"><i class="bx bx-receipt me-1"></i> Create AP Invoice</a>
                         <form method="post" action="<?= site_url('purchase/receipts/' . (int) $receipt['id'] . '/reverse') ?>" class="d-flex gap-2">
