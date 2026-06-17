@@ -49,6 +49,10 @@ class PurchaseOrderController extends BaseController
     {
         return view('purchase/orders/form', [
             'title' => 'Create Purchase Order',
+            'order' => [],
+            'lines' => [],
+            'isEdit' => false,
+            'action' => site_url('purchase/orders'),
             'suppliers' => $this->masterRows('suppliers'),
             'items' => $this->masterRows('items'),
         ]);
@@ -71,34 +75,64 @@ class PurchaseOrderController extends BaseController
             return redirect()->back()->withInput()->with('error', 'At least one valid line item is required.');
         }
 
-        $supplierId = (int) ($this->request->getPost('supplier_id') ?: 0);
-        $supplier = $supplierId > 0 ? Database::connect()->table('suppliers')->where('id', $supplierId)->get()->getRowArray() : null;
-        $supplierCode = $supplier['supplier'] ?? $supplier['code'] ?? null;
-        $supplierName = $supplier['supplierna'] ?? $supplier['name'] ?? trim((string) $this->request->getPost('supplier_name'));
-
         try {
-            $poId = (new PurchaseOrderService())->create([
-                'company_id' => $companyId,
-                'site_id' => $tenant->activeSiteId(),
-                'company' => session('active_company_code'),
-                'site' => session('active_site_code'),
-                'po_no' => trim((string) $this->request->getPost('po_no')),
-                'po_date' => (string) $this->request->getPost('po_date'),
-                'supplier_id' => $supplierId > 0 ? $supplierId : null,
-                'supplier' => $supplierCode,
-                'supplier_code' => $supplierCode,
-                'supplier_name' => $supplierName,
-                'terms_code' => trim((string) ($this->request->getPost('terms_code') ?: ($supplier['terms_code'] ?? $supplier['terms'] ?? ''))),
-                'currency_code' => trim((string) ($this->request->getPost('currency_code') ?: 'IDR')),
-                'status' => 'draft',
-                'document_status' => 'draft',
-                'notes' => trim((string) $this->request->getPost('notes')),
-            ], $lines, auth()->id());
+            $poId = (new PurchaseOrderService())->create($this->postedHeader($tenant), $lines, auth()->id());
         } catch (RuntimeException $exception) {
             return redirect()->back()->withInput()->with('error', $exception->getMessage());
         }
 
         return redirect()->to('/purchase/orders/' . $poId)->with('message', 'Purchase order created.');
+    }
+
+    public function edit(int $id): string
+    {
+        $tenant = new TenantContext(session());
+        $order = $this->scopedOrder($tenant, $id);
+        if ($order === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        $status = (string) ($order['document_status'] ?? $order['status'] ?? 'draft');
+        $lines = (new PurchaseOrderLineModel())->where('purchase_order_id', $id)->orderBy('line_no', 'ASC')->findAll();
+        if (! in_array($status, ['draft', 'submitted', 'approved'], true) || $this->hasReceivedLine($lines)) {
+            return view('errors/html/error_404', ['message' => 'PO cannot be edited because it is already received/closed/cancelled or has received quantity.']);
+        }
+
+        return view('purchase/orders/form', [
+            'title' => 'Edit Purchase Order',
+            'order' => $order,
+            'lines' => $lines,
+            'isEdit' => true,
+            'action' => site_url('purchase/orders/' . $id),
+            'suppliers' => $this->masterRows('suppliers'),
+            'items' => $this->masterRows('items'),
+        ]);
+    }
+
+    public function update(int $id)
+    {
+        $tenant = new TenantContext(session());
+        $order = $this->scopedOrder($tenant, $id);
+        if ($order === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        if (! $this->validate(['po_no' => 'required|max_length[60]', 'po_date' => 'required|valid_date[Y-m-d]'])) {
+            return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
+        }
+
+        $lines = $this->postedLines();
+        if ($lines === []) {
+            return redirect()->back()->withInput()->with('error', 'At least one valid line item is required.');
+        }
+
+        try {
+            (new PurchaseOrderService())->update($id, $this->postedHeader($tenant, $order), $lines, auth()->id());
+        } catch (RuntimeException $exception) {
+            return redirect()->back()->withInput()->with('error', $exception->getMessage());
+        }
+
+        return redirect()->to('/purchase/orders/' . $id)->with('message', 'Purchase order updated.');
     }
 
     public function show(int $id): string
@@ -164,17 +198,63 @@ class PurchaseOrderController extends BaseController
         return $orders->find($id);
     }
 
+    private function postedHeader(TenantContext $tenant, array $existing = []): array
+    {
+        $companyId = $tenant->activeCompanyId();
+        $supplierId = (int) ($this->request->getPost('supplier_id') ?: 0);
+        $supplier = $supplierId > 0 ? Database::connect()->table('suppliers')->where('id', $supplierId)->get()->getRowArray() : null;
+        $supplierCode = $supplier['supplier'] ?? $supplier['code'] ?? $existing['supplier_code'] ?? $existing['supplier'] ?? null;
+        $supplierName = $supplier['supplierna'] ?? $supplier['name'] ?? trim((string) $this->request->getPost('supplier_name'));
+
+        return [
+            'company_id' => $companyId,
+            'site_id' => $tenant->activeSiteId(),
+            'company' => session('active_company_code') ?: ($existing['company'] ?? null),
+            'site' => session('active_site_code') ?: ($existing['site'] ?? null),
+            'po_no' => trim((string) $this->request->getPost('po_no')),
+            'po_date' => (string) $this->request->getPost('po_date'),
+            'delivery_date' => $this->nullableDate($this->request->getPost('delivery_date')),
+            'arrive_date' => $this->nullableDate($this->request->getPost('arrive_date')),
+            'supplier_id' => $supplierId > 0 ? $supplierId : ($existing['supplier_id'] ?? null),
+            'supplier' => $supplierCode,
+            'supplier_code' => $supplierCode,
+            'supplier_name' => $supplierName,
+            'terms_code' => trim((string) ($this->request->getPost('terms_code') ?: ($supplier['terms_code'] ?? $supplier['terms'] ?? $existing['terms_code'] ?? ''))),
+            'currency_code' => trim((string) ($this->request->getPost('currency_code') ?: 'IDR')),
+            'discount_percent' => (float) $this->request->getPost('discount_percent'),
+            'discount_amount' => (float) $this->request->getPost('discount_amount'),
+            'freight_amount' => (float) $this->request->getPost('freight_amount'),
+            'other_amount' => (float) $this->request->getPost('other_amount'),
+            'special_charge_amount' => (float) $this->request->getPost('special_charge_amount'),
+            'vat_amount' => (float) $this->request->getPost('vat_amount'),
+            'wht_amount' => (float) $this->request->getPost('wht_amount'),
+            'status' => $existing['status'] ?? 'draft',
+            'document_status' => $existing['document_status'] ?? 'draft',
+            'notes' => trim((string) $this->request->getPost('notes')),
+            'remarks' => trim((string) $this->request->getPost('remarks')),
+        ];
+    }
+
     private function postedLines(): array
     {
         $poLines = (array) $this->request->getPost('po_line');
         $itemCodes = (array) $this->request->getPost('item_code');
         $itemIds = (array) $this->request->getPost('item_id');
         $itemNames = (array) $this->request->getPost('item_name');
+        $descriptions = (array) $this->request->getPost('description');
         $qtys = (array) $this->request->getPost('qty');
         $uoms = (array) $this->request->getPost('uom_code');
         $prices = (array) $this->request->getPost('unit_price');
-        $discounts = (array) $this->request->getPost('discount_amount');
-        $taxes = (array) $this->request->getPost('tax_amount');
+        $discountPercents = (array) $this->request->getPost('discount_percent_line');
+        $discounts = (array) $this->request->getPost('discount_amount_line');
+        $freights = (array) $this->request->getPost('freight_amount_line');
+        $specials = (array) $this->request->getPost('special_charge_amount_line');
+        $vatPercents = (array) $this->request->getPost('vat_percent_line');
+        $vats = (array) $this->request->getPost('vat_amount_line');
+        $whtPercents = (array) $this->request->getPost('wht_percent_line');
+        $whts = (array) $this->request->getPost('wht_amount_line');
+        $deliveryDates = (array) $this->request->getPost('delivery_date_line');
+        $arriveDates = (array) $this->request->getPost('arrive_date_line');
         $lines = [];
 
         foreach ($itemCodes as $index => $code) {
@@ -193,14 +273,34 @@ class PurchaseOrderController extends BaseController
                 'item_id' => (int) ($itemIds[$index] ?? 0) > 0 ? (int) $itemIds[$index] : null,
                 'item_code' => $code !== '' ? $code : null,
                 'item_name' => $name !== '' ? $name : $code,
+                'description' => trim((string) ($descriptions[$index] ?? '')),
                 'qty' => $qty,
                 'uom_code' => trim((string) ($uoms[$index] ?? 'PCS')),
                 'unit_price' => $price,
+                'discount_percent' => (float) ($discountPercents[$index] ?? 0),
                 'discount_amount' => (float) ($discounts[$index] ?? 0),
-                'tax_amount' => (float) ($taxes[$index] ?? 0),
+                'freight_amount' => (float) ($freights[$index] ?? 0),
+                'special_charge_amount' => (float) ($specials[$index] ?? 0),
+                'vat_percent' => (float) ($vatPercents[$index] ?? 0),
+                'vat_amount' => (float) ($vats[$index] ?? 0),
+                'wht_percent' => (float) ($whtPercents[$index] ?? 0),
+                'wht_amount' => (float) ($whts[$index] ?? 0),
+                'delivery_date' => $this->nullableDate($deliveryDates[$index] ?? null),
+                'arrive_date' => $this->nullableDate($arriveDates[$index] ?? null),
             ];
         }
         return $lines;
+    }
+
+    private function hasReceivedLine(array $lines): bool
+    {
+        foreach ($lines as $line) {
+            if ((float) ($line['qty_received'] ?? 0) > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function masterRows(string $table): array
@@ -221,5 +321,11 @@ class PurchaseOrderController extends BaseController
             $builder->where('site_id', $tenant->activeSiteId());
         }
         return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get()->getResultArray();
+    }
+
+    private function nullableDate(mixed $value): ?string
+    {
+        $value = trim((string) $value);
+        return $value !== '' ? $value : null;
     }
 }
