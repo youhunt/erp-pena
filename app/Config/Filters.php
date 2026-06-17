@@ -81,6 +81,9 @@ class Filters extends BaseFilters
             'before' => [
                 'setup/*',
             ],
+            'after' => [
+                'setup/*',
+            ],
         ],
         'permission' => [
             'before' => [
