@@ -4,6 +4,7 @@ namespace Config;
 
 use App\Filters\TenantBootstrapFilter;
 use App\Filters\PermissionGuardFilter;
+use App\Filters\SetupMasterTenantGuardFilter;
 use CodeIgniter\Config\Filters as BaseFilters;
 use CodeIgniter\Filters\Cors;
 use CodeIgniter\Filters\CSRF;
@@ -29,6 +30,7 @@ class Filters extends BaseFilters
         'performance'   => PerformanceMetrics::class,
         'tenant'        => TenantBootstrapFilter::class,
         'permission'    => PermissionGuardFilter::class,
+        'setupTenant'   => SetupMasterTenantGuardFilter::class,
     ];
 
     public array $required = [
@@ -73,6 +75,11 @@ class Filters extends BaseFilters
                 'ai-documents',
                 'ai-documents/*',
                 'ai-ocr/*',
+            ],
+        ],
+        'setupTenant' => [
+            'before' => [
+                'setup/*',
             ],
         ],
         'permission' => [
