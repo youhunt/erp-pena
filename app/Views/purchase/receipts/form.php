@@ -28,7 +28,8 @@
                     <select name="warehouse_id" class="form-select">
                         <option value="">No Warehouse</option>
                         <?php foreach ($warehouses as $warehouse): ?>
-                            <option value="<?= (int) $warehouse['id'] ?>"><?= esc(($warehouse['code'] ?? $warehouse['id']) . ' - ' . ($warehouse['name'] ?? '-')) ?></option>
+                            <?php $warehouseId = (int) $warehouse['id']; ?>
+                            <option value="<?= $warehouseId ?>" <?= (int) old('warehouse_id', 0) === $warehouseId ? 'selected' : '' ?>><?= esc(($warehouse['code'] ?? $warehouse['id']) . ' - ' . ($warehouse['name'] ?? '-')) ?></option>
                         <?php endforeach ?>
                     </select>
                 </div>
@@ -37,7 +38,8 @@
                     <select name="location_id" class="form-select">
                         <option value="">No Location</option>
                         <?php foreach ($locations as $location): ?>
-                            <option value="<?= (int) $location['id'] ?>"><?= esc(($location['code'] ?? $location['id']) . ' - ' . ($location['name'] ?? '-')) ?></option>
+                            <?php $locationId = (int) $location['id']; ?>
+                            <option value="<?= $locationId ?>" <?= (int) old('location_id', 0) === $locationId ? 'selected' : '' ?>><?= esc(($location['code'] ?? $location['id']) . ' - ' . ($location['name'] ?? '-')) ?></option>
                         <?php endforeach ?>
                     </select>
                 </div>
@@ -52,6 +54,9 @@
     <div class="card">
         <div class="card-body">
             <h4 class="card-title mb-3">Outstanding Lines</h4>
+            <div class="alert alert-info py-2">
+                Qty <strong>Receive Now</strong> bisa diedit sebagian. Kalau posting gagal, angka yang sudah diedit akan tetap dipertahankan agar mudah koreksi.
+            </div>
             <div class="table-responsive">
                 <table class="table table-nowrap align-middle mb-0">
                     <thead class="table-light">
@@ -68,14 +73,24 @@
                     </thead>
                     <tbody>
                     <?php foreach ($lines as $index => $line): ?>
+                        <?php $outstanding = (float) ($line['qty_outstanding'] ?? $line['qty'] ?? 0); ?>
                         <tr>
                             <td><?= esc($line['po_line'] ?? $line['line_no']) ?><input type="hidden" name="purchase_order_line_id[]" value="<?= (int) $line['id'] ?>"></td>
                             <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
                             <td><input type="text" name="batch_no[]" class="form-control" value="<?= esc(old('batch_no.' . $index)) ?>" placeholder="Optional"></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_ordered'] ?? $line['qty'] ?? 0), 4)) ?></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_received'] ?? 0), 4)) ?></td>
-                            <td class="text-end fw-semibold"><?= esc(number_format((float) ($line['qty_outstanding'] ?? $line['qty'] ?? 0), 4)) ?></td>
-                            <td><input type="number" step="0.0001" max="<?= esc((string) ($line['qty_outstanding'] ?? $line['qty'] ?? 0)) ?>" name="qty_received[]" class="form-control text-end" value="<?= esc((string) ($line['qty_outstanding'] ?? $line['qty'] ?? 0)) ?>"></td>
+                            <td class="text-end fw-semibold"><?= esc(number_format($outstanding, 4)) ?></td>
+                            <td>
+                                <input
+                                    type="number"
+                                    step="0.0001"
+                                    max="<?= esc((string) $outstanding) ?>"
+                                    name="qty_received[]"
+                                    class="form-control text-end"
+                                    value="<?= esc((string) old('qty_received.' . $index, $outstanding)) ?>"
+                                >
+                            </td>
                             <td><?= esc($line['uom_code'] ?? '-') ?></td>
                         </tr>
                     <?php endforeach ?>
