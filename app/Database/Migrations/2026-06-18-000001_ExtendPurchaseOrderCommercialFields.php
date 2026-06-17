@@ -38,15 +38,15 @@ class ExtendPurchaseOrderCommercialFields extends Migration
         }
 
         $fields = [];
-        $this->addIfMissing($fields, 'delivery_date', ['type' => 'DATE', 'null' => true, 'after' => 'po_date']);
-        $this->addIfMissing($fields, 'arrive_date', ['type' => 'DATE', 'null' => true, 'after' => 'delivery_date']);
-        $this->addIfMissing($fields, 'discount_percent', ['type' => 'DECIMAL', 'constraint' => '10,4', 'default' => 0, 'after' => 'subtotal_amount']);
-        $this->addIfMissing($fields, 'freight_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'discount_amount']);
-        $this->addIfMissing($fields, 'other_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'freight_amount']);
-        $this->addIfMissing($fields, 'special_charge_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'other_amount']);
-        $this->addIfMissing($fields, 'vat_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'special_charge_amount']);
-        $this->addIfMissing($fields, 'wht_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'vat_amount']);
-        $this->addIfMissing($fields, 'remarks', ['type' => 'TEXT', 'null' => true, 'after' => 'notes']);
+        $this->addIfMissing('purchase_orders', $fields, 'delivery_date', ['type' => 'DATE', 'null' => true, 'after' => 'po_date']);
+        $this->addIfMissing('purchase_orders', $fields, 'arrive_date', ['type' => 'DATE', 'null' => true, 'after' => 'delivery_date']);
+        $this->addIfMissing('purchase_orders', $fields, 'discount_percent', ['type' => 'DECIMAL', 'constraint' => '10,4', 'default' => 0, 'after' => 'subtotal_amount']);
+        $this->addIfMissing('purchase_orders', $fields, 'freight_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'discount_amount']);
+        $this->addIfMissing('purchase_orders', $fields, 'other_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'freight_amount']);
+        $this->addIfMissing('purchase_orders', $fields, 'special_charge_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'other_amount']);
+        $this->addIfMissing('purchase_orders', $fields, 'vat_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'special_charge_amount']);
+        $this->addIfMissing('purchase_orders', $fields, 'wht_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'vat_amount']);
+        $this->addIfMissing('purchase_orders', $fields, 'remarks', ['type' => 'TEXT', 'null' => true, 'after' => 'notes']);
 
         if ($fields !== []) {
             $this->forge->addColumn('purchase_orders', $fields);
@@ -60,27 +60,25 @@ class ExtendPurchaseOrderCommercialFields extends Migration
         }
 
         $fields = [];
-        $this->addIfMissing($fields, 'description', ['type' => 'TEXT', 'null' => true, 'after' => 'item_name']);
-        $this->addIfMissing($fields, 'discount_percent', ['type' => 'DECIMAL', 'constraint' => '10,4', 'default' => 0, 'after' => 'unit_price']);
-        $this->addIfMissing($fields, 'freight_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'discount_amount']);
-        $this->addIfMissing($fields, 'special_charge_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'freight_amount']);
-        $this->addIfMissing($fields, 'vat_percent', ['type' => 'DECIMAL', 'constraint' => '10,4', 'default' => 0, 'after' => 'special_charge_amount']);
-        $this->addIfMissing($fields, 'vat_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'vat_percent']);
-        $this->addIfMissing($fields, 'wht_percent', ['type' => 'DECIMAL', 'constraint' => '10,4', 'default' => 0, 'after' => 'vat_amount']);
-        $this->addIfMissing($fields, 'wht_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'wht_percent']);
-        $this->addIfMissing($fields, 'delivery_date', ['type' => 'DATE', 'null' => true, 'after' => 'line_status']);
-        $this->addIfMissing($fields, 'arrive_date', ['type' => 'DATE', 'null' => true, 'after' => 'delivery_date']);
+        $this->addIfMissing('purchase_order_lines', $fields, 'description', ['type' => 'TEXT', 'null' => true, 'after' => 'item_name']);
+        $this->addIfMissing('purchase_order_lines', $fields, 'discount_percent', ['type' => 'DECIMAL', 'constraint' => '10,4', 'default' => 0, 'after' => 'unit_price']);
+        $this->addIfMissing('purchase_order_lines', $fields, 'freight_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'discount_amount']);
+        $this->addIfMissing('purchase_order_lines', $fields, 'special_charge_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'freight_amount']);
+        $this->addIfMissing('purchase_order_lines', $fields, 'vat_percent', ['type' => 'DECIMAL', 'constraint' => '10,4', 'default' => 0, 'after' => 'special_charge_amount']);
+        $this->addIfMissing('purchase_order_lines', $fields, 'vat_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'vat_percent']);
+        $this->addIfMissing('purchase_order_lines', $fields, 'wht_percent', ['type' => 'DECIMAL', 'constraint' => '10,4', 'default' => 0, 'after' => 'vat_amount']);
+        $this->addIfMissing('purchase_order_lines', $fields, 'wht_amount', ['type' => 'DECIMAL', 'constraint' => '18,2', 'default' => 0, 'after' => 'wht_percent']);
+        $this->addIfMissing('purchase_order_lines', $fields, 'delivery_date', ['type' => 'DATE', 'null' => true, 'after' => 'line_status']);
+        $this->addIfMissing('purchase_order_lines', $fields, 'arrive_date', ['type' => 'DATE', 'null' => true, 'after' => 'delivery_date']);
 
         if ($fields !== []) {
             $this->forge->addColumn('purchase_order_lines', $fields);
         }
     }
 
-    private function addIfMissing(array &$fields, string $field, array $definition): void
+    private function addIfMissing(string $table, array &$fields, string $field, array $definition): void
     {
-        $table = str_contains($field, 'dummy') ? '' : debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2)[1]['function'];
-        $actualTable = $table === 'addHeaderFields' ? 'purchase_orders' : 'purchase_order_lines';
-        if (! $this->db->fieldExists($field, $actualTable)) {
+        if (! $this->db->fieldExists($field, $table)) {
             $fields[$field] = $definition;
         }
     }
