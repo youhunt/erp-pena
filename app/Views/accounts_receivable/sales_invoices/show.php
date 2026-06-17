@@ -44,6 +44,7 @@ $paidAmount = (float) ($receivable['paid_amount'] ?? $invoice['paid_amount'] ?? 
                 </table>
                 <div class="mt-3 d-flex flex-wrap gap-2">
                     <a href="<?= site_url('ar/sales-invoices') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back</a>
+                    <a href="<?= site_url('print/sales-invoices/' . (int) $invoice['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
                     <?php if ($status !== 'cancelled' && $outstandingAmount > 0): ?>
                         <a href="<?= site_url('ar/sales-invoices/' . $invoice['id'] . '/receipt') ?>" class="btn btn-primary"><i class="bx bx-money-withdraw me-1"></i> Post Receipt</a>
                     <?php endif ?>
