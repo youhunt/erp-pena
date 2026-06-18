@@ -245,16 +245,6 @@ class PurchaseOrderController extends BaseController
         $qtys = (array) $this->request->getPost('qty');
         $uoms = (array) $this->request->getPost('uom_code');
         $prices = (array) $this->request->getPost('unit_price');
-        $discountPercents = (array) $this->request->getPost('discount_percent_line');
-        $discounts = (array) $this->request->getPost('discount_amount_line');
-        $freights = (array) $this->request->getPost('freight_amount_line');
-        $specials = (array) $this->request->getPost('special_charge_amount_line');
-        $vatPercents = (array) $this->request->getPost('vat_percent_line');
-        $vats = (array) $this->request->getPost('vat_amount_line');
-        $whtPercents = (array) $this->request->getPost('wht_percent_line');
-        $whts = (array) $this->request->getPost('wht_amount_line');
-        $deliveryDates = (array) $this->request->getPost('delivery_date_line');
-        $arriveDates = (array) $this->request->getPost('arrive_date_line');
         $lines = [];
 
         foreach ($itemCodes as $index => $code) {
@@ -277,16 +267,6 @@ class PurchaseOrderController extends BaseController
                 'qty' => $qty,
                 'uom_code' => trim((string) ($uoms[$index] ?? 'PCS')),
                 'unit_price' => $price,
-                'discount_percent' => (float) ($discountPercents[$index] ?? 0),
-                'discount_amount' => (float) ($discounts[$index] ?? 0),
-                'freight_amount' => (float) ($freights[$index] ?? 0),
-                'special_charge_amount' => (float) ($specials[$index] ?? 0),
-                'vat_percent' => (float) ($vatPercents[$index] ?? 0),
-                'vat_amount' => (float) ($vats[$index] ?? 0),
-                'wht_percent' => (float) ($whtPercents[$index] ?? 0),
-                'wht_amount' => (float) ($whts[$index] ?? 0),
-                'delivery_date' => $this->nullableDate($deliveryDates[$index] ?? null),
-                'arrive_date' => $this->nullableDate($arriveDates[$index] ?? null),
             ];
         }
         return $lines;
