@@ -4,6 +4,7 @@ namespace App\Controllers\Inventory;
 
 use App\Controllers\BaseController;
 use App\Services\AuditLogService;
+use App\Services\Finance\PeriodCloseService;
 use App\Services\Inventory\InventoryStockService;
 use App\Services\TenantContext;
 use Config\Database;
@@ -212,6 +213,7 @@ class InventoryTransferController extends BaseController
             if (! in_array((string) $transfer['status'], ['draft', 'submitted'], true)) {
                 throw new RuntimeException('Only draft or submitted transfer can be posted.');
             }
+            $this->assertTransferPeriodOpen($transfer);
 
             $lines = $db->table('inventory_transfer_lines')
                 ->where('header_id', $id)
@@ -313,6 +315,7 @@ class InventoryTransferController extends BaseController
             if ((string) $transfer['status'] === 'cancelled') {
                 throw new RuntimeException('Transfer is already cancelled.');
             }
+            $this->assertTransferPeriodOpen($transfer);
 
             $now = date('Y-m-d H:i:s');
             $cancelReason = trim((string) $this->request->getPost('cancel_reason')) ?: null;
@@ -357,6 +360,7 @@ class InventoryTransferController extends BaseController
             if ((string) $transfer['status'] !== 'posted') {
                 throw new RuntimeException('Only posted transfer can be reversed.');
             }
+            $this->assertTransferPeriodOpen($transfer);
 
             $lines = $db->table('inventory_transfer_lines')
                 ->where('header_id', $id)
@@ -389,7 +393,7 @@ class InventoryTransferController extends BaseController
                     'uom_code' => $line['uom_code'],
                     'qty' => (float) $line['qty'],
                     'unit_cost' => (float) $line['unit_cost'],
-                    'movement_date' => $now,
+                    'movement_date' => $transfer['transfer_date'] ?? $now,
                     'reference_type' => 'inventory_transfer_reversal',
                     'reference_id' => $id,
                     'reference_no' => $referenceNo,
@@ -594,6 +598,16 @@ class InventoryTransferController extends BaseController
             'old_values' => $oldValues,
             'new_values' => $newValues,
         ]);
+    }
+
+    private function assertTransferPeriodOpen(array $transfer): void
+    {
+        (new PeriodCloseService())->assertOpen(
+            'inventory',
+            (int) ($transfer['company_id'] ?? 0),
+            (string) ($transfer['transfer_date'] ?? date('Y-m-d')),
+            ! empty($transfer['site_id']) ? (int) $transfer['site_id'] : null
+        );
     }
 
     private function auditDescription(string $action, string $transferNo): string

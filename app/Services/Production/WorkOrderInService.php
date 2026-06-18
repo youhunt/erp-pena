@@ -5,6 +5,7 @@ namespace App\Services\Production;
 use App\Models\ProductionWorkOrderModel;
 use App\Models\ProductionWorkOrderOutputModel;
 use App\Services\AuditLogService;
+use App\Services\Finance\PeriodCloseService;
 use App\Services\Inventory\InventoryStockService;
 use Config\Database;
 use RuntimeException;
@@ -24,6 +25,9 @@ class WorkOrderInService
         if ($qtyGood <= 0) {
             throw new RuntimeException('Good quantity must be greater than zero.');
         }
+        $period = new PeriodCloseService();
+        $period->assertOpen('production', (int) $header['company_id'], (string) ($header['wo_date'] ?? date('Y-m-d')), ! empty($header['site_id']) ? (int) $header['site_id'] : null);
+        $period->assertOpen('inventory', (int) $header['company_id'], (string) ($header['wo_date'] ?? date('Y-m-d')), ! empty($header['site_id']) ? (int) $header['site_id'] : null);
 
         $db = Database::connect();
         $db->transBegin();
@@ -57,6 +61,7 @@ class WorkOrderInService
                 'uom_code' => $header['uom_code'] ?? 'PCS',
                 'qty' => $qtyGood,
                 'unit_cost' => (float) ($header['unit_cost'] ?? 0),
+                'movement_date' => $header['wo_date'] ?? date('Y-m-d'),
                 'movement_type' => 'work_order_in',
                 'reference_type' => 'production_work_order',
                 'reference_id' => $woId,

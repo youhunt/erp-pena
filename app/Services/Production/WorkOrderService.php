@@ -11,6 +11,7 @@ use App\Models\ProductionWorkOrderComponentModel;
 use App\Models\ProductionWorkOrderModel;
 use App\Models\ProductionWorkOrderRoutingModel;
 use App\Services\AuditLogService;
+use App\Services\Finance\PeriodCloseService;
 use App\Services\Inventory\InventoryStockService;
 use Config\Database;
 use RuntimeException;
@@ -24,6 +25,7 @@ class WorkOrderService
                 throw new RuntimeException($field . ' is required.');
             }
         }
+        $this->assertProductionPeriodOpen($header);
 
         $bom = (new ProductionBomModel())
             ->where('company_id', $header['company_id'])
@@ -140,6 +142,7 @@ class WorkOrderService
         if (! in_array($status, ['draft', 'partial_allocated'], true)) {
             throw new RuntimeException('Only draft or partially allocated work order can be allocated. Current status: ' . $status);
         }
+        $this->assertProductionPeriodOpen($workOrder);
 
         $components = $componentModel->where('production_work_order_id', $workOrderId)->orderBy('line_no', 'ASC')->findAll();
         if ($components === []) {
@@ -237,6 +240,7 @@ class WorkOrderService
         if (! in_array($status, ['allocated', 'partial_issued'], true)) {
             throw new RuntimeException('Only allocated or partially issued work order can be issued. Current status: ' . $status);
         }
+        $this->assertProductionPeriodOpen($workOrder);
 
         $components = $componentModel->where('production_work_order_id', $workOrderId)->orderBy('line_no', 'ASC')->findAll();
         if ($components === []) {
@@ -270,6 +274,7 @@ class WorkOrderService
                     'item_name' => $component['component_item_name'] ?? null,
                     'uom_code' => $component['uom_code'] ?? 'PCS',
                     'qty' => $toIssue,
+                    'movement_date' => $workOrder['wo_date'] ?? date('Y-m-d'),
                     'movement_type' => 'production_issue',
                     'reference_type' => 'production_work_order',
                     'reference_id' => $workOrderId,
@@ -327,6 +332,7 @@ class WorkOrderService
         if (! in_array($status, ['material_issued', 'partial_finished'], true)) {
             throw new RuntimeException('Only material issued or partially finished work order can be received. Current status: ' . $status);
         }
+        $this->assertProductionPeriodOpen($workOrder);
 
         $standardQty = (float) ($workOrder['std_qty_finished'] ?? $workOrder['wo_qty'] ?? 0);
         $actualQty = (float) ($workOrder['act_qty_finished'] ?? 0);
@@ -362,6 +368,7 @@ class WorkOrderService
                 'uom_code' => $item['stockuom'] ?? $item['stock_uom'] ?? 'PCS',
                 'qty' => $receiveQty,
                 'unit_cost' => (float) ($item['standard_cost'] ?? $item['item_price'] ?? 0),
+                'movement_date' => $workOrder['wo_date'] ?? date('Y-m-d'),
                 'movement_type' => 'production_receipt',
                 'reference_type' => 'production_work_order',
                 'reference_id' => $workOrderId,
@@ -408,6 +415,7 @@ class WorkOrderService
         if (! in_array($status, ['allocated', 'partial_issued', 'material_issued', 'partial_finished'], true)) {
             throw new RuntimeException('Only allocated, issued, or partially finished work order can be processed as In Out. Current status: ' . $status);
         }
+        $this->assertProductionPeriodOpen($workOrder);
 
         if (in_array($status, ['allocated', 'partial_issued'], true)) {
             $this->issueMaterials($workOrderId, $userId);
@@ -441,6 +449,16 @@ class WorkOrderService
             'status' => $status,
             'updated_by' => $userId,
         ]);
+    }
+
+    private function assertProductionPeriodOpen(array $workOrder): void
+    {
+        $date = (string) ($workOrder['wo_date'] ?? date('Y-m-d'));
+        $companyId = (int) ($workOrder['company_id'] ?? 0);
+        $siteId = ! empty($workOrder['site_id']) ? (int) $workOrder['site_id'] : null;
+        $period = new PeriodCloseService();
+        $period->assertOpen('production', $companyId, $date, $siteId);
+        $period->assertOpen('inventory', $companyId, $date, $siteId);
     }
 
     private function refreshIssueStatus(int $workOrderId, ?int $userId): void

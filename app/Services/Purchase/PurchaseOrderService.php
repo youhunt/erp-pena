@@ -5,6 +5,7 @@ namespace App\Services\Purchase;
 use App\Models\PurchaseOrderLineModel;
 use App\Models\PurchaseOrderModel;
 use App\Services\AuditLogService;
+use App\Services\Finance\PeriodCloseService;
 use Config\Database;
 use RuntimeException;
 use Throwable;
@@ -14,6 +15,7 @@ class PurchaseOrderService
     public function create(array $header, array $lines, ?int $userId = null): int
     {
         $this->validateHeader($header, $lines);
+        $this->assertPeriodOpen($header);
         $lines = $this->normalizeLines($lines);
         $totals = $this->calculateTotals($lines, $header);
         $db = Database::connect();
@@ -65,6 +67,7 @@ class PurchaseOrderService
         if ($po === null) {
             throw new RuntimeException('Purchase order not found.');
         }
+        $this->assertPeriodOpen($header + $po);
 
         $status = (string) ($po['document_status'] ?? $po['status'] ?? 'draft');
         if (! in_array($status, ['draft', 'submitted', 'approved'], true)) {
@@ -156,9 +159,20 @@ class PurchaseOrderService
         if (! in_array($current, $allowedFrom, true)) {
             throw new RuntimeException('PO status ' . $current . ' cannot be changed to ' . $toStatus . '.');
         }
+        $this->assertPeriodOpen($po);
 
         $model->update($poId, $extra + ['status' => $toStatus, 'document_status' => $toStatus, 'updated_by' => $userId]);
         $this->audit($action, $poId, $po, ['to_status' => $toStatus] + $extra, $userId, $description);
+    }
+
+    private function assertPeriodOpen(array $document): void
+    {
+        (new PeriodCloseService())->assertOpen(
+            'purchase',
+            (int) ($document['company_id'] ?? 0),
+            (string) ($document['po_date'] ?? $document['document_date'] ?? date('Y-m-d')),
+            ! empty($document['site_id']) ? (int) $document['site_id'] : null
+        );
     }
 
     public function calculateTotals(array $lines, array $header = []): array

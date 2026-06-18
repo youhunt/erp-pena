@@ -7,6 +7,7 @@ use App\Models\AllocationOrderModel;
 use App\Models\SalesOrderLineModel;
 use App\Models\SalesOrderModel;
 use App\Services\AuditLogService;
+use App\Services\Finance\PeriodCloseService;
 use App\Services\Inventory\InventoryStockService;
 use Config\Database;
 use RuntimeException;
@@ -27,6 +28,7 @@ class AllocationService
         if (! in_array($status, ['approved', 'partial_reserved'], true)) {
             throw new RuntimeException('Only approved or partially reserved SO can be allocated. Current status: ' . $status);
         }
+        $this->assertPeriodOpen($so, $header);
 
         $lines = $lineModel->where('sales_order_id', $salesOrderId)->orderBy('line_no', 'ASC')->findAll();
         if ($lines === []) {
@@ -188,5 +190,15 @@ class AllocationService
             'reserved' => (float) ($row['reserved'] ?? 0),
             'available' => (float) ($row['available'] ?? 0),
         ];
+    }
+
+    private function assertPeriodOpen(array $salesOrder, array $header): void
+    {
+        $date = (string) ($header['allocdate'] ?? $salesOrder['so_date'] ?? $salesOrder['document_date'] ?? date('Y-m-d'));
+        $companyId = (int) ($salesOrder['company_id'] ?? 0);
+        $siteId = ! empty($salesOrder['site_id']) ? (int) $salesOrder['site_id'] : null;
+        $period = new PeriodCloseService();
+        $period->assertOpen('sales', $companyId, $date, $siteId);
+        $period->assertOpen('inventory', $companyId, $date, $siteId);
     }
 }

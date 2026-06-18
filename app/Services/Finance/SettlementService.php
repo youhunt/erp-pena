@@ -255,14 +255,15 @@ class SettlementService
                 throw new RuntimeException('A/P payment cash/bank entry has been reconciled.');
             }
 
-            (new PeriodCloseService())->assertOpen('ap', (int) $payment['company_id'], date('Y-m-d'), ! empty($payment['site_id']) ? (int) $payment['site_id'] : null);
+            $paymentDate = (string) ($payment['payment_date'] ?? date('Y-m-d'));
+            (new PeriodCloseService())->assertOpen('ap', (int) $payment['company_id'], $paymentDate, ! empty($payment['site_id']) ? (int) $payment['site_id'] : null);
 
             $amount = round((float) ($payment['payment_amount'] ?? 0), 6);
             $reversalCashBankEntryId = (new CashBankService())->post([
                 'company_id' => $payment['company_id'],
                 'site_id' => $payment['site_id'] ?? null,
                 'entry_no' => $this->cancellationEntryNo('CB-CNL-AP-', (string) ($payment['payment_no'] ?? 'APPAY'), $paymentId),
-                'entry_date' => date('Y-m-d'),
+                'entry_date' => $paymentDate,
                 'entry_type' => $this->cashBankEntryType((int) $payment['company_id'], (string) $payment['cash_bank_code'], 'in'),
                 'cash_bank_code' => $payment['cash_bank_code'],
                 'currency_code' => $payment['currency_code'] ?? 'IDR',
@@ -334,14 +335,15 @@ class SettlementService
                 throw new RuntimeException('A/R receipt cash/bank entry has been reconciled.');
             }
 
-            (new PeriodCloseService())->assertOpen('ar', (int) $receipt['company_id'], date('Y-m-d'), ! empty($receipt['site_id']) ? (int) $receipt['site_id'] : null);
+            $receiptDate = (string) ($receipt['receipt_date'] ?? date('Y-m-d'));
+            (new PeriodCloseService())->assertOpen('ar', (int) $receipt['company_id'], $receiptDate, ! empty($receipt['site_id']) ? (int) $receipt['site_id'] : null);
 
             $amount = round((float) ($receipt['receipt_amount'] ?? 0), 6);
             $reversalCashBankEntryId = (new CashBankService())->post([
                 'company_id' => $receipt['company_id'],
                 'site_id' => $receipt['site_id'] ?? null,
                 'entry_no' => $this->cancellationEntryNo('CB-CNL-AR-', (string) ($receipt['receipt_no'] ?? 'ARREC'), $receiptId),
-                'entry_date' => date('Y-m-d'),
+                'entry_date' => $receiptDate,
                 'entry_type' => $this->cashBankEntryType((int) $receipt['company_id'], (string) $receipt['cash_bank_code'], 'out'),
                 'cash_bank_code' => $receipt['cash_bank_code'],
                 'currency_code' => $receipt['currency_code'] ?? 'IDR',

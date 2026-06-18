@@ -10,6 +10,7 @@ use App\Models\SalesOrderModel;
 use App\Models\InventoryStockMovementModel;
 use App\Services\AuditLogService;
 use App\Services\Finance\GeneralLedgerService;
+use App\Services\Finance\PeriodCloseService;
 use App\Services\Finance\PostingProfileService;
 use App\Services\Inventory\InventoryStockService;
 use Config\Database;
@@ -26,6 +27,8 @@ class SalesDeliveryService
         if ($lines === []) {
             throw new RuntimeException('At least one delivery line is required.');
         }
+        $this->assertPeriodOpen('sales', $header, 'delivery_date');
+        $this->assertPeriodOpen('inventory', $header, 'delivery_date');
 
         $soModel = new SalesOrderModel();
         $so = $soModel->find((int) $header['sales_order_id']);
@@ -114,6 +117,7 @@ class SalesDeliveryService
                     'uom_code' => $soLine['uom_code'] ?? 'PCS',
                     'qty' => $qtyDeliver,
                     'unit_cost' => 0,
+                    'movement_date' => $header['delivery_date'] ?? date('Y-m-d'),
                     'movement_type' => 'sales_delivery',
                     'reference_type' => 'sales_delivery',
                     'reference_id' => $deliveryId,
@@ -205,6 +209,8 @@ class SalesDeliveryService
             if ($invoice !== null) {
                 throw new RuntimeException('Sales delivery already has sales invoice ' . ($invoice['invoice_no'] ?? '#' . $invoice['id']) . '. Reverse or cancel the invoice first.');
             }
+            $this->assertPeriodOpen('sales', $delivery, 'delivery_date');
+            $this->assertPeriodOpen('inventory', $delivery, 'delivery_date');
 
             $lines = $deliveryLineModel->where('sales_delivery_id', $deliveryId)->orderBy('line_no', 'ASC')->findAll();
             if ($lines === []) {
@@ -229,6 +235,7 @@ class SalesDeliveryService
                     'uom_code' => $line['uom_code'] ?? 'PCS',
                     'qty' => (float) ($line['qty_delivered'] ?? 0),
                     'unit_cost' => 0,
+                    'movement_date' => $delivery['delivery_date'] ?? date('Y-m-d'),
                     'movement_type' => 'sales_delivery_reversal',
                     'reference_type' => 'sales_delivery_reversal',
                     'reference_id' => $deliveryId,
@@ -324,6 +331,16 @@ class SalesDeliveryService
                 'credit' => $cogsAmount,
             ],
         ], $userId);
+    }
+
+    private function assertPeriodOpen(string $module, array $document, string $dateField): void
+    {
+        (new PeriodCloseService())->assertOpen(
+            $module,
+            (int) ($document['company_id'] ?? 0),
+            (string) ($document[$dateField] ?? date('Y-m-d')),
+            ! empty($document['site_id']) ? (int) $document['site_id'] : null
+        );
     }
 
     private function refreshSoStatus(int $soId, ?int $userId = null): void

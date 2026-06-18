@@ -7,6 +7,7 @@ use App\Models\InventoryMovementDocumentLineModel;
 use App\Models\InventoryMovementDocumentModel;
 use App\Models\InventoryStockMovementModel;
 use App\Services\AuditLogService;
+use App\Services\Finance\PeriodCloseService;
 use App\Services\Inventory\InventoryStockService;
 use App\Services\TenantContext;
 use Config\Database;
@@ -44,6 +45,12 @@ class InventoryMovementDocumentController extends BaseController
             if (! empty($document['reversal_document_id'])) {
                 throw new RuntimeException('Inventory document has already been reversed.');
             }
+            (new PeriodCloseService())->assertOpen(
+                'inventory',
+                (int) ($document['company_id'] ?? 0),
+                (string) ($document['document_date'] ?? date('Y-m-d')),
+                ! empty($document['site_id']) ? (int) $document['site_id'] : null
+            );
 
             $lines = $db->table('inventory_movement_document_lines l')
                 ->select('l.*, m.direction movement_direction, m.movement_type, m.warehouse_id movement_warehouse_id, m.location_id movement_location_id, m.unit_cost movement_unit_cost')
@@ -62,7 +69,7 @@ class InventoryMovementDocumentController extends BaseController
                 'company_id' => (int) $document['company_id'],
                 'site_id' => $document['site_id'] !== null ? (int) $document['site_id'] : null,
                 'document_no' => $reversalNo,
-                'document_date' => $now,
+                'document_date' => $document['document_date'] ?? $now,
                 'document_type' => $documentType . '_reversal',
                 'direction' => 'mixed',
                 'status' => 'posted',
@@ -114,7 +121,7 @@ class InventoryMovementDocumentController extends BaseController
                     'uom_code' => $line['uom_code'] ?? 'PCS',
                     'qty' => (float) ($line['qty'] ?? 0),
                     'unit_cost' => (float) ($line['movement_unit_cost'] ?? $line['unit_cost'] ?? 0),
-                    'movement_date' => $now,
+                    'movement_date' => $document['document_date'] ?? $now,
                     'movement_type' => $documentType,
                     'direction' => $reverseDirection,
                     'reference_type' => 'inventory_movement_reversal',

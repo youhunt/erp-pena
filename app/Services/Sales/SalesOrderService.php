@@ -5,6 +5,7 @@ namespace App\Services\Sales;
 use App\Models\SalesOrderLineModel;
 use App\Models\SalesOrderModel;
 use App\Services\AuditLogService;
+use App\Services\Finance\PeriodCloseService;
 use App\Services\Inventory\InventoryStockService;
 use Config\Database;
 use RuntimeException;
@@ -26,6 +27,7 @@ class SalesOrderService
         if ($lines === []) {
             throw new RuntimeException('At least one SO line is required.');
         }
+        $this->assertPeriodOpen($header);
         $lines = $this->normalizeLines($lines);
 
         $totals = $this->calculateTotals($lines);
@@ -117,6 +119,13 @@ class SalesOrderService
         if (! in_array($status, ['approved', 'partial_reserved'], true)) {
             throw new RuntimeException('Only approved or partially reserved SO can be reserved. Current status: ' . $status);
         }
+        $this->assertPeriodOpen($so);
+        (new PeriodCloseService())->assertOpen(
+            'inventory',
+            (int) ($so['company_id'] ?? 0),
+            (string) ($so['so_date'] ?? $so['document_date'] ?? date('Y-m-d')),
+            ! empty($so['site_id']) ? (int) $so['site_id'] : null
+        );
 
         $db = Database::connect();
         $db->transBegin();
@@ -188,8 +197,19 @@ class SalesOrderService
         if (! in_array($current, $allowedFrom, true)) {
             throw new RuntimeException('SO status ' . $current . ' cannot be changed to ' . $toStatus . '.');
         }
+        $this->assertPeriodOpen($so);
         $model->update($soId, $extra + ['status' => $toStatus, 'document_status' => $toStatus, 'updated_by' => $userId]);
         $this->audit($action, $soId, $so, ['to_status' => $toStatus] + $extra, $userId, $description);
+    }
+
+    private function assertPeriodOpen(array $document): void
+    {
+        (new PeriodCloseService())->assertOpen(
+            'sales',
+            (int) ($document['company_id'] ?? 0),
+            (string) ($document['so_date'] ?? $document['document_date'] ?? date('Y-m-d')),
+            ! empty($document['site_id']) ? (int) $document['site_id'] : null
+        );
     }
 
     public function calculateTotals(array $lines): array

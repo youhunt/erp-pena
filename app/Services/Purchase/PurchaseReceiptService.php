@@ -10,6 +10,7 @@ use App\Models\PurchaseReceiptModel;
 use App\Models\InventoryStockMovementModel;
 use App\Services\AuditLogService;
 use App\Services\Finance\GeneralLedgerService;
+use App\Services\Finance\PeriodCloseService;
 use App\Services\Finance\PostingProfileService;
 use App\Services\Inventory\InventoryStockService;
 use Config\Database;
@@ -26,6 +27,8 @@ class PurchaseReceiptService
         if ($lines === []) {
             throw new RuntimeException('At least one receipt line is required.');
         }
+        $this->assertPeriodOpen('purchase', $header, 'receipt_date');
+        $this->assertPeriodOpen('inventory', $header, 'receipt_date');
 
         $poModel = new PurchaseOrderModel();
         $po = $poModel->find((int) $header['purchase_order_id']);
@@ -89,6 +92,7 @@ class PurchaseReceiptService
                     'uom_code' => $poLine['uom_code'] ?? 'PCS',
                     'qty' => $qtyReceive,
                     'unit_cost' => (float) ($poLine['unit_price'] ?? 0),
+                    'movement_date' => $header['receipt_date'] ?? date('Y-m-d'),
                     'movement_type' => 'purchase_receipt',
                     'reference_type' => 'purchase_receipt',
                     'reference_id' => $receiptId,
@@ -205,6 +209,8 @@ class PurchaseReceiptService
             if ($invoice !== null) {
                 throw new RuntimeException('Purchase receipt already has purchase invoice ' . ($invoice['invoice_no'] ?? '#' . $invoice['id']) . '. Reverse or cancel the invoice first.');
             }
+            $this->assertPeriodOpen('purchase', $receipt, 'receipt_date');
+            $this->assertPeriodOpen('inventory', $receipt, 'receipt_date');
 
             $lines = $receiptLineModel->where('purchase_receipt_id', $receiptId)->orderBy('line_no', 'ASC')->findAll();
             if ($lines === []) {
@@ -229,6 +235,7 @@ class PurchaseReceiptService
                     'uom_code' => $line['uom_code'] ?? 'PCS',
                     'qty' => (float) ($line['qty_received'] ?? 0),
                     'unit_cost' => (float) ($line['unit_cost'] ?? 0),
+                    'movement_date' => $receipt['receipt_date'] ?? date('Y-m-d'),
                     'movement_type' => 'purchase_receipt_reversal',
                     'reference_type' => 'purchase_receipt_reversal',
                     'reference_id' => $receiptId,
@@ -326,6 +333,16 @@ class PurchaseReceiptService
                 'credit' => $inventoryValue,
             ],
         ], $userId);
+    }
+
+    private function assertPeriodOpen(string $module, array $document, string $dateField): void
+    {
+        (new PeriodCloseService())->assertOpen(
+            $module,
+            (int) ($document['company_id'] ?? 0),
+            (string) ($document[$dateField] ?? date('Y-m-d')),
+            ! empty($document['site_id']) ? (int) $document['site_id'] : null
+        );
     }
 
     private function refreshPoStatus(int $poId, ?int $userId = null): void
