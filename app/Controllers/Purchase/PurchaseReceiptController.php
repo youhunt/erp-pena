@@ -58,15 +58,20 @@ class PurchaseReceiptController extends BaseController
 
         $status = (string) ($po['document_status'] ?? $po['status'] ?? 'draft');
         if (! in_array($status, ['approved', 'partial_received'], true)) {
-            return view('errors/html/error_404', ['message' => 'Only approved or partially received PO can be received.']);
+            return view('errors/html/error_404', ['message' => 'Only approved or partially received PO can be received. Current status: ' . $status]);
         }
+
+        $warehouses = $this->masterRows('warehouses');
+        $locations = $this->masterRows('locations');
 
         return view('purchase/receipts/form', [
             'title' => 'Receive Purchase Order',
             'po' => $po,
             'lines' => (new PurchaseOrderLineModel())->where('purchase_order_id', $poId)->where('qty_outstanding >', 0)->orderBy('line_no', 'ASC')->findAll(),
-            'warehouses' => $this->masterRows('warehouses'),
-            'locations' => $this->masterRows('locations'),
+            'warehouses' => $warehouses,
+            'locations' => $locations,
+            'selectedWarehouseId' => $this->oldOrDefaultId('warehouse_id', $warehouses),
+            'selectedLocationId' => $this->oldOrDefaultId('location_id', $locations),
         ]);
     }
 
@@ -78,13 +83,14 @@ class PurchaseReceiptController extends BaseController
             throw PageNotFoundException::forPageNotFound();
         }
 
+        $receiveUrl = '/purchase/orders/' . $poId . '/receive';
         if (! $this->validate(['receipt_no' => 'required|max_length[60]', 'receipt_date' => 'required|valid_date[Y-m-d]'])) {
-            return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
+            return redirect()->to($receiveUrl)->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
 
         $lines = $this->postedLines();
         if ($lines === []) {
-            return redirect()->back()->withInput()->with('error', 'At least one receipt line qty is required.');
+            return redirect()->to($receiveUrl)->withInput()->with('error', 'At least one receipt line qty is required.');
         }
 
         try {
@@ -105,7 +111,7 @@ class PurchaseReceiptController extends BaseController
                 'notes' => trim((string) $this->request->getPost('notes')),
             ], $lines, auth()->id());
         } catch (RuntimeException $e) {
-            return redirect()->back()->withInput()->with('error', $e->getMessage());
+            return redirect()->to($receiveUrl)->withInput()->with('error', $e->getMessage());
         }
 
         return redirect()->to('/purchase/receipts/' . $receiptId)->with('message', 'Purchase receipt posted.');
@@ -206,6 +212,16 @@ class PurchaseReceiptController extends BaseController
             $builder->where('site_id', $tenant->activeSiteId());
         }
         return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get()->getResultArray();
+    }
+
+    private function oldOrDefaultId(string $field, array $rows): ?int
+    {
+        $old = $this->nullableInt(old($field));
+        if ($old !== null) {
+            return $old;
+        }
+
+        return isset($rows[0]['id']) ? (int) $rows[0]['id'] : null;
     }
 
     private function nullableInt(mixed $value): ?int
