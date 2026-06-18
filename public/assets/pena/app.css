@@ -135,6 +135,26 @@ body[data-sidebar="dark"] #sidebar-menu ul li.mm-active > a {
 }
 
 /* Dashboard metric cards */
+.dashboard-metric-row {
+    row-gap: .75rem;
+}
+
+.dashboard-metric-card-link {
+    display: block;
+    height: 100%;
+    text-decoration: none;
+}
+
+.dashboard-metric-card-link:hover .dashboard-metric-card {
+    transform: translateY(-1px);
+    box-shadow: 0 .35rem 1rem rgba(18, 38, 63, .08);
+}
+
+.dashboard-metric-card {
+    height: 100%;
+    transition: box-shadow .15s ease, transform .15s ease;
+}
+
 .dashboard-metric-card .card-body {
     padding: 1.15rem 1.2rem;
 }
@@ -155,6 +175,17 @@ body[data-sidebar="dark"] #sidebar-menu ul li.mm-active > a {
     font-size: 1.25rem;
     line-height: 1.2;
     letter-spacing: -.01em;
+}
+
+.dashboard-metric-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: .25rem .55rem;
+    font-size: .72rem;
+    font-weight: 600;
+    line-height: 1.2;
+    border-radius: 999px;
 }
 
 .dashboard-metric-icon {
