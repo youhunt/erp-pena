@@ -19,6 +19,73 @@ $lineValue = static function (array $line, int $index, string $field, mixed $def
 
 $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
 ?>
+<style>
+    .po-lines-scroll {
+        overflow-x: auto;
+        overflow-y: visible;
+        padding-bottom: .35rem;
+    }
+
+    #poLinesTable {
+        min-width: 1240px;
+        table-layout: fixed;
+    }
+
+    #poLinesTable th,
+    #poLinesTable td {
+        vertical-align: middle;
+    }
+
+    #poLinesTable th:nth-child(1),
+    #poLinesTable td:nth-child(1) { width: 76px; min-width: 76px; }
+    #poLinesTable th:nth-child(2),
+    #poLinesTable td:nth-child(2) { width: 260px; min-width: 260px; }
+    #poLinesTable th:nth-child(3),
+    #poLinesTable td:nth-child(3) { width: 220px; min-width: 220px; }
+    #poLinesTable th:nth-child(4),
+    #poLinesTable td:nth-child(4) { width: 280px; min-width: 280px; }
+    #poLinesTable th:nth-child(5),
+    #poLinesTable td:nth-child(5) { width: 120px; min-width: 120px; }
+    #poLinesTable th:nth-child(6),
+    #poLinesTable td:nth-child(6) { width: 100px; min-width: 100px; }
+    #poLinesTable th:nth-child(7),
+    #poLinesTable td:nth-child(7) { width: 140px; min-width: 140px; }
+    #poLinesTable th:nth-child(8),
+    #poLinesTable td:nth-child(8) { width: 150px; min-width: 150px; }
+    #poLinesTable th:nth-child(9),
+    #poLinesTable td:nth-child(9) { width: 70px; min-width: 70px; }
+
+    #poLinesTable .form-control,
+    #poLinesTable .form-select {
+        min-height: 38px;
+        color: #212529;
+        background-color: #fff;
+        font-size: 13px;
+    }
+
+    #poLinesTable .line-number,
+    #poLinesTable input[name="qty[]"],
+    #poLinesTable input[name="uom_code[]"],
+    #poLinesTable input[name="unit_price[]"] {
+        min-width: 100%;
+        padding-left: .55rem;
+        padding-right: .55rem;
+    }
+
+    #poLinesTable .line-total {
+        white-space: nowrap;
+        color: #212529;
+    }
+
+    #poLinesTable .select2-container {
+        min-width: 100% !important;
+        width: 100% !important;
+    }
+
+    #poLinesTable .select2-selection__rendered {
+        padding-right: 28px !important;
+    }
+</style>
 <form method="post" action="<?= esc($action, 'attr') ?>">
     <?= csrf_field() ?>
 
@@ -128,19 +195,19 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
                 </button>
             </div>
 
-            <div class="table-responsive">
+            <div class="table-responsive po-lines-scroll">
                 <table class="table table-nowrap align-middle" id="poLinesTable">
                     <thead class="table-light">
                         <tr>
-                            <th style="width:70px;">Line</th>
-                            <th style="min-width:220px;">Item Code</th>
-                            <th style="min-width:200px;">Item Name</th>
-                            <th style="min-width:260px;">Description</th>
-                            <th style="width:110px;">Qty</th>
-                            <th style="width:90px;">UoM</th>
-                            <th style="width:130px;">Price</th>
-                            <th style="width:140px;" class="text-end">Line Total</th>
-                            <th style="width:60px;"></th>
+                            <th>Line</th>
+                            <th>Item Code</th>
+                            <th>Item Name</th>
+                            <th>Description</th>
+                            <th>Qty</th>
+                            <th>UoM</th>
+                            <th>Price</th>
+                            <th class="text-end">Line Total</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
