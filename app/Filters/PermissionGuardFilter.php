@@ -159,6 +159,8 @@ class PermissionGuardFilter implements FilterInterface
             || $path === 'sales/deliveries/import/commit'
             || $path === 'sales/deliveries/import-template'
             || $path === 'sales/orders/new'
+            || str_contains($path, '/edit')
+            || preg_match('~^sales/orders/\d+$~', $path) && $method !== 'GET'
             || ($path === 'sales/orders' && $method !== 'GET')) {
             return 'sales.order.create';
         }
@@ -179,6 +181,8 @@ class PermissionGuardFilter implements FilterInterface
             || $path === 'purchase/receipts/import/commit'
             || $path === 'purchase/receipts/import-template'
             || $path === 'purchase/orders/new'
+            || str_contains($path, '/edit')
+            || (preg_match('~^purchase/orders/\d+$~', $path) && $method !== 'GET')
             || ($path === 'purchase/orders' && $method !== 'GET')) {
             return 'purchase.po.create';
         }
@@ -220,23 +224,27 @@ class PermissionGuardFilter implements FilterInterface
             'purchase' => 'purchase.po.view',
             'inventory' => 'inventory.stock.view',
             'production' => 'production.view',
-            'ap' => 'finance.ap.view',
-            'ar' => 'finance.ar.view',
-            'cashbank' => 'cashbank.view',
             default => 'finance.gl.view',
         };
     }
 
-    private function placeholderPermission(string $slug): ?string
+    private function placeholderPermission(string $module): ?string
     {
-        foreach (config(ErpMenu::class)->items() as $item) {
-            foreach (($item['children'] ?? [$item]) as $child) {
-                if (($child['route'] ?? '') === 'modules/' . $slug) {
-                    return $child['permission'] ?? null;
+        $menu = ErpMenu::modules();
+        if (! isset($menu[$module])) {
+            return null;
+        }
+
+        $firstPermission = null;
+        foreach ($menu[$module]['sections'] as $section) {
+            foreach ($section['links'] as $link) {
+                if (! empty($link['permission'])) {
+                    $firstPermission = $link['permission'];
+                    break 2;
                 }
             }
         }
 
-        return null;
+        return $firstPermission;
     }
 }
