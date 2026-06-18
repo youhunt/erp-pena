@@ -49,6 +49,7 @@
 <?php
 $h = $header ?? [];
 $cfg = $config ?? [];
+$type = (string) ($type ?? '');
 $company = $company ?? [];
 $docNo = (string) ($h[$cfg['number'] ?? ''] ?? '');
 $docDate = (string) ($h[$cfg['date'] ?? ''] ?? '');
@@ -65,6 +66,7 @@ $special = (float) ($h['special_charge_amount'] ?? 0);
 $tax = (float) ($h['vat_amount'] ?? $h['tax_amount'] ?? 0);
 $wht = (float) ($h['wht_amount'] ?? 0);
 $total = (float) ($h['total_amount'] ?? 0);
+$showLineCommercial = ! in_array($type, ['purchase-order', 'purchase-receipt', 'sales-delivery'], true);
 $money = static fn (mixed $v): string => number_format((float) $v, 2);
 $qty = static fn (mixed $v): string => rtrim(rtrim(number_format((float) $v, 4, '.', ''), '0'), '.');
 $backUrl = $_SERVER['HTTP_REFERER'] ?? '#';
@@ -122,8 +124,10 @@ $backUrl = $_SERVER['HTTP_REFERER'] ?? '#';
                 <th class="text-end" style="width:70px;">Qty</th>
                 <th style="width:60px;">UoM</th>
                 <th class="text-end" style="width:84px;">Price</th>
-                <th class="text-end" style="width:84px;">Disc</th>
-                <th class="text-end" style="width:84px;">Tax</th>
+                <?php if ($showLineCommercial): ?>
+                    <th class="text-end" style="width:84px;">Disc</th>
+                    <th class="text-end" style="width:84px;">Tax</th>
+                <?php endif ?>
                 <th class="text-end" style="width:94px;">Total</th>
             </tr>
         </thead>
@@ -145,13 +149,15 @@ $backUrl = $_SERVER['HTTP_REFERER'] ?? '#';
                 <td class="text-end"><?= esc($qty($lineQty)) ?></td>
                 <td><?= esc($line['uom_code'] ?? '-') ?></td>
                 <td class="text-end"><?= esc($money($linePrice)) ?></td>
-                <td class="text-end"><?= esc($money($line['discount_amount'] ?? 0)) ?></td>
-                <td class="text-end"><?= esc($money($line['vat_amount'] ?? $line['tax_amount'] ?? 0)) ?></td>
+                <?php if ($showLineCommercial): ?>
+                    <td class="text-end"><?= esc($money($line['discount_amount'] ?? 0)) ?></td>
+                    <td class="text-end"><?= esc($money($line['vat_amount'] ?? $line['tax_amount'] ?? 0)) ?></td>
+                <?php endif ?>
                 <td class="text-end fw"><?= esc($money($line['line_total'] ?? 0)) ?></td>
             </tr>
         <?php endforeach ?>
         <?php if (($lines ?? []) === []): ?>
-            <tr><td colspan="9" class="text-center muted">No line data.</td></tr>
+            <tr><td colspan="<?= $showLineCommercial ? 9 : 7 ?>" class="text-center muted">No line data.</td></tr>
         <?php endif ?>
         </tbody>
     </table>
@@ -160,8 +166,9 @@ $backUrl = $_SERVER['HTTP_REFERER'] ?? '#';
         <tr><td>Subtotal</td><td class="text-end"><?= esc($money($subtotal)) ?></td></tr>
         <tr><td>Discount</td><td class="text-end"><?= esc($money($discount)) ?></td></tr>
         <?php if ($freight != 0.0): ?><tr><td>Freight</td><td class="text-end"><?= esc($money($freight)) ?></td></tr><?php endif ?>
-        <?php if (($other + $special) != 0.0): ?><tr><td>Other / Special</td><td class="text-end"><?= esc($money($other + $special)) ?></td></tr><?php endif ?>
-        <tr><td>VAT / Tax</td><td class="text-end"><?= esc($money($tax)) ?></td></tr>
+        <?php if ($other != 0.0): ?><tr><td>Other Amount</td><td class="text-end"><?= esc($money($other)) ?></td></tr><?php endif ?>
+        <?php if ($special != 0.0): ?><tr><td>Special Charge</td><td class="text-end"><?= esc($money($special)) ?></td></tr><?php endif ?>
+        <tr><td><?= $type === 'purchase-order' ? 'VAT' : 'VAT / Tax' ?></td><td class="text-end"><?= esc($money($tax)) ?></td></tr>
         <?php if ($wht != 0.0): ?><tr><td>WHT</td><td class="text-end">(<?= esc($money($wht)) ?>)</td></tr><?php endif ?>
         <tr><td>Grand Total</td><td class="text-end"><?= esc($money($total)) ?></td></tr>
     </table>
