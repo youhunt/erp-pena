@@ -134,6 +134,50 @@ body[data-sidebar="dark"] #sidebar-menu ul li.mm-active > a {
     width: auto !important;
 }
 
+/* Dashboard metric cards */
+.dashboard-metric-card .card-body {
+    padding: 1.15rem 1.2rem;
+}
+
+.dashboard-metric-content {
+    min-width: 0;
+}
+
+.dashboard-metric-label {
+    line-height: 1.25;
+    min-height: 32px;
+}
+
+.dashboard-metric-value {
+    display: block;
+    max-width: 100%;
+    white-space: nowrap;
+    font-size: 1.25rem;
+    line-height: 1.2;
+    letter-spacing: -.01em;
+}
+
+.dashboard-metric-icon {
+    margin-left: .25rem;
+}
+
+@media (max-width: 1399.98px) {
+    .dashboard-metric-card .card-body {
+        padding: 1rem 1.1rem;
+    }
+
+    .dashboard-metric-value {
+        font-size: 1.15rem;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .dashboard-metric-value {
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+}
+
 /* Transaction line item table */
 .po-lines-scroll {
     overflow-x: auto;
