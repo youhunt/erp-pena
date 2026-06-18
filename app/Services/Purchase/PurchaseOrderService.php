@@ -123,7 +123,7 @@ class PurchaseOrderService
 
     public function close(int $poId, ?int $userId = null): void
     {
-        $this->transition($poId, ['approved', 'partial_received', 'received'], 'closed', ['closed_at' => date('Y-m-d H:i:s'), 'closed_by' => $userId], $userId, 'po.close', 'Purchase order closed.');
+        $this->transition($poId, ['partial_received', 'received'], 'closed', ['closed_at' => date('Y-m-d H:i:s'), 'closed_by' => $userId], $userId, 'po.close', 'Purchase order closed.');
     }
 
     public function cancel(int $poId, string $reason = '', ?int $userId = null): void
@@ -186,22 +186,21 @@ class PurchaseOrderService
         }
 
         $discountPercent = (float) ($header['discount_percent'] ?? 0);
-        $discountAmount = (float) ($header['discount_amount'] ?? 0);
-        if ($discountAmount <= 0 && $discountPercent > 0) {
-            $discountAmount = round($subtotal * $discountPercent / 100, 2);
-        }
+        $manualDiscountAmount = (float) ($header['discount_amount'] ?? 0);
+        $discountPercentAmount = round($subtotal * $discountPercent / 100, 2);
+        $totalDiscountAmount = round($discountPercentAmount + $manualDiscountAmount, 2);
 
         $freight = (float) ($header['freight_amount'] ?? 0);
         $other = (float) ($header['other_amount'] ?? 0);
         $special = (float) ($header['special_charge_amount'] ?? 0);
         $vat = (float) ($header['vat_amount'] ?? 0);
         $wht = (float) ($header['wht_amount'] ?? 0);
-        $total = $subtotal - $discountAmount + $freight + $other + $special + $vat - $wht;
+        $total = $subtotal - $totalDiscountAmount + $freight + $other + $special + $vat - $wht;
 
         return [
             'subtotal_amount' => round($subtotal, 2),
             'discount_percent' => $discountPercent,
-            'discount_amount' => round($discountAmount, 2),
+            'discount_amount' => round($manualDiscountAmount, 2),
             'freight_amount' => round($freight, 2),
             'other_amount' => round($other, 2),
             'special_charge_amount' => round($special, 2),
@@ -233,18 +232,7 @@ class PurchaseOrderService
 
             $line['po_line'] = $displayLine;
             $line['line_no'] = $displayLine;
-            $line['discount_percent'] = 0;
-            $line['discount_amount'] = 0;
-            $line['freight_amount'] = 0;
-            $line['special_charge_amount'] = 0;
-            $line['vat_percent'] = 0;
-            $line['vat_amount'] = 0;
-            $line['wht_percent'] = 0;
-            $line['wht_amount'] = 0;
-            $line['tax_amount'] = 0;
             $line['line_total'] = $gross;
-            $line['delivery_date'] = null;
-            $line['arrive_date'] = null;
 
             $seen[$displayLine] = true;
             $normalized[] = $line;
@@ -283,19 +271,8 @@ class PurchaseOrderService
             'qty_outstanding' => $qty,
             'uom_code' => $line['uom_code'] ?? null,
             'unit_price' => (float) ($line['unit_price'] ?? 0),
-            'discount_percent' => 0,
-            'discount_amount' => 0,
-            'freight_amount' => 0,
-            'special_charge_amount' => 0,
-            'vat_percent' => 0,
-            'vat_amount' => 0,
-            'wht_percent' => 0,
-            'wht_amount' => 0,
-            'tax_amount' => 0,
             'line_total' => (float) ($line['line_total'] ?? 0),
             'line_status' => $status === 'approved' ? 'approved' : 'open',
-            'delivery_date' => null,
-            'arrive_date' => null,
         ];
     }
 
