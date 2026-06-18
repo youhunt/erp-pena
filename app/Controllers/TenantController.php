@@ -31,6 +31,9 @@ class TenantController extends BaseController
             return redirect()->back()->with('error', 'You do not have access to the selected site.');
         }
 
+        $previousUrl = previous_url() ?: site_url('dashboard');
+        $redirectUrl = $this->redirectAfterTenantChange($previousUrl);
+
         $tenant->switch($companyId, $siteId);
 
         (new AuditLogService())->log('tenant', 'tenant.switch', [
@@ -46,6 +49,44 @@ class TenantController extends BaseController
         session()->setFlashdata('message', 'Active company/site has been changed.');
         session()->close();
 
-        return redirect()->to(previous_url() ?: site_url('dashboard'));
+        return redirect()->to($redirectUrl);
+    }
+
+    private function redirectAfterTenantChange(string $previousUrl): string
+    {
+        $path = trim((string) parse_url($previousUrl, PHP_URL_PATH), '/');
+        $basePath = trim((string) parse_url(site_url(), PHP_URL_PATH), '/');
+        if ($basePath !== '' && str_starts_with($path, $basePath . '/')) {
+            $path = substr($path, strlen($basePath) + 1);
+        }
+
+        $scopedLists = [
+            'purchase/orders',
+            'purchase/receipts',
+            'sales/orders',
+            'sales/deliveries',
+            'ap/purchase-invoices',
+            'ap/payments',
+            'ar/sales-invoices',
+            'ar/receipts',
+            'inventory/transfers',
+            'gl/entries',
+            'production/work-orders',
+        ];
+
+        foreach ($scopedLists as $listPath) {
+            if ($path === $listPath) {
+                return $previousUrl;
+            }
+            if (str_starts_with($path, $listPath . '/')) {
+                return site_url($listPath);
+            }
+        }
+
+        if (str_starts_with($path, 'inventory/movement-documents/')) {
+            return site_url('inventory/stock-card');
+        }
+
+        return $previousUrl;
     }
 }
