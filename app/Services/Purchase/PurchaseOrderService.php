@@ -123,7 +123,7 @@ class PurchaseOrderService
 
     public function close(int $poId, ?int $userId = null): void
     {
-        $this->transition($poId, ['partial_received', 'received'], 'closed', ['closed_at' => date('Y-m-d H:i:s'), 'closed_by' => $userId], $userId, 'po.close', 'Purchase order closed.');
+        $this->transition($poId, ['received'], 'closed', ['closed_at' => date('Y-m-d H:i:s'), 'closed_by' => $userId], $userId, 'po.close', 'Purchase order closed.');
     }
 
     public function cancel(int $poId, string $reason = '', ?int $userId = null): void

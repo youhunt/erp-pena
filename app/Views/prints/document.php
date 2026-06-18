@@ -123,10 +123,12 @@ $lineColspan = 5 + ($showUnitPrice ? 1 : 0) + ($showLineCommercial ? 2 : 0) + ($
         <div><?php if (! empty($h['notes']) || ! empty($h['remarks'])): ?><div class="box"><div class="box-title">Notes / Remarks</div><?php if (! empty($h['notes'])): ?><div><?= esc($h['notes']) ?></div><?php endif ?><?php if (! empty($h['remarks'])): ?><div><?= nl2br(esc($h['remarks'])) ?></div><?php endif ?></div><?php endif ?></div>
         <?php if ($showAmounts): ?><table class="totals">
             <tr><td>Subtotal</td><td class="text-end"><?= esc($money($subtotal)) ?></td></tr>
-            <?php if ($showHeaderCommercial && $discountPercent != 0.0): ?><tr><td>Discount %</td><td class="text-end"><?= esc(number_format($discountPercent, 4)) ?>%</td></tr><?php endif ?>
-            <?php if ($showHeaderCommercial && $discountPercentAmount != 0.0): ?><tr><td>Disc % Amount</td><td class="text-end"><?= esc($money($discountPercentAmount)) ?></td></tr><?php endif ?>
-            <tr><td>Discount Amount</td><td class="text-end"><?= esc($money($manualDiscountAmount)) ?></td></tr>
-            <?php if ($showHeaderCommercial): ?><tr><td>Total Discount</td><td class="text-end"><?= esc($money($totalDiscountAmount)) ?></td></tr><?php endif ?>
+            <?php if ($showHeaderCommercial || $totalDiscountAmount != 0.0): ?>
+                <tr>
+                    <td>Discount<?= $showHeaderCommercial && $discountPercent != 0.0 ? ' (' . esc(number_format($discountPercent, 4)) . '% + Amount)' : '' ?></td>
+                    <td class="text-end"><?= esc($money($totalDiscountAmount)) ?></td>
+                </tr>
+            <?php endif ?>
             <?php if ($freight != 0.0): ?><tr><td>Freight</td><td class="text-end"><?= esc($money($freight)) ?></td></tr><?php endif ?>
             <?php if ($other != 0.0): ?><tr><td>Other Amount</td><td class="text-end"><?= esc($money($other)) ?></td></tr><?php endif ?>
             <?php if ($special != 0.0): ?><tr><td>Special Charge</td><td class="text-end"><?= esc($money($special)) ?></td></tr><?php endif ?>

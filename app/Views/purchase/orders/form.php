@@ -76,8 +76,15 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
                     <label class="form-label">Currency</label>
                     <input type="text" name="currency_code" class="form-control" value="<?= esc($value('currency_code', 'IDR')) ?>">
                 </div>
-                <div class="col-md-3 mb-3"><label class="form-label">Header Discount %</label><input type="number" step="0.0001" name="discount_percent" class="form-control calc-header text-end" value="<?= esc($value('discount_percent', '0')) ?>"></div>
-                <div class="col-md-3 mb-3"><label class="form-label">Header Discount Amount</label><input type="number" step="0.01" name="discount_amount" class="form-control calc-header text-end" value="<?= esc($value('discount_amount', '0')) ?>"></div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Header Discount</label>
+                    <div class="input-group">
+                        <span class="input-group-text">%</span>
+                        <input type="number" step="0.0001" name="discount_percent" class="form-control calc-header text-end" value="<?= esc($value('discount_percent', '0')) ?>">
+                        <span class="input-group-text">Amount</span>
+                        <input type="number" step="0.01" name="discount_amount" class="form-control calc-header text-end" value="<?= esc($value('discount_amount', '0')) ?>">
+                    </div>
+                </div>
                 <div class="col-md-3 mb-3"><label class="form-label">Freight</label><input type="number" step="0.01" name="freight_amount" class="form-control calc-header text-end" value="<?= esc($value('freight_amount', '0')) ?>"></div>
                 <div class="col-md-3 mb-3"><label class="form-label">Other Amount</label><input type="number" step="0.01" name="other_amount" class="form-control calc-header text-end" value="<?= esc($value('other_amount', '0')) ?>"></div>
                 <div class="col-md-3 mb-3"><label class="form-label">Special Charge</label><input type="number" step="0.01" name="special_charge_amount" class="form-control calc-header text-end" value="<?= esc($value('special_charge_amount', '0')) ?>"></div>

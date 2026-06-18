@@ -18,13 +18,13 @@ class OrderImportController extends BaseController
     private const SESSION_KEY = 'order_import_previews';
 
     private const SALES_HEADERS = [
-        'so_no', 'so_line', 'so_date', 'site', 'customer_code', 'customer_name',
+        'so_no', 'so_line', 'so_date', 'site_code', 'customer_code', 'customer_name',
         'terms_code', 'currency_code', 'notes',
         'item_code', 'item_name', 'qty', 'uom_code', 'unit_price', 'discount_amount', 'tax_amount',
     ];
 
     private const PURCHASE_HEADERS = [
-        'po_no', 'po_line', 'po_date', 'site', 'delivery_date', 'arrive_date',
+        'po_no', 'po_line', 'po_date', 'site_code', 'delivery_date', 'arrive_date',
         'supplier_code', 'supplier_name', 'terms_code', 'currency_code', 'notes', 'remarks',
         'discount_percent', 'discount_amount', 'freight_amount', 'other_amount',
         'special_charge_amount', 'vat_amount', 'wht_amount',
@@ -161,8 +161,8 @@ class OrderImportController extends BaseController
             }
 
             try {
-                $siteContext = $this->resolveSiteContext($first['site'] ?? '', $tenant, (int) $first['_excel_row']);
-                $this->assertNotDuplicate($config['table'], $config['documentField'], $documentNo, (int) $tenant->activeCompanyId());
+                $siteContext = $this->resolveSiteContext($this->siteCode($first), $tenant, (int) $first['_excel_row']);
+                $this->assertNotDuplicate($config['table'], $config['documentField'], $documentNo, (int) $tenant->activeCompanyId(), $siteContext['id'] ?? null);
                 $this->normalizeDate($first[$config['dateField']] ?? '', (int) $first['_excel_row']);
                 if ($type === 'purchase') {
                     $this->normalizeOptionalDate($first['delivery_date'] ?? '', (int) $first['_excel_row'], 'delivery_date');
@@ -206,7 +206,7 @@ class OrderImportController extends BaseController
             'type' => $type,
             'filename' => $filename,
             'company_id' => $tenant->activeCompanyId(),
-            'site_id' => $tenant->activeSiteId(),
+            'site_id' => null,
             'records' => $records,
             'documents' => count($groups),
             'valid_documents' => $validDocuments,
@@ -225,7 +225,7 @@ class OrderImportController extends BaseController
         $first = $lines[0];
         $checks = [
             $config['dateField'] => 'document date',
-            'site' => 'site',
+            'site_code' => 'site code',
             $config['partnerCodeField'] => 'partner code',
             $config['partnerNameField'] => 'partner name',
             'currency_code' => 'currency',
@@ -274,8 +274,8 @@ class OrderImportController extends BaseController
         $lineCount = 0;
         foreach ($groups as $documentNo => $lines) {
             $first = $lines[0];
-            $siteContext = $this->resolveSiteContext($first['site'] ?? '', $tenant, (int) $first['_excel_row']);
-            $this->assertNotDuplicate($config['table'], $config['documentField'], $documentNo, (int) $tenant->activeCompanyId());
+            $siteContext = $this->resolveSiteContext($this->siteCode($first), $tenant, (int) $first['_excel_row']);
+            $this->assertNotDuplicate($config['table'], $config['documentField'], $documentNo, (int) $tenant->activeCompanyId(), $siteContext['id'] ?? null);
             $partner = $this->lookupPartner($type, (string) ($first[$config['partnerCodeField']] ?? ''), $tenant->activeCompanyId(), $siteContext['id']);
 
             $header = [
@@ -358,7 +358,9 @@ class OrderImportController extends BaseController
     {
         if (count($rows) < 2) throw new RuntimeException('Uploaded file must contain a header row and at least one data row.');
         $headers = array_map(fn ($value): string => $this->normalizeHeader((string) $value), $rows[0]);
-        foreach ($expectedHeaders as $header) if (! in_array($header, $headers, true)) throw new RuntimeException('Missing required header: ' . $header);
+        foreach ($expectedHeaders as $header) {
+            if (! $this->hasHeader($header, $headers)) throw new RuntimeException('Missing required header: ' . $header);
+        }
         $records = [];
         foreach (array_slice($rows, 1) as $index => $row) {
             if ($this->isBlankRow($row)) continue;
@@ -367,9 +369,44 @@ class OrderImportController extends BaseController
                 if ($header === '') continue;
                 $record[$header] = trim((string) ($row[$position] ?? ''));
             }
+            $record = $this->applyHeaderAliases($record);
             $records[] = $record;
         }
         return $records;
+    }
+
+    private function hasHeader(string $expectedHeader, array $headers): bool
+    {
+        if (in_array($expectedHeader, $headers, true)) return true;
+        foreach ($this->headerAliases()[$expectedHeader] ?? [] as $alias) {
+            if (in_array($alias, $headers, true)) return true;
+        }
+        return false;
+    }
+
+    private function applyHeaderAliases(array $record): array
+    {
+        foreach ($this->headerAliases() as $canonical => $aliases) {
+            if (trim((string) ($record[$canonical] ?? '')) !== '') continue;
+            foreach ($aliases as $alias) {
+                if (trim((string) ($record[$alias] ?? '')) === '') continue;
+                $record[$canonical] = trim((string) $record[$alias]);
+                break;
+            }
+        }
+        return $record;
+    }
+
+    private function siteCode(array $row): string
+    {
+        return trim((string) ($row['site_code'] ?? $row['site'] ?? ''));
+    }
+
+    private function headerAliases(): array
+    {
+        return [
+            'site_code' => ['site'],
+        ];
     }
 
     private function readRows(string $path, string $extension): array
@@ -393,12 +430,13 @@ class OrderImportController extends BaseController
         return null;
     }
 
-    private function assertNotDuplicate(string $table, string $documentField, string $documentNo, int $companyId): void
+    private function assertNotDuplicate(string $table, string $documentField, string $documentNo, int $companyId, ?int $siteId = null): void
     {
         $db = Database::connect();
         $builder = $db->table($table)->where('company_id', $companyId)->groupStart()->where($documentField, $documentNo);
         if ($documentField !== 'document_no' && $db->fieldExists('document_no', $table)) $builder->orWhere('document_no', $documentNo);
         $builder->groupEnd();
+        if ($siteId !== null && $db->fieldExists('site_id', $table)) $builder->where('site_id', $siteId);
         if ($db->fieldExists('deleted_at', $table)) $builder->where('deleted_at', null);
         if ($builder->countAllResults() > 0) throw new RuntimeException(strtoupper(str_replace('_no', '', $documentField)) . ' number already exists: ' . $documentNo);
     }
@@ -441,7 +479,7 @@ class OrderImportController extends BaseController
         $companyId = (int) $tenant->activeCompanyId();
         $siteCode = trim((string) $siteCode);
         if ($siteCode === '') {
-            return ['id' => $tenant->activeSiteId(), 'code' => $this->activeCode('site')];
+            throw new RuntimeException('site_code is required on Excel row ' . $rowNumber . '.');
         }
         $db = Database::connect();
         $builder = $db->table('sites')->where('company_id', $companyId);

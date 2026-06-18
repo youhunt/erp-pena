@@ -60,7 +60,7 @@ $totalDiscountAmount = round($discountPercentAmount + $manualDiscountAmount, 2);
                     <?php if (in_array($status, ['approved','partial_received'], true)): ?>
                         <a href="<?= site_url('purchase/orders/' . $order['id'] . '/receive') ?>" class="btn btn-primary"><i class="bx bx-package me-1"></i> Receive</a>
                     <?php endif ?>
-                    <?php if (in_array($status, ['partial_received','received'], true)): ?>
+                    <?php if ($status === 'received'): ?>
                         <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/close') ?>"><?= csrf_field() ?><button class="btn btn-dark" onclick="return confirm('Close this PO?')">Close</button></form>
                     <?php endif ?>
                     <?php if (in_array($status, ['draft','submitted'], true)): ?>
@@ -80,10 +80,13 @@ $totalDiscountAmount = round($discountPercentAmount + $manualDiscountAmount, 2);
                 <table class="table table-sm mb-0">
                     <tbody>
                         <tr><th>Subtotal</th><td class="text-end"><?= esc(number_format($subtotal, 2)) ?></td></tr>
-                        <tr><th>Discount %</th><td class="text-end"><?= esc(number_format($discountPercent, 4)) ?>%</td></tr>
-                        <tr><th>Disc % Amount</th><td class="text-end"><?= esc(number_format($discountPercentAmount, 2)) ?></td></tr>
-                        <tr><th>Discount Amount</th><td class="text-end"><?= esc(number_format($manualDiscountAmount, 2)) ?></td></tr>
-                        <tr class="table-light"><th>Total Discount</th><td class="text-end fw-semibold"><?= esc(number_format($totalDiscountAmount, 2)) ?></td></tr>
+                        <tr class="table-light">
+                            <th>Discount</th>
+                            <td class="text-end">
+                                <div class="fw-semibold"><?= esc(number_format($totalDiscountAmount, 2)) ?></div>
+                                <small class="text-muted"><?= esc(number_format($discountPercent, 4)) ?>% = <?= esc(number_format($discountPercentAmount, 2)) ?> + amount <?= esc(number_format($manualDiscountAmount, 2)) ?></small>
+                            </td>
+                        </tr>
                         <tr><th>Freight</th><td class="text-end"><?= esc(number_format((float) ($order['freight_amount'] ?? 0), 2)) ?></td></tr>
                         <tr><th>Other Amount</th><td class="text-end"><?= esc(number_format((float) ($order['other_amount'] ?? 0), 2)) ?></td></tr>
                         <tr><th>Special Charge</th><td class="text-end"><?= esc(number_format((float) ($order['special_charge_amount'] ?? 0), 2)) ?></td></tr>
