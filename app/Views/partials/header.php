@@ -10,5 +10,6 @@
     <link rel="stylesheet" href="<?= base_url('assets/skote/libs/select2/css/select2.min.css') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/skote/css/app.min.css') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/pena/app.css') ?>">
+    <link rel="stylesheet" href="<?= base_url('assets/pena/dashboard.css') ?>">
 </head>
 <body data-sidebar="dark">
