@@ -16,13 +16,21 @@ class DocumentPrintController extends BaseController
             'line_fk' => 'purchase_order_id',
             'number' => 'po_no',
             'date' => 'po_date',
+            'date_label' => 'PO Date',
             'partner_label' => 'Supplier',
             'partner_code' => 'supplier_code',
             'partner_name' => 'supplier_name',
             'source_label' => '',
             'source_field' => '',
             'qty' => 'qty_ordered',
+            'qty_label' => 'Qty',
             'price' => 'unit_price',
+            'price_label' => 'Unit Price',
+            'show_amounts' => true,
+            'show_line_commercial' => false,
+            'show_header_commercial' => true,
+            'show_unit_price' => true,
+            'signatures' => ['Prepared By', 'Checked By', 'Approved By'],
         ],
         'sales-order' => [
             'title' => 'Sales Order',
@@ -31,13 +39,21 @@ class DocumentPrintController extends BaseController
             'line_fk' => 'sales_order_id',
             'number' => 'so_no',
             'date' => 'so_date',
+            'date_label' => 'SO Date',
             'partner_label' => 'Customer',
             'partner_code' => 'customer_code',
             'partner_name' => 'customer_name',
             'source_label' => '',
             'source_field' => '',
             'qty' => 'qty_ordered',
+            'qty_label' => 'Qty',
             'price' => 'unit_price',
+            'price_label' => 'Unit Price',
+            'show_amounts' => true,
+            'show_line_commercial' => true,
+            'show_header_commercial' => false,
+            'show_unit_price' => true,
+            'signatures' => ['Prepared By', 'Checked By', 'Approved By'],
         ],
         'purchase-receipt' => [
             'title' => 'Purchase Receipt',
@@ -46,13 +62,21 @@ class DocumentPrintController extends BaseController
             'line_fk' => 'purchase_receipt_id',
             'number' => 'receipt_no',
             'date' => 'receipt_date',
+            'date_label' => 'Receipt Date',
             'partner_label' => 'Supplier',
             'partner_code' => 'supplier_code',
             'partner_name' => 'supplier_name',
             'source_label' => 'PO No',
             'source_field' => 'po_no',
             'qty' => 'qty_received',
+            'qty_label' => 'Received Qty',
             'price' => 'unit_cost',
+            'price_label' => 'Unit Cost',
+            'show_amounts' => false,
+            'show_line_commercial' => false,
+            'show_header_commercial' => false,
+            'show_unit_price' => false,
+            'signatures' => ['Received By', 'Checked By', 'Warehouse'],
         ],
         'sales-delivery' => [
             'title' => 'Delivery Order',
@@ -61,13 +85,21 @@ class DocumentPrintController extends BaseController
             'line_fk' => 'sales_delivery_id',
             'number' => 'delivery_no',
             'date' => 'delivery_date',
+            'date_label' => 'Delivery Date',
             'partner_label' => 'Customer',
             'partner_code' => 'customer_code',
             'partner_name' => 'customer_name',
             'source_label' => 'SO No',
             'source_field' => 'so_no',
             'qty' => 'qty_delivered',
+            'qty_label' => 'Delivered Qty',
             'price' => 'unit_price',
+            'price_label' => 'Unit Price',
+            'show_amounts' => false,
+            'show_line_commercial' => false,
+            'show_header_commercial' => false,
+            'show_unit_price' => false,
+            'signatures' => ['Prepared By', 'Delivered By', 'Received By'],
         ],
         'purchase-invoice' => [
             'title' => 'Purchase Invoice',
@@ -76,13 +108,21 @@ class DocumentPrintController extends BaseController
             'line_fk' => 'purchase_invoice_id',
             'number' => 'invoice_no',
             'date' => 'invoice_date',
+            'date_label' => 'Invoice Date',
             'partner_label' => 'Supplier',
             'partner_code' => 'supplier_code',
             'partner_name' => 'supplier_name',
             'source_label' => 'Receipt No',
             'source_field' => 'receipt_no',
             'qty' => 'qty_invoiced',
+            'qty_label' => 'Invoice Qty',
             'price' => 'unit_cost',
+            'price_label' => 'Unit Cost',
+            'show_amounts' => true,
+            'show_line_commercial' => true,
+            'show_header_commercial' => false,
+            'show_unit_price' => true,
+            'signatures' => ['Prepared By', 'Checked By', 'Approved By'],
         ],
         'sales-invoice' => [
             'title' => 'Sales Invoice',
@@ -91,45 +131,30 @@ class DocumentPrintController extends BaseController
             'line_fk' => 'sales_invoice_id',
             'number' => 'invoice_no',
             'date' => 'invoice_date',
+            'date_label' => 'Invoice Date',
             'partner_label' => 'Customer',
             'partner_code' => 'customer_code',
             'partner_name' => 'customer_name',
             'source_label' => 'Delivery No',
             'source_field' => 'delivery_no',
             'qty' => 'qty_invoiced',
+            'qty_label' => 'Invoice Qty',
             'price' => 'unit_price',
+            'price_label' => 'Unit Price',
+            'show_amounts' => true,
+            'show_line_commercial' => true,
+            'show_header_commercial' => false,
+            'show_unit_price' => true,
+            'signatures' => ['Prepared By', 'Checked By', 'Received By'],
         ],
     ];
 
-    public function purchaseOrder(int $id): string
-    {
-        return $this->renderPrintable('purchase-order', $id);
-    }
-
-    public function salesOrder(int $id): string
-    {
-        return $this->renderPrintable('sales-order', $id);
-    }
-
-    public function purchaseReceipt(int $id): string
-    {
-        return $this->renderPrintable('purchase-receipt', $id);
-    }
-
-    public function salesDelivery(int $id): string
-    {
-        return $this->renderPrintable('sales-delivery', $id);
-    }
-
-    public function purchaseInvoice(int $id): string
-    {
-        return $this->renderPrintable('purchase-invoice', $id);
-    }
-
-    public function salesInvoice(int $id): string
-    {
-        return $this->renderPrintable('sales-invoice', $id);
-    }
+    public function purchaseOrder(int $id): string { return $this->renderPrintable('purchase-order', $id); }
+    public function salesOrder(int $id): string { return $this->renderPrintable('sales-order', $id); }
+    public function purchaseReceipt(int $id): string { return $this->renderPrintable('purchase-receipt', $id); }
+    public function salesDelivery(int $id): string { return $this->renderPrintable('sales-delivery', $id); }
+    public function purchaseInvoice(int $id): string { return $this->renderPrintable('purchase-invoice', $id); }
+    public function salesInvoice(int $id): string { return $this->renderPrintable('sales-invoice', $id); }
 
     private function renderPrintable(string $type, int $id): string
     {
