@@ -1,0 +1,16 @@
+PO form layout update note
+
+This is not a database migration. No SQL is required.
+
+Changed file:
+- app/Views/purchase/orders/form.php
+
+Purpose:
+- Remove custom font-size override from PO line inputs/selects.
+- Reduce top/bottom and left/right padding on PO line inputs.
+- Keep table horizontal scroll and min column widths.
+
+Deploy:
+- git pull origin main
+- php spark cache:clear
+- Hard refresh browser: Ctrl + F5
