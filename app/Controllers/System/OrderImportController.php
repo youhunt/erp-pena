@@ -18,13 +18,13 @@ class OrderImportController extends BaseController
     private const SESSION_KEY = 'order_import_previews';
 
     private const SALES_HEADERS = [
-        'so_no', 'so_line', 'so_date', 'customer_code', 'customer_name',
+        'so_no', 'so_line', 'so_date', 'site', 'customer_code', 'customer_name',
         'terms_code', 'currency_code', 'notes',
         'item_code', 'item_name', 'qty', 'uom_code', 'unit_price', 'discount_amount', 'tax_amount',
     ];
 
     private const PURCHASE_HEADERS = [
-        'po_no', 'po_line', 'po_date', 'delivery_date', 'arrive_date',
+        'po_no', 'po_line', 'po_date', 'site', 'delivery_date', 'arrive_date',
         'supplier_code', 'supplier_name', 'terms_code', 'currency_code', 'notes', 'remarks',
         'discount_percent', 'discount_amount', 'freight_amount', 'other_amount',
         'special_charge_amount', 'vat_amount', 'wht_amount',
@@ -97,8 +97,7 @@ class OrderImportController extends BaseController
             return redirect()->to(site_url($config['importUrl']))->with('error', $exception->getMessage());
         }
 
-        return redirect()
-            ->to(site_url($config['importUrl'] . '?preview=' . $token))
+        return redirect()->to(site_url($config['importUrl'] . '?preview=' . $token))
             ->with($preview['errors'] === [] ? 'message' : 'error', $preview['message']);
     }
 
@@ -110,15 +109,13 @@ class OrderImportController extends BaseController
         if ($preview === null || ($preview['type'] ?? '') !== $type) {
             return redirect()->to(site_url($config['importUrl']))->with('error', 'Import preview was not found or has expired. Please upload the file again.');
         }
-
         if (($preview['errors'] ?? []) !== []) {
             return redirect()->to(site_url($config['importUrl'] . '?preview=' . $token))->with('error', 'Cannot post import while preview still has errors.');
         }
 
         $tenant = new TenantContext(session());
-        if ((int) ($preview['company_id'] ?? 0) !== (int) $tenant->activeCompanyId()
-            || (string) ($preview['site_id'] ?? '') !== (string) $tenant->activeSiteId()) {
-            return redirect()->to(site_url($config['importUrl']))->with('error', 'Active company/site changed after preview. Please preview the file again.');
+        if ((int) ($preview['company_id'] ?? 0) !== (int) $tenant->activeCompanyId()) {
+            return redirect()->to(site_url($config['importUrl']))->with('error', 'Active company changed after preview. Please preview the file again.');
         }
 
         try {
@@ -128,9 +125,7 @@ class OrderImportController extends BaseController
         }
 
         $this->clearPreview($token);
-
-        return redirect()
-            ->to(site_url($config['backUrl']))
+        return redirect()->to(site_url($config['backUrl']))
             ->with('message', 'Import selesai. ' . $result['documents'] . ' dokumen dibuat, ' . $result['lines'] . ' line diproses.');
     }
 
@@ -155,6 +150,8 @@ class OrderImportController extends BaseController
         }
 
         foreach ($groups as $documentNo => $lines) {
+            $first = $lines[0];
+            $siteContext = null;
             $consistencyError = $this->documentConsistencyError($lines, $config);
             if ($consistencyError !== null) {
                 foreach ($lines as $line) {
@@ -164,11 +161,12 @@ class OrderImportController extends BaseController
             }
 
             try {
+                $siteContext = $this->resolveSiteContext($first['site'] ?? '', $tenant, (int) $first['_excel_row']);
                 $this->assertNotDuplicate($config['table'], $config['documentField'], $documentNo, (int) $tenant->activeCompanyId());
-                $this->normalizeDate($lines[0][$config['dateField']] ?? '', (int) $lines[0]['_excel_row']);
+                $this->normalizeDate($first[$config['dateField']] ?? '', (int) $first['_excel_row']);
                 if ($type === 'purchase') {
-                    $this->normalizeOptionalDate($lines[0]['delivery_date'] ?? '', (int) $lines[0]['_excel_row'], 'delivery_date');
-                    $this->normalizeOptionalDate($lines[0]['arrive_date'] ?? '', (int) $lines[0]['_excel_row'], 'arrive_date');
+                    $this->normalizeOptionalDate($first['delivery_date'] ?? '', (int) $first['_excel_row'], 'delivery_date');
+                    $this->normalizeOptionalDate($first['arrive_date'] ?? '', (int) $first['_excel_row'], 'arrive_date');
                 }
             } catch (Throwable $exception) {
                 foreach ($lines as $line) {
@@ -179,11 +177,12 @@ class OrderImportController extends BaseController
 
             foreach ($lines as $line) {
                 try {
-                    $payload = $this->linePayload($line, $type);
+                    $payload = $this->linePayload($line, $type, $siteContext['id'] ?? null);
                     $validRows[] = [
                         'excel_row' => $line['_excel_row'] ?? '-',
                         'document_no' => $documentNo,
                         'line' => $payload[$config['lineField']] ?? '',
+                        'site' => $siteContext['code'] ?? '',
                         'partner_code' => $line[$config['partnerCodeField']] ?? '',
                         'partner_name' => $line[$config['partnerNameField']] ?? '',
                         'item_code' => $payload['item_code'] ?? '',
@@ -222,13 +221,11 @@ class OrderImportController extends BaseController
 
     private function documentConsistencyError(array $lines, array $config): ?string
     {
-        if ($lines === []) {
-            return null;
-        }
-
+        if ($lines === []) return null;
         $first = $lines[0];
         $checks = [
             $config['dateField'] => 'document date',
+            'site' => 'site',
             $config['partnerCodeField'] => 'partner code',
             $config['partnerNameField'] => 'partner name',
             'currency_code' => 'currency',
@@ -237,7 +234,6 @@ class OrderImportController extends BaseController
         foreach (($config['headerFields'] ?? []) as $field => $label) {
             $checks[$field] = $label;
         }
-
         foreach ($lines as $line) {
             foreach ($checks as $field => $label) {
                 $firstValue = trim((string) ($first[$field] ?? ''));
@@ -251,55 +247,42 @@ class OrderImportController extends BaseController
         $lineNumbers = [];
         foreach ($lines as $line) {
             $lineNo = (int) ($line[$config['lineField']] ?? 0);
-            if ($lineNo < 1) {
-                return strtoupper($config['lineField']) . ' must be a positive number.';
-            }
-            if (isset($lineNumbers[$lineNo])) {
-                return 'Duplicate ' . strtoupper($config['lineField']) . ': ' . $lineNo . '.';
-            }
+            if ($lineNo < 1) return strtoupper($config['lineField']) . ' must be a positive number.';
+            if (isset($lineNumbers[$lineNo])) return 'Duplicate ' . strtoupper($config['lineField']) . ': ' . $lineNo . '.';
             $lineNumbers[$lineNo] = true;
         }
-
         $expected = 1;
         foreach (array_keys($lineNumbers) as $lineNo) {
-            if ((int) $lineNo !== $expected) {
-                return strtoupper($config['lineField']) . ' must be sequential starting from 1. Expected line ' . $expected . ', got ' . $lineNo . '.';
-            }
+            if ((int) $lineNo !== $expected) return strtoupper($config['lineField']) . ' must be sequential starting from 1. Expected line ' . $expected . ', got ' . $lineNo . '.';
             $expected++;
         }
-
         return null;
     }
 
     private function createDocuments(string $type, array $records, TenantContext $tenant): array
     {
-        if ($records === []) {
-            throw new RuntimeException('No valid order rows found in the uploaded file.');
-        }
-
+        if ($records === []) throw new RuntimeException('No valid order rows found in the uploaded file.');
         $config = $this->config($type);
         $groups = [];
         foreach ($records as $record) {
             $documentNo = trim((string) ($record[$config['documentField']] ?? ''));
-            if ($documentNo === '') {
-                throw new RuntimeException('Document number is required on Excel row ' . $record['_excel_row'] . '.');
-            }
+            if ($documentNo === '') throw new RuntimeException('Document number is required on Excel row ' . $record['_excel_row'] . '.');
             $groups[$documentNo][] = $record;
         }
 
         $created = 0;
         $lineCount = 0;
-
         foreach ($groups as $documentNo => $lines) {
             $first = $lines[0];
+            $siteContext = $this->resolveSiteContext($first['site'] ?? '', $tenant, (int) $first['_excel_row']);
             $this->assertNotDuplicate($config['table'], $config['documentField'], $documentNo, (int) $tenant->activeCompanyId());
-            $partner = $this->lookupPartner($type, (string) ($first[$config['partnerCodeField']] ?? ''));
+            $partner = $this->lookupPartner($type, (string) ($first[$config['partnerCodeField']] ?? ''), $tenant->activeCompanyId(), $siteContext['id']);
 
             $header = [
                 'company_id' => $tenant->activeCompanyId(),
-                'site_id' => $tenant->activeSiteId(),
+                'site_id' => $siteContext['id'],
                 'company' => $this->activeCode('company'),
-                'site' => $this->activeCode('site'),
+                'site' => $siteContext['code'],
                 $config['documentField'] => $documentNo,
                 $config['dateField'] => $this->normalizeDate($first[$config['dateField']] ?? '', (int) $first['_excel_row']),
                 $config['partnerIdField'] => $partner['id'] ?? null,
@@ -330,46 +313,29 @@ class OrderImportController extends BaseController
 
             $documentLines = [];
             foreach ($lines as $line) {
-                $documentLines[] = $this->linePayload($line, $type);
+                $documentLines[] = $this->linePayload($line, $type, $siteContext['id']);
             }
 
-            if ($type === 'sales') {
-                (new SalesOrderService())->create($header, $documentLines, auth()->id());
-            } else {
-                (new PurchaseOrderService())->create($header, $documentLines, auth()->id());
-            }
-
+            if ($type === 'sales') (new SalesOrderService())->create($header, $documentLines, auth()->id());
+            else (new PurchaseOrderService())->create($header, $documentLines, auth()->id());
             $created++;
             $lineCount += count($documentLines);
         }
-
         return ['documents' => $created, 'lines' => $lineCount];
     }
 
-    private function linePayload(array $line, string $type): array
+    private function linePayload(array $line, string $type, ?int $siteId = null): array
     {
-        $item = $this->lookupItem((string) ($line['item_code'] ?? ''));
+        $item = $this->lookupItem((string) ($line['item_code'] ?? ''), $siteId);
         $qty = $this->number($line['qty'] ?? 0);
-        if ($qty <= 0) {
-            throw new RuntimeException('Qty must be greater than zero on Excel row ' . $line['_excel_row'] . '.');
-        }
-
+        if ($qty <= 0) throw new RuntimeException('Qty must be greater than zero on Excel row ' . $line['_excel_row'] . '.');
         $uom = trim((string) ($line['uom_code'] ?? ''));
-        if ($uom === '') {
-            $uom = (string) ($item[$type === 'sales' ? 'sellinguom' : 'purchaseuom'] ?? $item['stockuom'] ?? 'PCS');
-        }
-
+        if ($uom === '') $uom = (string) ($item[$type === 'sales' ? 'sellinguom' : 'purchaseuom'] ?? $item['stockuom'] ?? 'PCS');
         $price = $this->number($line['unit_price'] ?? '');
-        if ($price <= 0 && $item !== null) {
-            $price = $this->number($item[$type === 'sales' ? 'sellingprice' : 'purchasep'] ?? $item['item_price'] ?? 0);
-        }
-
+        if ($price <= 0 && $item !== null) $price = $this->number($item[$type === 'sales' ? 'sellingprice' : 'purchasep'] ?? $item['item_price'] ?? 0);
         $code = trim((string) ($line['item_code'] ?? '')) ?: (string) ($item['item_code'] ?? $item['code'] ?? '');
         $name = trim((string) ($line['item_name'] ?? '')) ?: (string) ($item['item_name'] ?? $item['name'] ?? $code);
-
-        if ($code === '' && $name === '') {
-            throw new RuntimeException('Item code or item name is required on Excel row ' . $line['_excel_row'] . '.');
-        }
+        if ($code === '' && $name === '') throw new RuntimeException('Item code or item name is required on Excel row ' . $line['_excel_row'] . '.');
 
         $payload = [
             $type === 'sales' ? 'so_line' : 'po_line' => (int) ($line[$type === 'sales' ? 'so_line' : 'po_line'] ?? 0),
@@ -381,65 +347,40 @@ class OrderImportController extends BaseController
             'uom_code' => $uom,
             'unit_price' => $price,
         ];
-
         if ($type === 'sales') {
             $payload['discount_amount'] = $this->number($line['discount_amount'] ?? 0);
             $payload['tax_amount'] = $this->number($line['tax_amount'] ?? 0);
         }
-
         return $payload;
     }
 
     private function rowsToRecords(array $rows, array $expectedHeaders): array
     {
-        if (count($rows) < 2) {
-            throw new RuntimeException('Uploaded file must contain a header row and at least one data row.');
-        }
-
+        if (count($rows) < 2) throw new RuntimeException('Uploaded file must contain a header row and at least one data row.');
         $headers = array_map(fn ($value): string => $this->normalizeHeader((string) $value), $rows[0]);
-        foreach ($expectedHeaders as $header) {
-            if (! in_array($header, $headers, true)) {
-                throw new RuntimeException('Missing required header: ' . $header);
-            }
-        }
-
+        foreach ($expectedHeaders as $header) if (! in_array($header, $headers, true)) throw new RuntimeException('Missing required header: ' . $header);
         $records = [];
         foreach (array_slice($rows, 1) as $index => $row) {
-            if ($this->isBlankRow($row)) {
-                continue;
-            }
-
+            if ($this->isBlankRow($row)) continue;
             $record = ['_excel_row' => $index + 2];
             foreach ($headers as $position => $header) {
-                if ($header === '') {
-                    continue;
-                }
+                if ($header === '') continue;
                 $record[$header] = trim((string) ($row[$position] ?? ''));
             }
             $records[] = $record;
         }
-
         return $records;
     }
 
     private function readRows(string $path, string $extension): array
     {
-        if ($extension === 'xlsx') {
-            return (new XlsxSheetReader())->readFirstSheet($path);
-        }
-
+        if ($extension === 'xlsx') return (new XlsxSheetReader())->readFirstSheet($path);
         $delimiter = $extension === 'tsv' ? "\t" : ',';
         $handle = fopen($path, 'rb');
-        if ($handle === false) {
-            throw new RuntimeException('Unable to read uploaded file.');
-        }
-
+        if ($handle === false) throw new RuntimeException('Unable to read uploaded file.');
         $rows = [];
-        while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
-            $rows[] = $row;
-        }
+        while (($row = fgetcsv($handle, 0, $delimiter)) !== false) $rows[] = $row;
         fclose($handle);
-
         return $rows;
     }
 
@@ -456,60 +397,61 @@ class OrderImportController extends BaseController
     {
         $db = Database::connect();
         $builder = $db->table($table)->where('company_id', $companyId)->groupStart()->where($documentField, $documentNo);
-        if ($documentField !== 'document_no' && $db->fieldExists('document_no', $table)) {
-            $builder->orWhere('document_no', $documentNo);
-        }
+        if ($documentField !== 'document_no' && $db->fieldExists('document_no', $table)) $builder->orWhere('document_no', $documentNo);
         $builder->groupEnd();
-        if ($db->fieldExists('deleted_at', $table)) {
-            $builder->where('deleted_at', null);
-        }
-        if ($builder->countAllResults() > 0) {
-            throw new RuntimeException(strtoupper(str_replace('_no', '', $documentField)) . ' number already exists: ' . $documentNo);
-        }
+        if ($db->fieldExists('deleted_at', $table)) $builder->where('deleted_at', null);
+        if ($builder->countAllResults() > 0) throw new RuntimeException(strtoupper(str_replace('_no', '', $documentField)) . ' number already exists: ' . $documentNo);
     }
 
-    private function lookupPartner(string $type, string $code): ?array
+    private function lookupPartner(string $type, string $code, ?int $companyId = null, ?int $siteId = null): ?array
     {
         $code = trim($code);
         if ($code === '') return null;
-
         $table = $type === 'sales' ? 'customers' : 'suppliers';
         $legacyCode = $type === 'sales' ? 'customer' : 'supplier';
         $legacyName = $type === 'sales' ? 'customern' : 'supplierna';
         $db = Database::connect();
-        $builder = $db->table($table);
-        $builder->groupStart()->where($legacyCode, $code)->orWhere('code', $code)->groupEnd();
-        $this->scopeBuilder($builder, $table);
+        $builder = $db->table($table)->groupStart()->where($legacyCode, $code)->orWhere('code', $code)->groupEnd();
+        $this->scopeBuilder($builder, $table, $companyId, $siteId);
         $row = $builder->get()->getRowArray();
         if ($row === null) return null;
-
-        return [
-            'id' => (int) $row['id'],
-            'code' => (string) ($row[$legacyCode] ?? $row['code'] ?? ''),
-            'name' => (string) ($row[$legacyName] ?? $row['name'] ?? ''),
-            'terms_code' => (string) ($row['terms_code'] ?? $row['terms'] ?? ''),
-        ];
+        return ['id' => (int) $row['id'], 'code' => (string) ($row[$legacyCode] ?? $row['code'] ?? ''), 'name' => (string) ($row[$legacyName] ?? $row['name'] ?? ''), 'terms_code' => (string) ($row['terms_code'] ?? $row['terms'] ?? '')];
     }
 
-    private function lookupItem(string $code): ?array
+    private function lookupItem(string $code, ?int $siteId = null): ?array
     {
         $code = trim($code);
         if ($code === '') return null;
-
         $db = Database::connect();
-        $builder = $db->table('items');
-        $builder->groupStart()->where('item_code', $code)->orWhere('code', $code)->groupEnd();
-        $this->scopeBuilder($builder, 'items');
+        $builder = $db->table('items')->groupStart()->where('item_code', $code)->orWhere('code', $code)->groupEnd();
+        $this->scopeBuilder($builder, 'items', (new TenantContext(session()))->activeCompanyId(), $siteId);
         return $builder->get()->getRowArray() ?: null;
     }
 
-    private function scopeBuilder($builder, string $table): void
+    private function scopeBuilder($builder, string $table, ?int $companyId = null, ?int $siteId = null): void
     {
-        $tenant = new TenantContext(session());
         $db = Database::connect();
-        if ($db->fieldExists('company_id', $table) && $tenant->activeCompanyId() !== null) $builder->where('company_id', $tenant->activeCompanyId());
-        if ($db->fieldExists('site_id', $table) && $tenant->activeSiteId() !== null) $builder->where('site_id', $tenant->activeSiteId());
+        if ($db->fieldExists('company_id', $table) && $companyId !== null) $builder->where('company_id', $companyId);
+        if ($db->fieldExists('site_id', $table) && $siteId !== null) $builder->where('site_id', $siteId);
         if ($db->fieldExists('deleted_at', $table)) $builder->where('deleted_at', null);
+    }
+
+    private function resolveSiteContext(mixed $siteCode, TenantContext $tenant, int $rowNumber): array
+    {
+        $companyId = (int) $tenant->activeCompanyId();
+        $siteCode = trim((string) $siteCode);
+        if ($siteCode === '') {
+            return ['id' => $tenant->activeSiteId(), 'code' => $this->activeCode('site')];
+        }
+        $db = Database::connect();
+        $builder = $db->table('sites')->where('company_id', $companyId);
+        $builder->groupStart()->where('code', $siteCode)->orWhere('site', $siteCode)->groupEnd();
+        if ($db->fieldExists('deleted_at', 'sites')) $builder->where('deleted_at', null);
+        $site = $builder->get()->getRowArray();
+        if ($site === null) throw new RuntimeException('Site not found on Excel row ' . $rowNumber . ': ' . $siteCode);
+        $siteId = (int) $site['id'];
+        if (! $tenant->userCanAccessSite((int) auth()->id(), $companyId, $siteId)) throw new RuntimeException('You do not have access to site ' . $siteCode . ' on Excel row ' . $rowNumber . '.');
+        return ['id' => $siteId, 'code' => (string) ($site['code'] ?? $site['site'] ?? $siteCode)];
     }
 
     private function normalizeDate(mixed $value, int $rowNumber): string
@@ -541,9 +483,7 @@ class OrderImportController extends BaseController
 
     private function isBlankRow(array $row): bool
     {
-        foreach ($row as $value) {
-            if (trim((string) $value) !== '') return false;
-        }
+        foreach ($row as $value) if (trim((string) $value) !== '') return false;
         return true;
     }
 
@@ -581,24 +521,13 @@ class OrderImportController extends BaseController
                 'label' => 'Sales Order',
                 'headers' => self::SALES_HEADERS,
                 'sampleRows' => [
-                    ['SO-IMPORT-001', '1', date('Y-m-d'), 'CUST001', 'PT Contoh Customer', 'NET30', 'IDR', 'Contoh import SO', 'ITEM-0001', 'Kertas A4 80gsm 001', '10', 'PCS', '25000', '0', '0'],
-                    ['SO-IMPORT-001', '2', date('Y-m-d'), 'CUST001', 'PT Contoh Customer', 'NET30', 'IDR', 'Contoh import SO', 'ITEM-0002', 'Pulpen Hitam 002', '5', 'PCS', '5000', '0', '0'],
+                    ['SO-IMPORT-001', '1', date('Y-m-d'), 'HO', 'CUST001', 'PT Contoh Customer', 'NET30', 'IDR', 'Contoh import SO', 'ITEM-0001', 'Kertas A4 80gsm 001', '10', 'PCS', '25000', '0', '0'],
+                    ['SO-IMPORT-001', '2', date('Y-m-d'), 'HO', 'CUST001', 'PT Contoh Customer', 'NET30', 'IDR', 'Contoh import SO', 'ITEM-0002', 'Pulpen Hitam 002', '5', 'PCS', '5000', '0', '0'],
                 ],
-                'sheetName' => 'Sales Order Import',
-                'fileName' => 'sales-order-import-template.xlsx',
-                'importUrl' => 'sales/orders/import',
-                'commitUrl' => 'sales/orders/import/commit',
-                'templateUrl' => 'sales/orders/import-template',
-                'backUrl' => 'sales/orders',
-                'table' => 'sales_orders',
-                'documentField' => 'so_no',
-                'lineField' => 'so_line',
-                'dateField' => 'so_date',
-                'partnerIdField' => 'customer_id',
-                'partnerLegacyField' => 'customer',
-                'partnerCodeField' => 'customer_code',
-                'partnerNameField' => 'customer_name',
-                'headerFields' => [],
+                'sheetName' => 'Sales Order Import', 'fileName' => 'sales-order-import-template.xlsx',
+                'importUrl' => 'sales/orders/import', 'commitUrl' => 'sales/orders/import/commit', 'templateUrl' => 'sales/orders/import-template', 'backUrl' => 'sales/orders',
+                'table' => 'sales_orders', 'documentField' => 'so_no', 'lineField' => 'so_line', 'dateField' => 'so_date',
+                'partnerIdField' => 'customer_id', 'partnerLegacyField' => 'customer', 'partnerCodeField' => 'customer_code', 'partnerNameField' => 'customer_name', 'headerFields' => [],
             ];
         }
 
@@ -607,35 +536,14 @@ class OrderImportController extends BaseController
             'label' => 'Purchase Order',
             'headers' => self::PURCHASE_HEADERS,
             'sampleRows' => [
-                ['PO-IMPORT-001', '1', date('Y-m-d'), date('Y-m-d', strtotime('+3 days')), date('Y-m-d', strtotime('+5 days')), 'SUP001', 'PT Contoh Supplier', 'NET30', 'IDR', 'Contoh import PO', 'Header remarks', '2.5', '0', '15000', '0', '5000', '11000', '0', 'ITEM-0001', 'Kertas A4 80gsm 001', 'Description line 1', '20', 'PCS', '20000'],
-                ['PO-IMPORT-001', '2', date('Y-m-d'), date('Y-m-d', strtotime('+3 days')), date('Y-m-d', strtotime('+5 days')), 'SUP001', 'PT Contoh Supplier', 'NET30', 'IDR', 'Contoh import PO', 'Header remarks', '2.5', '0', '15000', '0', '5000', '11000', '0', 'ITEM-0002', 'Pulpen Hitam 002', 'Description line 2', '12', 'PCS', '4000'],
+                ['PO-IMPORT-001', '1', date('Y-m-d'), 'HO', date('Y-m-d', strtotime('+3 days')), date('Y-m-d', strtotime('+5 days')), 'SUP001', 'PT Contoh Supplier', 'NET30', 'IDR', 'Contoh import PO', 'Header remarks', '2.5', '0', '15000', '0', '5000', '11000', '0', 'ITEM-0001', 'Kertas A4 80gsm 001', 'Description line 1', '20', 'PCS', '20000'],
+                ['PO-IMPORT-001', '2', date('Y-m-d'), 'HO', date('Y-m-d', strtotime('+3 days')), date('Y-m-d', strtotime('+5 days')), 'SUP001', 'PT Contoh Supplier', 'NET30', 'IDR', 'Contoh import PO', 'Header remarks', '2.5', '0', '15000', '0', '5000', '11000', '0', 'ITEM-0002', 'Pulpen Hitam 002', 'Description line 2', '12', 'PCS', '4000'],
             ],
-            'sheetName' => 'Purchase Order Import',
-            'fileName' => 'purchase-order-import-template.xlsx',
-            'importUrl' => 'purchase/orders/import',
-            'commitUrl' => 'purchase/orders/import/commit',
-            'templateUrl' => 'purchase/orders/import-template',
-            'backUrl' => 'purchase/orders',
-            'table' => 'purchase_orders',
-            'documentField' => 'po_no',
-            'lineField' => 'po_line',
-            'dateField' => 'po_date',
-            'partnerIdField' => 'supplier_id',
-            'partnerLegacyField' => 'supplier',
-            'partnerCodeField' => 'supplier_code',
-            'partnerNameField' => 'supplier_name',
-            'headerFields' => [
-                'delivery_date' => 'delivery date',
-                'arrive_date' => 'arrive date',
-                'remarks' => 'remarks',
-                'discount_percent' => 'discount percent',
-                'discount_amount' => 'discount amount',
-                'freight_amount' => 'freight amount',
-                'other_amount' => 'other amount',
-                'special_charge_amount' => 'special charge amount',
-                'vat_amount' => 'VAT amount',
-                'wht_amount' => 'WHT amount',
-            ],
+            'sheetName' => 'Purchase Order Import', 'fileName' => 'purchase-order-import-template.xlsx',
+            'importUrl' => 'purchase/orders/import', 'commitUrl' => 'purchase/orders/import/commit', 'templateUrl' => 'purchase/orders/import-template', 'backUrl' => 'purchase/orders',
+            'table' => 'purchase_orders', 'documentField' => 'po_no', 'lineField' => 'po_line', 'dateField' => 'po_date',
+            'partnerIdField' => 'supplier_id', 'partnerLegacyField' => 'supplier', 'partnerCodeField' => 'supplier_code', 'partnerNameField' => 'supplier_name',
+            'headerFields' => ['delivery_date' => 'delivery date', 'arrive_date' => 'arrive date', 'remarks' => 'remarks', 'discount_percent' => 'discount percent', 'discount_amount' => 'discount amount', 'freight_amount' => 'freight amount', 'other_amount' => 'other amount', 'special_charge_amount' => 'special charge amount', 'vat_amount' => 'VAT amount', 'wht_amount' => 'WHT amount'],
         ];
     }
 
