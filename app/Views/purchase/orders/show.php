@@ -68,6 +68,25 @@ $canEditPo = in_array($status, ['draft', 'submitted', 'approved'], true) && ! $h
                 </div>
             </div>
         </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h4 class="card-title mb-3">Header Amount</h4>
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr><th>Subtotal</th><td class="text-end"><?= esc(number_format((float) $order['subtotal_amount'], 2)) ?></td></tr>
+                        <tr><th>Discount %</th><td class="text-end"><?= esc(number_format((float) ($order['discount_percent'] ?? 0), 4)) ?></td></tr>
+                        <tr><th>Discount Amount</th><td class="text-end"><?= esc(number_format((float) $order['discount_amount'], 2)) ?></td></tr>
+                        <tr><th>Freight</th><td class="text-end"><?= esc(number_format((float) ($order['freight_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr><th>Other Amount</th><td class="text-end"><?= esc(number_format((float) ($order['other_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr><th>Special Charge</th><td class="text-end"><?= esc(number_format((float) ($order['special_charge_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr><th>VAT</th><td class="text-end"><?= esc(number_format((float) ($order['vat_amount'] ?? $order['tax_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr><th>WHT</th><td class="text-end"><?= esc(number_format((float) ($order['wht_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr class="table-light"><th>Total</th><td class="text-end fw-semibold"><?= esc(number_format((float) $order['total_amount'], 2)) ?></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <div class="col-xl-8">
@@ -78,7 +97,7 @@ $canEditPo = in_array($status, ['draft', 'submitted', 'approved'], true) && ! $h
                     <table class="table table-nowrap align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th>#</th><th>Item</th><th>Description</th><th class="text-end">Ordered</th><th class="text-end">Received</th><th class="text-end">Outstanding</th><th>UoM</th><th class="text-end">Price</th><th class="text-end">Disc</th><th class="text-end">Freight</th><th class="text-end">Special</th><th class="text-end">VAT</th><th class="text-end">WHT</th><th>Delivery</th><th>Arrive</th><th class="text-end">Total</th><th>Status</th>
+                                <th>#</th><th>Item</th><th>Description</th><th class="text-end">Ordered</th><th class="text-end">Received</th><th class="text-end">Outstanding</th><th>UoM</th><th class="text-end">Price</th><th class="text-end">Line Total</th><th>Status</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -92,27 +111,11 @@ $canEditPo = in_array($status, ['draft', 'submitted', 'approved'], true) && ! $h
                                 <td class="text-end fw-semibold"><?= esc(number_format((float) ($line['qty_outstanding'] ?? $line['qty'] ?? 0), 4)) ?></td>
                                 <td><?= esc($line['uom_code'] ?? '-') ?></td>
                                 <td class="text-end"><?= esc(number_format((float) $line['unit_price'], 2)) ?></td>
-                                <td class="text-end"><?= esc(number_format((float) ($line['discount_amount'] ?? 0), 2)) ?></td>
-                                <td class="text-end"><?= esc(number_format((float) ($line['freight_amount'] ?? 0), 2)) ?></td>
-                                <td class="text-end"><?= esc(number_format((float) ($line['special_charge_amount'] ?? 0), 2)) ?></td>
-                                <td class="text-end"><?= esc(number_format((float) ($line['vat_amount'] ?? $line['tax_amount'] ?? 0), 2)) ?></td>
-                                <td class="text-end"><?= esc(number_format((float) ($line['wht_amount'] ?? 0), 2)) ?></td>
-                                <td><?= esc($line['delivery_date'] ?? '-') ?></td>
-                                <td><?= esc($line['arrive_date'] ?? '-') ?></td>
                                 <td class="text-end fw-semibold"><?= esc(number_format((float) $line['line_total'], 2)) ?></td>
                                 <td><span class="badge bg-secondary"><?= esc($line['line_status'] ?? 'open') ?></span></td>
                             </tr>
                         <?php endforeach ?>
                         </tbody>
-                        <tfoot class="table-light">
-                            <tr><th colspan="15" class="text-end">Subtotal</th><th class="text-end"><?= esc(number_format((float) $order['subtotal_amount'], 2)) ?></th><th></th></tr>
-                            <tr><th colspan="15" class="text-end">Discount</th><th class="text-end"><?= esc(number_format((float) $order['discount_amount'], 2)) ?></th><th></th></tr>
-                            <tr><th colspan="15" class="text-end">Freight</th><th class="text-end"><?= esc(number_format((float) ($order['freight_amount'] ?? 0), 2)) ?></th><th></th></tr>
-                            <tr><th colspan="15" class="text-end">Other + Special</th><th class="text-end"><?= esc(number_format((float) ($order['other_amount'] ?? 0) + (float) ($order['special_charge_amount'] ?? 0), 2)) ?></th><th></th></tr>
-                            <tr><th colspan="15" class="text-end">VAT</th><th class="text-end"><?= esc(number_format((float) ($order['vat_amount'] ?? $order['tax_amount'] ?? 0), 2)) ?></th><th></th></tr>
-                            <tr><th colspan="15" class="text-end">WHT</th><th class="text-end"><?= esc(number_format((float) ($order['wht_amount'] ?? 0), 2)) ?></th><th></th></tr>
-                            <tr><th colspan="15" class="text-end">Total</th><th class="text-end"><?= esc(number_format((float) $order['total_amount'], 2)) ?></th><th></th></tr>
-                        </tfoot>
                     </table>
                 </div>
             </div>
