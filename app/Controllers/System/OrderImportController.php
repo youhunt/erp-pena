@@ -18,80 +18,27 @@ class OrderImportController extends BaseController
     private const SESSION_KEY = 'order_import_previews';
 
     private const SALES_HEADERS = [
-        'so_no',
-        'so_line',
-        'so_date',
-        'customer_code',
-        'customer_name',
-        'terms_code',
-        'currency_code',
-        'notes',
-        'item_code',
-        'item_name',
-        'qty',
-        'uom_code',
-        'unit_price',
-        'discount_amount',
-        'tax_amount',
+        'so_no', 'so_line', 'so_date', 'customer_code', 'customer_name',
+        'terms_code', 'currency_code', 'notes',
+        'item_code', 'item_name', 'qty', 'uom_code', 'unit_price', 'discount_amount', 'tax_amount',
     ];
 
     private const PURCHASE_HEADERS = [
-        'po_no',
-        'po_line',
-        'po_date',
-        'supplier_code',
-        'supplier_name',
-        'terms_code',
-        'currency_code',
-        'notes',
-        'item_code',
-        'item_name',
-        'qty',
-        'uom_code',
-        'unit_price',
-        'discount_amount',
-        'tax_amount',
+        'po_no', 'po_line', 'po_date', 'delivery_date', 'arrive_date',
+        'supplier_code', 'supplier_name', 'terms_code', 'currency_code', 'notes', 'remarks',
+        'discount_percent', 'discount_amount', 'freight_amount', 'other_amount',
+        'special_charge_amount', 'vat_amount', 'wht_amount',
+        'item_code', 'item_name', 'description', 'qty', 'uom_code', 'unit_price',
     ];
 
-    public function salesForm(): string
-    {
-        return $this->form('sales');
-    }
-
-    public function purchaseForm(): string
-    {
-        return $this->form('purchase');
-    }
-
-    public function salesTemplate()
-    {
-        return $this->template('sales');
-    }
-
-    public function purchaseTemplate()
-    {
-        return $this->template('purchase');
-    }
-
-    public function importSales()
-    {
-        return $this->import('sales');
-    }
-
-    public function importPurchase()
-    {
-        return $this->import('purchase');
-    }
-
-    public function commitSales()
-    {
-        return $this->commit('sales');
-    }
-
-    public function commitPurchase()
-    {
-        return $this->commit('purchase');
-    }
+    public function salesForm(): string { return $this->form('sales'); }
+    public function purchaseForm(): string { return $this->form('purchase'); }
+    public function salesTemplate() { return $this->template('sales'); }
+    public function purchaseTemplate() { return $this->template('purchase'); }
+    public function importSales() { return $this->import('sales'); }
+    public function importPurchase() { return $this->import('purchase'); }
+    public function commitSales() { return $this->commit('sales'); }
+    public function commitPurchase() { return $this->commit('purchase'); }
 
     private function form(string $type): string
     {
@@ -114,11 +61,7 @@ class OrderImportController extends BaseController
     private function template(string $type)
     {
         $config = $this->config($type);
-        $path = (new XlsxSheetWriter())->writeFirstSheet(
-            array_merge([$config['headers']], $config['sampleRows']),
-            $config['sheetName']
-        );
-
+        $path = (new XlsxSheetWriter())->writeFirstSheet(array_merge([$config['headers']], $config['sampleRows']), $config['sheetName']);
         $content = file_get_contents($path) ?: '';
         @unlink($path);
 
@@ -205,15 +148,9 @@ class OrderImportController extends BaseController
         foreach ($records as $record) {
             $documentNo = trim((string) ($record[$config['documentField']] ?? ''));
             if ($documentNo === '') {
-                $errors[] = [
-                    'excel_row' => $record['_excel_row'] ?? '-',
-                    'document_no' => '-',
-                    'item_code' => $record['item_code'] ?? '',
-                    'message' => 'Document number is required.',
-                ];
+                $errors[] = ['excel_row' => $record['_excel_row'] ?? '-', 'document_no' => '-', 'item_code' => $record['item_code'] ?? '', 'message' => 'Document number is required.'];
                 continue;
             }
-
             $groups[$documentNo][] = $record;
         }
 
@@ -221,12 +158,7 @@ class OrderImportController extends BaseController
             $consistencyError = $this->documentConsistencyError($lines, $config);
             if ($consistencyError !== null) {
                 foreach ($lines as $line) {
-                    $errors[] = [
-                        'excel_row' => $line['_excel_row'] ?? '-',
-                        'document_no' => $documentNo,
-                        'item_code' => $line['item_code'] ?? '',
-                        'message' => $consistencyError,
-                    ];
+                    $errors[] = ['excel_row' => $line['_excel_row'] ?? '-', 'document_no' => $documentNo, 'item_code' => $line['item_code'] ?? '', 'message' => $consistencyError];
                 }
                 continue;
             }
@@ -234,14 +166,13 @@ class OrderImportController extends BaseController
             try {
                 $this->assertNotDuplicate($config['table'], $config['documentField'], $documentNo, (int) $tenant->activeCompanyId());
                 $this->normalizeDate($lines[0][$config['dateField']] ?? '', (int) $lines[0]['_excel_row']);
+                if ($type === 'purchase') {
+                    $this->normalizeOptionalDate($lines[0]['delivery_date'] ?? '', (int) $lines[0]['_excel_row'], 'delivery_date');
+                    $this->normalizeOptionalDate($lines[0]['arrive_date'] ?? '', (int) $lines[0]['_excel_row'], 'arrive_date');
+                }
             } catch (Throwable $exception) {
                 foreach ($lines as $line) {
-                    $errors[] = [
-                        'excel_row' => $line['_excel_row'] ?? '-',
-                        'document_no' => $documentNo,
-                        'item_code' => $line['item_code'] ?? '',
-                        'message' => $exception->getMessage(),
-                    ];
+                    $errors[] = ['excel_row' => $line['_excel_row'] ?? '-', 'document_no' => $documentNo, 'item_code' => $line['item_code'] ?? '', 'message' => $exception->getMessage()];
                 }
                 continue;
             }
@@ -262,17 +193,11 @@ class OrderImportController extends BaseController
                         'unit_price' => $payload['unit_price'] ?? 0,
                     ];
                 } catch (Throwable $exception) {
-                    $errors[] = [
-                        'excel_row' => $line['_excel_row'] ?? '-',
-                        'document_no' => $documentNo,
-                        'item_code' => $line['item_code'] ?? '',
-                        'message' => $exception->getMessage(),
-                    ];
+                    $errors[] = ['excel_row' => $line['_excel_row'] ?? '-', 'document_no' => $documentNo, 'item_code' => $line['item_code'] ?? '', 'message' => $exception->getMessage()];
                 }
             }
         }
 
-        $documents = count($groups);
         $validDocuments = count(array_unique(array_column($validRows, 'document_no')));
         $message = $errors === []
             ? 'Preview valid. ' . $validDocuments . ' dokumen dan ' . count($validRows) . ' line siap diposting.'
@@ -284,7 +209,7 @@ class OrderImportController extends BaseController
             'company_id' => $tenant->activeCompanyId(),
             'site_id' => $tenant->activeSiteId(),
             'records' => $records,
-            'documents' => $documents,
+            'documents' => count($groups),
             'valid_documents' => $validDocuments,
             'lines' => count($records),
             'valid_lines' => count($validRows),
@@ -309,6 +234,9 @@ class OrderImportController extends BaseController
             'currency_code' => 'currency',
             'terms_code' => 'terms',
         ];
+        foreach (($config['headerFields'] ?? []) as $field => $label) {
+            $checks[$field] = $label;
+        }
 
         foreach ($lines as $line) {
             foreach ($checks as $field => $label) {
@@ -350,14 +278,12 @@ class OrderImportController extends BaseController
         }
 
         $config = $this->config($type);
-        $db = Database::connect();
         $groups = [];
         foreach ($records as $record) {
             $documentNo = trim((string) ($record[$config['documentField']] ?? ''));
             if ($documentNo === '') {
                 throw new RuntimeException('Document number is required on Excel row ' . $record['_excel_row'] . '.');
             }
-
             $groups[$documentNo][] = $record;
         }
 
@@ -386,6 +312,21 @@ class OrderImportController extends BaseController
                 'document_status' => 'draft',
                 'notes' => trim((string) ($first['notes'] ?? '')),
             ];
+
+            if ($type === 'purchase') {
+                $header += [
+                    'delivery_date' => $this->normalizeOptionalDate($first['delivery_date'] ?? '', (int) $first['_excel_row'], 'delivery_date'),
+                    'arrive_date' => $this->normalizeOptionalDate($first['arrive_date'] ?? '', (int) $first['_excel_row'], 'arrive_date'),
+                    'remarks' => trim((string) ($first['remarks'] ?? '')),
+                    'discount_percent' => $this->number($first['discount_percent'] ?? 0),
+                    'discount_amount' => $this->number($first['discount_amount'] ?? 0),
+                    'freight_amount' => $this->number($first['freight_amount'] ?? 0),
+                    'other_amount' => $this->number($first['other_amount'] ?? 0),
+                    'special_charge_amount' => $this->number($first['special_charge_amount'] ?? 0),
+                    'vat_amount' => $this->number($first['vat_amount'] ?? 0),
+                    'wht_amount' => $this->number($first['wht_amount'] ?? 0),
+                ];
+            }
 
             $documentLines = [];
             foreach ($lines as $line) {
@@ -430,17 +371,23 @@ class OrderImportController extends BaseController
             throw new RuntimeException('Item code or item name is required on Excel row ' . $line['_excel_row'] . '.');
         }
 
-        return [
+        $payload = [
             $type === 'sales' ? 'so_line' : 'po_line' => (int) ($line[$type === 'sales' ? 'so_line' : 'po_line'] ?? 0),
             'item_id' => isset($item['id']) ? (int) $item['id'] : null,
             'item_code' => $code !== '' ? $code : null,
             'item_name' => $name !== '' ? $name : $code,
+            'description' => trim((string) ($line['description'] ?? '')),
             'qty' => $qty,
             'uom_code' => $uom,
             'unit_price' => $price,
-            'discount_amount' => $this->number($line['discount_amount'] ?? 0),
-            'tax_amount' => $this->number($line['tax_amount'] ?? 0),
         ];
+
+        if ($type === 'sales') {
+            $payload['discount_amount'] = $this->number($line['discount_amount'] ?? 0);
+            $payload['tax_amount'] = $this->number($line['tax_amount'] ?? 0);
+        }
+
+        return $payload;
     }
 
     private function rowsToRecords(array $rows, array $expectedHeaders): array
@@ -467,7 +414,6 @@ class OrderImportController extends BaseController
                 if ($header === '') {
                     continue;
                 }
-
                 $record[$header] = trim((string) ($row[$position] ?? ''));
             }
             $records[] = $record;
@@ -499,46 +445,25 @@ class OrderImportController extends BaseController
 
     private function validateUpload($file): ?string
     {
-        if ($file === null || ! $file->isValid()) {
-            return 'Please upload a valid Excel or CSV file.';
-        }
-
-        if ($file->getSize() < 1) {
-            return 'Uploaded file is empty.';
-        }
-
-        if ($file->getSize() > self::MAX_UPLOAD_BYTES) {
-            return 'Uploaded file is too large. Maximum allowed size is 10 MB.';
-        }
-
-        if (! in_array(strtolower($file->getClientExtension()), ['xlsx', 'csv', 'tsv'], true)) {
-            return 'Only .xlsx, .csv, or .tsv files are supported.';
-        }
-
+        if ($file === null || ! $file->isValid()) return 'Please upload a valid Excel or CSV file.';
+        if ($file->getSize() < 1) return 'Uploaded file is empty.';
+        if ($file->getSize() > self::MAX_UPLOAD_BYTES) return 'Uploaded file is too large. Maximum allowed size is 10 MB.';
+        if (! in_array(strtolower($file->getClientExtension()), ['xlsx', 'csv', 'tsv'], true)) return 'Only .xlsx, .csv, or .tsv files are supported.';
         return null;
     }
 
     private function assertNotDuplicate(string $table, string $documentField, string $documentNo, int $companyId): void
     {
         $db = Database::connect();
-        $builder = $db->table($table)
-            ->where('company_id', $companyId)
-            ->groupStart()
-            ->where($documentField, $documentNo);
-
+        $builder = $db->table($table)->where('company_id', $companyId)->groupStart()->where($documentField, $documentNo);
         if ($documentField !== 'document_no' && $db->fieldExists('document_no', $table)) {
             $builder->orWhere('document_no', $documentNo);
         }
-
         $builder->groupEnd();
-
         if ($db->fieldExists('deleted_at', $table)) {
             $builder->where('deleted_at', null);
         }
-
-        $exists = $builder->countAllResults() > 0;
-
-        if ($exists) {
+        if ($builder->countAllResults() > 0) {
             throw new RuntimeException(strtoupper(str_replace('_no', '', $documentField)) . ' number already exists: ' . $documentNo);
         }
     }
@@ -546,9 +471,7 @@ class OrderImportController extends BaseController
     private function lookupPartner(string $type, string $code): ?array
     {
         $code = trim($code);
-        if ($code === '') {
-            return null;
-        }
+        if ($code === '') return null;
 
         $table = $type === 'sales' ? 'customers' : 'suppliers';
         $legacyCode = $type === 'sales' ? 'customer' : 'supplier';
@@ -558,10 +481,7 @@ class OrderImportController extends BaseController
         $builder->groupStart()->where($legacyCode, $code)->orWhere('code', $code)->groupEnd();
         $this->scopeBuilder($builder, $table);
         $row = $builder->get()->getRowArray();
-
-        if ($row === null) {
-            return null;
-        }
+        if ($row === null) return null;
 
         return [
             'id' => (int) $row['id'],
@@ -574,15 +494,12 @@ class OrderImportController extends BaseController
     private function lookupItem(string $code): ?array
     {
         $code = trim($code);
-        if ($code === '') {
-            return null;
-        }
+        if ($code === '') return null;
 
         $db = Database::connect();
         $builder = $db->table('items');
         $builder->groupStart()->where('item_code', $code)->orWhere('code', $code)->groupEnd();
         $this->scopeBuilder($builder, 'items');
-
         return $builder->get()->getRowArray() ?: null;
     }
 
@@ -590,36 +507,28 @@ class OrderImportController extends BaseController
     {
         $tenant = new TenantContext(session());
         $db = Database::connect();
-
-        if ($db->fieldExists('company_id', $table) && $tenant->activeCompanyId() !== null) {
-            $builder->where('company_id', $tenant->activeCompanyId());
-        }
-
-        if ($db->fieldExists('site_id', $table) && $tenant->activeSiteId() !== null) {
-            $builder->where('site_id', $tenant->activeSiteId());
-        }
-
-        if ($db->fieldExists('deleted_at', $table)) {
-            $builder->where('deleted_at', null);
-        }
+        if ($db->fieldExists('company_id', $table) && $tenant->activeCompanyId() !== null) $builder->where('company_id', $tenant->activeCompanyId());
+        if ($db->fieldExists('site_id', $table) && $tenant->activeSiteId() !== null) $builder->where('site_id', $tenant->activeSiteId());
+        if ($db->fieldExists('deleted_at', $table)) $builder->where('deleted_at', null);
     }
 
     private function normalizeDate(mixed $value, int $rowNumber): string
     {
         $value = trim((string) $value);
-        if ($value === '') {
-            throw new RuntimeException('Document date is required on Excel row ' . $rowNumber . '.');
-        }
-
-        if (is_numeric($value) && (float) $value > 20000) {
-            return gmdate('Y-m-d', ((int) floor((float) $value) - 25569) * 86400);
-        }
-
+        if ($value === '') throw new RuntimeException('Document date is required on Excel row ' . $rowNumber . '.');
+        if (is_numeric($value) && (float) $value > 20000) return gmdate('Y-m-d', ((int) floor((float) $value) - 25569) * 86400);
         $timestamp = strtotime($value);
-        if ($timestamp === false) {
-            throw new RuntimeException('Invalid document date on Excel row ' . $rowNumber . '. Use YYYY-MM-DD.');
-        }
+        if ($timestamp === false) throw new RuntimeException('Invalid document date on Excel row ' . $rowNumber . '. Use YYYY-MM-DD.');
+        return date('Y-m-d', $timestamp);
+    }
 
+    private function normalizeOptionalDate(mixed $value, int $rowNumber, string $label): ?string
+    {
+        $value = trim((string) $value);
+        if ($value === '') return null;
+        if (is_numeric($value) && (float) $value > 20000) return gmdate('Y-m-d', ((int) floor((float) $value) - 25569) * 86400);
+        $timestamp = strtotime($value);
+        if ($timestamp === false) throw new RuntimeException('Invalid ' . $label . ' on Excel row ' . $rowNumber . '. Use YYYY-MM-DD.');
         return date('Y-m-d', $timestamp);
     }
 
@@ -627,35 +536,27 @@ class OrderImportController extends BaseController
     {
         $header = strtolower(trim($header));
         $header = preg_replace('/[^a-z0-9]+/', '_', $header) ?? '';
-
         return trim($header, '_');
     }
 
     private function isBlankRow(array $row): bool
     {
         foreach ($row as $value) {
-            if (trim((string) $value) !== '') {
-                return false;
-            }
+            if (trim((string) $value) !== '') return false;
         }
-
         return true;
     }
 
     private function number(mixed $value): float
     {
         $value = trim((string) $value);
-        if ($value === '') {
-            return 0.0;
-        }
-
+        if ($value === '') return 0.0;
         return (float) str_replace(',', '', $value);
     }
 
     private function nullIfBlank(mixed $value): ?string
     {
         $value = trim((string) $value);
-
         return $value === '' ? null : $value;
     }
 
@@ -663,19 +564,12 @@ class OrderImportController extends BaseController
     {
         $sessionKey = $type === 'company' ? 'active_company_code' : 'active_site_code';
         $code = session($sessionKey);
-        if ($code !== null && $code !== '') {
-            return (string) $code;
-        }
-
+        if ($code !== null && $code !== '') return (string) $code;
         $tenant = new TenantContext(session());
         $id = $type === 'company' ? $tenant->activeCompanyId() : $tenant->activeSiteId();
-        if ($id === null) {
-            return null;
-        }
-
+        if ($id === null) return null;
         $table = $type === 'company' ? 'companies' : 'sites';
         $row = Database::connect()->table($table)->where('id', $id)->get()->getRowArray();
-
         return isset($row['code']) ? (string) $row['code'] : null;
     }
 
@@ -704,6 +598,7 @@ class OrderImportController extends BaseController
                 'partnerLegacyField' => 'customer',
                 'partnerCodeField' => 'customer_code',
                 'partnerNameField' => 'customer_name',
+                'headerFields' => [],
             ];
         }
 
@@ -712,8 +607,8 @@ class OrderImportController extends BaseController
             'label' => 'Purchase Order',
             'headers' => self::PURCHASE_HEADERS,
             'sampleRows' => [
-                ['PO-IMPORT-001', '1', date('Y-m-d'), 'SUP001', 'PT Contoh Supplier', 'NET30', 'IDR', 'Contoh import PO', 'ITEM-0001', 'Kertas A4 80gsm 001', '20', 'PCS', '20000', '0', '0'],
-                ['PO-IMPORT-001', '2', date('Y-m-d'), 'SUP001', 'PT Contoh Supplier', 'NET30', 'IDR', 'Contoh import PO', 'ITEM-0002', 'Pulpen Hitam 002', '12', 'PCS', '4000', '0', '0'],
+                ['PO-IMPORT-001', '1', date('Y-m-d'), date('Y-m-d', strtotime('+3 days')), date('Y-m-d', strtotime('+5 days')), 'SUP001', 'PT Contoh Supplier', 'NET30', 'IDR', 'Contoh import PO', 'Header remarks', '2.5', '0', '15000', '0', '5000', '11000', '0', 'ITEM-0001', 'Kertas A4 80gsm 001', 'Description line 1', '20', 'PCS', '20000'],
+                ['PO-IMPORT-001', '2', date('Y-m-d'), date('Y-m-d', strtotime('+3 days')), date('Y-m-d', strtotime('+5 days')), 'SUP001', 'PT Contoh Supplier', 'NET30', 'IDR', 'Contoh import PO', 'Header remarks', '2.5', '0', '15000', '0', '5000', '11000', '0', 'ITEM-0002', 'Pulpen Hitam 002', 'Description line 2', '12', 'PCS', '4000'],
             ],
             'sheetName' => 'Purchase Order Import',
             'fileName' => 'purchase-order-import-template.xlsx',
@@ -729,21 +624,27 @@ class OrderImportController extends BaseController
             'partnerLegacyField' => 'supplier',
             'partnerCodeField' => 'supplier_code',
             'partnerNameField' => 'supplier_name',
+            'headerFields' => [
+                'delivery_date' => 'delivery date',
+                'arrive_date' => 'arrive date',
+                'remarks' => 'remarks',
+                'discount_percent' => 'discount percent',
+                'discount_amount' => 'discount amount',
+                'freight_amount' => 'freight amount',
+                'other_amount' => 'other amount',
+                'special_charge_amount' => 'special charge amount',
+                'vat_amount' => 'VAT amount',
+                'wht_amount' => 'WHT amount',
+            ],
         ];
     }
 
     private function previewFromRequest(string $type): ?array
     {
         $token = trim((string) $this->request->getGet('preview'));
-        if ($token === '') {
-            return null;
-        }
-
+        if ($token === '') return null;
         $preview = $this->getPreview($token);
-        if ($preview === null || ($preview['type'] ?? '') !== $type) {
-            return null;
-        }
-
+        if ($preview === null || ($preview['type'] ?? '') !== $type) return null;
         return $preview;
     }
 
@@ -756,12 +657,8 @@ class OrderImportController extends BaseController
 
     private function getPreview(string $token): ?array
     {
-        if ($token === '') {
-            return null;
-        }
-
+        if ($token === '') return null;
         $previews = session(self::SESSION_KEY) ?? [];
-
         return is_array($previews[$token] ?? null) ? $previews[$token] : null;
     }
 
