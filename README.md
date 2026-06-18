@@ -4,20 +4,30 @@ PENA ERP is an enterprise ERP foundation built with CodeIgniter 4, CodeIgniter S
 
 ## Current Stage
 
-This repository was empty at audit time, so the first implementation creates the ERP foundation only:
+This repository was empty at initial audit time, so the first implementation created the ERP foundation. The current codebase must be continued, not regenerated from scratch.
+
+Implemented foundation includes:
 
 - CodeIgniter 4 appstarter `v4.7.3`
 - CodeIgniter Shield `v1.3.0`
 - ERP role and permission matrix
 - Multi-company and multi-site database foundation
-- Migration and seeder baseline from the Excel data dictionary
+- Tenant bootstrap and active company/site switcher
+- Permission guard filter for protected ERP routes
+- Setup/master generic CRUD foundation
+- Sales, purchase, inventory, finance, AP/AR, production, and AI/OCR route foundations
 - Dynamic sidebar model and service
 - Skote assets extracted from `resources.zip` into `public/assets/skote`
-- Initial dashboard, setup, and AI document upload pages
-- CRUD foundation for company, site, department, warehouse, UoM, customer, supplier, and item
-- Active company/site switcher in the Skote topbar
 - Vendor-neutral OCR/AI service contracts
 - Documentation under `docs/`
+
+The current continuation adds:
+
+- Formal repository audit documentation
+- Reusable tenant scope helper: `App\Services\Support\TenantScope`
+- Local readiness command: `php spark pena:health`
+- Tenant and permission hardening guide
+- Updated continuation plan for staged development
 
 Skote assets are stored in `resources.zip` and extracted into `public/assets/skote` for the current layout.
 
@@ -31,6 +41,9 @@ Skote assets are stored in `resources.zip` and extracted into `public/assets/sko
 ## Quick Start
 
 ```bash
+git clone https://github.com/youhunt/erp-pena.git
+cd erp-pena
+composer install
 cp env .env
 ```
 
@@ -51,10 +64,10 @@ wilayah.baseUrl = 'https://api-wilayah.belajardisiniaja.com'
 wilayah.apiToken = 'YOUR_WILAYAH_API_TOKEN'
 ```
 
-Install dependencies:
+Create database:
 
-```bash
-composer install
+```sql
+CREATE DATABASE pena_erp CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
 Run migrations and seeders:
@@ -64,12 +77,22 @@ php spark migrate --all
 php spark db:seed PenaErpSeeder
 ```
 
-Run the seeder again after menu or baseline master updates; it refreshes `menu_items` without deleting transactional data.
+Run local readiness check:
+
+```bash
+php spark pena:health
+```
 
 Start the app:
 
 ```bash
 php spark serve
+```
+
+Open:
+
+```text
+http://localhost:8080
 ```
 
 Default admin:
@@ -79,8 +102,30 @@ Default admin:
 
 Change the password immediately after first login.
 
+## Core Security Notes
+
+- ERP routes are protected by Shield session authentication.
+- Tenant context is initialized by `TenantBootstrapFilter`.
+- Setup/master tenant safety is guarded by `SetupMasterTenantGuardFilter`.
+- Route-level permission is guarded by `PermissionGuardFilter`.
+- Sidebar visibility is not treated as security; direct URL access must also pass permission checks.
+- New service/controller code should use `App\Services\Support\TenantScope` for active `company_id` and `site_id` handling.
+
+## Development Rule
+
+Before adding a new module or route:
+
+1. Add or verify migration.
+2. Add or verify seeder/menu entry.
+3. Add route.
+4. Add permission mapping in `PermissionGuardFilter` when the route is protected.
+5. Use `TenantScope` for tenant-owned query/insert/update.
+6. Add audit log for important changes.
+7. Test with Super Admin and non-admin role.
+
 ## Documentation
 
+- [Repository Audit](docs/00-repository-audit.md)
 - [Overview](docs/01-overview.md)
 - [Installation](docs/02-installation.md)
 - [Architecture](docs/03-architecture.md)
@@ -91,4 +136,6 @@ Change the password immediately after first login.
 - [Development Guide](docs/08-development-guide.md)
 - [Testing Checklist](docs/09-testing-checklist.md)
 - [Roadmap](docs/10-roadmap.md)
+- [Continuation Plan](docs/11-continuation-plan.md)
 - [Development Priority Plan](docs/12-development-priority-plan.md)
+- [Tenant and Permission Hardening](docs/13-tenant-permission-hardening.md)
