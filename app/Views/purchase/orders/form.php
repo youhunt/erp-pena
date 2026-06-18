@@ -133,7 +133,7 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
                     </tbody>
                     <tfoot class="table-light">
                         <tr><th colspan="7" class="text-end">Subtotal</th><th class="text-end" id="subtotalText">0.00</th><th></th></tr>
-                        <tr><th colspan="7" class="text-end">Header Discount</th><th class="text-end" id="discountText">0.00</th><th></th></tr>
+                        <tr><th colspan="7" class="text-end">Total Discount</th><th class="text-end" id="discountText">0.00</th><th></th></tr>
                         <tr><th colspan="7" class="text-end">Freight + Special + Other</th><th class="text-end" id="chargeText">0.00</th><th></th></tr>
                         <tr><th colspan="7" class="text-end">VAT</th><th class="text-end" id="vatText">0.00</th><th></th></tr>
                         <tr><th colspan="7" class="text-end">WHT</th><th class="text-end" id="whtText">0.00</th><th></th></tr>
@@ -169,14 +169,15 @@ document.addEventListener('DOMContentLoaded', function () {
             subtotal += lineTotal;
             row.querySelector('.line-total').textContent = money(lineTotal);
         });
-        let headerDiscount = header('discount_amount');
-        if (headerDiscount <= 0 && header('discount_percent') > 0) headerDiscount = subtotal * header('discount_percent') / 100;
+        const percentDiscount = subtotal * header('discount_percent') / 100;
+        const manualDiscount = header('discount_amount');
+        const totalDiscount = percentDiscount + manualDiscount;
         const charges = header('freight_amount') + header('special_charge_amount') + header('other_amount');
         const vat = header('vat_amount');
         const wht = header('wht_amount');
-        const total = subtotal - headerDiscount + charges + vat - wht;
+        const total = subtotal - totalDiscount + charges + vat - wht;
         document.getElementById('subtotalText').textContent = money(subtotal);
-        document.getElementById('discountText').textContent = money(headerDiscount);
+        document.getElementById('discountText').textContent = money(totalDiscount);
         document.getElementById('chargeText').textContent = money(charges);
         document.getElementById('vatText').textContent = money(vat);
         document.getElementById('whtText').textContent = money(wht);
