@@ -182,7 +182,7 @@ class PurchaseReceiptController extends BaseController
         $batchNos = (array) $this->request->getPost('batch_no');
         $lines = [];
         foreach ($lineIds as $index => $lineId) {
-            $qty = (float) ($qtys[$index] ?? 0);
+            $qty = $this->toNumber($qtys[$index] ?? 0);
             if ((int) $lineId > 0 && $qty > 0) {
                 $lines[] = [
                     'purchase_order_line_id' => (int) $lineId,
@@ -228,5 +228,19 @@ class PurchaseReceiptController extends BaseController
     {
         $int = (int) $value;
         return $int > 0 ? $int : null;
+    }
+
+    private function toNumber(mixed $value): float
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0.0;
+        }
+        if (str_contains($value, ',') && ! str_contains($value, '.')) {
+            $value = str_replace(',', '.', $value);
+        } else {
+            $value = str_replace(',', '', $value);
+        }
+        return (float) $value;
     }
 }
