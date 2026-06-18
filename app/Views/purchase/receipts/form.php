@@ -1,6 +1,18 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php
+$oldQtys = old('qty_received', []);
+$oldBatchNos = old('batch_no', []);
+if (! is_array($oldQtys)) {
+    $oldQtys = [];
+}
+if (! is_array($oldBatchNos)) {
+    $oldBatchNos = [];
+}
+$selectedWarehouseId = (int) old('warehouse_id', $selectedWarehouseId ?? 0);
+$selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
+?>
 <form method="post" action="<?= site_url('purchase/orders/' . $po['id'] . '/receive') ?>">
     <?= csrf_field() ?>
 
@@ -29,7 +41,7 @@
                         <option value="">No Warehouse</option>
                         <?php foreach ($warehouses as $warehouse): ?>
                             <?php $warehouseId = (int) $warehouse['id']; ?>
-                            <option value="<?= $warehouseId ?>" <?= (int) old('warehouse_id', 0) === $warehouseId ? 'selected' : '' ?>><?= esc(($warehouse['code'] ?? $warehouse['id']) . ' - ' . ($warehouse['name'] ?? '-')) ?></option>
+                            <option value="<?= $warehouseId ?>" <?= $selectedWarehouseId === $warehouseId ? 'selected' : '' ?>><?= esc(($warehouse['code'] ?? $warehouse['id']) . ' - ' . ($warehouse['name'] ?? '-')) ?></option>
                         <?php endforeach ?>
                     </select>
                 </div>
@@ -39,7 +51,7 @@
                         <option value="">No Location</option>
                         <?php foreach ($locations as $location): ?>
                             <?php $locationId = (int) $location['id']; ?>
-                            <option value="<?= $locationId ?>" <?= (int) old('location_id', 0) === $locationId ? 'selected' : '' ?>><?= esc(($location['code'] ?? $location['id']) . ' - ' . ($location['name'] ?? '-')) ?></option>
+                            <option value="<?= $locationId ?>" <?= $selectedLocationId === $locationId ? 'selected' : '' ?>><?= esc(($location['code'] ?? $location['id']) . ' - ' . ($location['name'] ?? '-')) ?></option>
                         <?php endforeach ?>
                     </select>
                 </div>
@@ -73,11 +85,15 @@
                     </thead>
                     <tbody>
                     <?php foreach ($lines as $index => $line): ?>
-                        <?php $outstanding = (float) ($line['qty_outstanding'] ?? $line['qty'] ?? 0); ?>
+                        <?php
+                        $outstanding = (float) ($line['qty_outstanding'] ?? $line['qty'] ?? 0);
+                        $qtyValue = array_key_exists($index, $oldQtys) ? $oldQtys[$index] : $outstanding;
+                        $batchValue = array_key_exists($index, $oldBatchNos) ? $oldBatchNos[$index] : '';
+                        ?>
                         <tr>
                             <td><?= esc($line['po_line'] ?? $line['line_no']) ?><input type="hidden" name="purchase_order_line_id[]" value="<?= (int) $line['id'] ?>"></td>
                             <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
-                            <td><input type="text" name="batch_no[]" class="form-control" value="<?= esc(old('batch_no.' . $index)) ?>" placeholder="Optional"></td>
+                            <td><input type="text" name="batch_no[]" class="form-control" value="<?= esc((string) $batchValue) ?>" placeholder="Optional"></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_ordered'] ?? $line['qty'] ?? 0), 4)) ?></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_received'] ?? 0), 4)) ?></td>
                             <td class="text-end fw-semibold"><?= esc(number_format($outstanding, 4)) ?></td>
@@ -88,7 +104,7 @@
                                     max="<?= esc((string) $outstanding) ?>"
                                     name="qty_received[]"
                                     class="form-control text-end"
-                                    value="<?= esc((string) old('qty_received.' . $index, $outstanding)) ?>"
+                                    value="<?= esc((string) $qtyValue) ?>"
                                 >
                             </td>
                             <td><?= esc($line['uom_code'] ?? '-') ?></td>
