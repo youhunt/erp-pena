@@ -11,6 +11,11 @@ foreach ($lines as $line) {
     }
 }
 $canEditPo = in_array($status, ['draft', 'submitted', 'approved'], true) && ! $hasReceivedLine;
+$subtotal = (float) ($order['subtotal_amount'] ?? 0);
+$discountPercent = (float) ($order['discount_percent'] ?? 0);
+$discountPercentAmount = round($subtotal * $discountPercent / 100, 2);
+$manualDiscountAmount = (float) ($order['discount_amount'] ?? 0);
+$totalDiscountAmount = round($discountPercentAmount + $manualDiscountAmount, 2);
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -55,7 +60,7 @@ $canEditPo = in_array($status, ['draft', 'submitted', 'approved'], true) && ! $h
                     <?php if (in_array($status, ['approved','partial_received'], true)): ?>
                         <a href="<?= site_url('purchase/orders/' . $order['id'] . '/receive') ?>" class="btn btn-primary"><i class="bx bx-package me-1"></i> Receive</a>
                     <?php endif ?>
-                    <?php if (in_array($status, ['approved','partial_received','received'], true)): ?>
+                    <?php if (in_array($status, ['partial_received','received'], true)): ?>
                         <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/close') ?>"><?= csrf_field() ?><button class="btn btn-dark" onclick="return confirm('Close this PO?')">Close</button></form>
                     <?php endif ?>
                     <?php if (in_array($status, ['draft','submitted'], true)): ?>
@@ -74,15 +79,17 @@ $canEditPo = in_array($status, ['draft', 'submitted', 'approved'], true) && ! $h
                 <h4 class="card-title mb-3">Header Amount</h4>
                 <table class="table table-sm mb-0">
                     <tbody>
-                        <tr><th>Subtotal</th><td class="text-end"><?= esc(number_format((float) $order['subtotal_amount'], 2)) ?></td></tr>
-                        <tr><th>Discount %</th><td class="text-end"><?= esc(number_format((float) ($order['discount_percent'] ?? 0), 4)) ?></td></tr>
-                        <tr><th>Discount Amount</th><td class="text-end"><?= esc(number_format((float) $order['discount_amount'], 2)) ?></td></tr>
+                        <tr><th>Subtotal</th><td class="text-end"><?= esc(number_format($subtotal, 2)) ?></td></tr>
+                        <tr><th>Discount %</th><td class="text-end"><?= esc(number_format($discountPercent, 4)) ?>%</td></tr>
+                        <tr><th>Disc % Amount</th><td class="text-end"><?= esc(number_format($discountPercentAmount, 2)) ?></td></tr>
+                        <tr><th>Discount Amount</th><td class="text-end"><?= esc(number_format($manualDiscountAmount, 2)) ?></td></tr>
+                        <tr class="table-light"><th>Total Discount</th><td class="text-end fw-semibold"><?= esc(number_format($totalDiscountAmount, 2)) ?></td></tr>
                         <tr><th>Freight</th><td class="text-end"><?= esc(number_format((float) ($order['freight_amount'] ?? 0), 2)) ?></td></tr>
                         <tr><th>Other Amount</th><td class="text-end"><?= esc(number_format((float) ($order['other_amount'] ?? 0), 2)) ?></td></tr>
                         <tr><th>Special Charge</th><td class="text-end"><?= esc(number_format((float) ($order['special_charge_amount'] ?? 0), 2)) ?></td></tr>
                         <tr><th>VAT</th><td class="text-end"><?= esc(number_format((float) ($order['vat_amount'] ?? $order['tax_amount'] ?? 0), 2)) ?></td></tr>
                         <tr><th>WHT</th><td class="text-end"><?= esc(number_format((float) ($order['wht_amount'] ?? 0), 2)) ?></td></tr>
-                        <tr class="table-light"><th>Total</th><td class="text-end fw-semibold"><?= esc(number_format((float) $order['total_amount'], 2)) ?></td></tr>
+                        <tr class="table-light"><th>Total PO</th><td class="text-end fw-semibold"><?= esc(number_format((float) $order['total_amount'], 2)) ?></td></tr>
                     </tbody>
                 </table>
             </div>
