@@ -57,10 +57,11 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
 
     #poLinesTable .form-control,
     #poLinesTable .form-select {
-        min-height: 38px;
+        min-height: 36px;
         color: #212529;
         background-color: #fff;
-        font-size: 13px;
+        padding-top: .35rem;
+        padding-bottom: .35rem;
     }
 
     #poLinesTable .line-number,
@@ -68,8 +69,8 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
     #poLinesTable input[name="uom_code[]"],
     #poLinesTable input[name="unit_price[]"] {
         min-width: 100%;
-        padding-left: .55rem;
-        padding-right: .55rem;
+        padding-left: .45rem;
+        padding-right: .45rem;
     }
 
     #poLinesTable .line-total {
