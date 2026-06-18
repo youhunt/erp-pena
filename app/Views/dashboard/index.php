@@ -25,23 +25,23 @@
         </div>
     </div>
 <?php else: ?>
-    <div class="row">
+    <div class="row dashboard-metric-row">
         <?php foreach ($metrics as $label => $value): ?>
             <?php
                 $isMoney = in_array($label, $metricMoney ?? [], true);
                 $displayValue = number_format((float) $value, 0, ',', '.');
                 $route = $metricLinks[$label] ?? 'dashboard';
             ?>
-            <div class="col-xl-2 col-md-4 col-sm-6">
-                <div class="card mini-stats-wid">
+            <div class="col-xxl-2 col-xl-3 col-md-4 col-sm-6">
+                <div class="card mini-stats-wid dashboard-metric-card">
                     <div class="card-body">
-                        <div class="d-flex">
-                            <div class="flex-grow-1">
-                                <p class="text-muted fw-medium mb-2"><?= esc($label) ?></p>
-                                <h4 class="mb-0"><?= $isMoney ? 'Rp ' : '' ?><?= esc($displayValue) ?></h4>
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="flex-grow-1 dashboard-metric-content">
+                                <p class="text-muted fw-medium mb-2 dashboard-metric-label"><?= esc($label) ?></p>
+                                <h4 class="mb-1 dashboard-metric-value"><?= $isMoney ? 'Rp ' : '' ?><?= esc($displayValue) ?></h4>
                                 <a href="<?= site_url($route) ?>" class="small text-muted">Open</a>
                             </div>
-                            <div class="avatar-sm rounded-circle bg-primary align-self-center mini-stat-icon">
+                            <div class="avatar-sm rounded-circle bg-primary flex-shrink-0 mini-stat-icon dashboard-metric-icon">
                                 <span class="avatar-title rounded-circle bg-primary">
                                     <i class="bx bx-bar-chart-alt-2 font-size-24"></i>
                                 </span>
