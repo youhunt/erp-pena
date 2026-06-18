@@ -48,6 +48,7 @@ class PurchaseReceiptService
             $movementModel = new InventoryStockMovementModel();
             $totalInventoryValue = 0.0;
             $postedLineCount = 0;
+            $glWarning = null;
 
             $receiptModel->insert($header + [
                 'status' => 'posted',
@@ -129,9 +130,25 @@ class PurchaseReceiptService
                 throw new RuntimeException('No receipt line can be posted.');
             }
 
-            $glEntryId = $this->postReceiptGl($header, $receiptId, round($totalInventoryValue, 2), $userId);
+            try {
+                $glEntryId = $this->postReceiptGl($header, $receiptId, round($totalInventoryValue, 2), $userId);
+            } catch (RuntimeException $e) {
+                if (! str_contains($e->getMessage(), 'Account not found or inactive')) {
+                    throw $e;
+                }
+                $glEntryId = null;
+                $glWarning = 'GL skipped: ' . $e->getMessage();
+            }
+
+            $receiptUpdate = [];
             if ($glEntryId !== null) {
-                $receiptModel->update($receiptId, ['gl_entry_id' => $glEntryId]);
+                $receiptUpdate['gl_entry_id'] = $glEntryId;
+            }
+            if ($glWarning !== null) {
+                $receiptUpdate['notes'] = trim(($header['notes'] ?? '') . ' ' . $glWarning);
+            }
+            if ($receiptUpdate !== []) {
+                $receiptModel->update($receiptId, $receiptUpdate);
             }
 
             $this->refreshPoStatus((int) $po['id'], $userId);
@@ -148,8 +165,8 @@ class PurchaseReceiptService
                 'table_name' => 'purchase_receipts',
                 'record_id' => $receiptId,
                 'record_code' => $header['receipt_no'],
-                'description' => 'Purchase receipt posted, stock increased, and inventory/GRNI GL posted.',
-                'new_values' => ['header' => $header, 'lines' => $lines, 'inventory_value' => $totalInventoryValue, 'gl_entry_id' => $glEntryId],
+                'description' => $glWarning !== null ? 'Purchase receipt posted, stock increased, GL skipped.' : 'Purchase receipt posted, stock increased, and inventory/GRNI GL posted.',
+                'new_values' => ['header' => $header, 'lines' => $lines, 'inventory_value' => $totalInventoryValue, 'gl_entry_id' => $glEntryId, 'gl_warning' => $glWarning],
             ]);
 
             return $receiptId;
