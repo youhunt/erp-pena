@@ -27,7 +27,7 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
                 <div>
                     <h4 class="card-title mb-1"><?= esc($title ?? ($isEdit ? 'Edit Purchase Order' : 'Create Purchase Order')) ?></h4>
-                    <p class="text-muted mb-0">Manual PO entry for the active company/site.</p>
+                    <p class="text-muted mb-0">Commercial fields are entered at header level. Detail lines only contain item, description, quantity, UoM, and price.</p>
                 </div>
                 <a href="<?= $isEdit ? site_url('purchase/orders/' . (int) $order['id']) : site_url('purchase/orders') ?>" class="btn btn-light">Back</a>
             </div>
@@ -78,6 +78,7 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
                     <label class="form-label">Currency</label>
                     <input type="text" name="currency_code" class="form-control" value="<?= esc($value('currency_code', 'IDR')) ?>">
                 </div>
+
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Header Discount %</label>
                     <input type="number" step="0.0001" name="discount_percent" class="form-control calc-header text-end" value="<?= esc($value('discount_percent', '0')) ?>">
@@ -132,22 +133,12 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
                     <thead class="table-light">
                         <tr>
                             <th style="width:70px;">Line</th>
-                            <th style="min-width:210px;">Item Code</th>
-                            <th style="min-width:180px;">Item Name</th>
-                            <th style="min-width:200px;">Description</th>
-                            <th style="width:100px;">Qty</th>
+                            <th style="min-width:220px;">Item Code</th>
+                            <th style="min-width:200px;">Item Name</th>
+                            <th style="min-width:260px;">Description</th>
+                            <th style="width:110px;">Qty</th>
                             <th style="width:90px;">UoM</th>
-                            <th style="width:120px;">Price</th>
-                            <th style="width:95px;">Disc %</th>
-                            <th style="width:120px;">Disc Amt</th>
-                            <th style="width:120px;">Freight</th>
-                            <th style="width:130px;">Special</th>
-                            <th style="width:95px;">VAT %</th>
-                            <th style="width:120px;">VAT Amt</th>
-                            <th style="width:95px;">WHT %</th>
-                            <th style="width:120px;">WHT Amt</th>
-                            <th style="width:130px;">Delivery</th>
-                            <th style="width:130px;">Arrive</th>
+                            <th style="width:130px;">Price</th>
                             <th style="width:140px;" class="text-end">Line Total</th>
                             <th style="width:60px;"></th>
                         </tr>
@@ -179,28 +170,18 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
                                 <td><input type="number" step="0.0001" name="qty[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'qty', $line['qty_ordered'] ?? ($i === 0 ? '1' : ''))) ?>"></td>
                                 <td><input type="text" name="uom_code[]" class="form-control" value="<?= esc($lineValue($line, $i, 'uom_code', 'PCS')) ?>"></td>
                                 <td><input type="number" step="0.01" name="unit_price[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'unit_price', '0')) ?>"></td>
-                                <td><input type="number" step="0.0001" name="discount_percent_line[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'discount_percent', '0')) ?>"></td>
-                                <td><input type="number" step="0.01" name="discount_amount_line[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'discount_amount', '0')) ?>"></td>
-                                <td><input type="number" step="0.01" name="freight_amount_line[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'freight_amount', '0')) ?>"></td>
-                                <td><input type="number" step="0.01" name="special_charge_amount_line[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'special_charge_amount', '0')) ?>"></td>
-                                <td><input type="number" step="0.0001" name="vat_percent_line[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'vat_percent', '0')) ?>"></td>
-                                <td><input type="number" step="0.01" name="vat_amount_line[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'vat_amount', $line['tax_amount'] ?? '0')) ?>"></td>
-                                <td><input type="number" step="0.0001" name="wht_percent_line[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'wht_percent', '0')) ?>"></td>
-                                <td><input type="number" step="0.01" name="wht_amount_line[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'wht_amount', '0')) ?>"></td>
-                                <td><input type="date" name="delivery_date_line[]" class="form-control" value="<?= esc($lineValue($line, $i, 'delivery_date', $value('delivery_date'))) ?>"></td>
-                                <td><input type="date" name="arrive_date_line[]" class="form-control" value="<?= esc($lineValue($line, $i, 'arrive_date', $value('arrive_date'))) ?>"></td>
                                 <td class="text-end fw-semibold line-total">0.00</td>
                                 <td><button type="button" class="btn btn-sm btn-outline-danger remove-line"><i class="bx bx-trash"></i></button></td>
                             </tr>
                         <?php endforeach ?>
                     </tbody>
                     <tfoot class="table-light">
-                        <tr><th colspan="17" class="text-end">Subtotal</th><th class="text-end" id="subtotalText">0.00</th><th></th></tr>
-                        <tr><th colspan="17" class="text-end">Discount</th><th class="text-end" id="discountText">0.00</th><th></th></tr>
-                        <tr><th colspan="17" class="text-end">Freight + Special + Other</th><th class="text-end" id="chargeText">0.00</th><th></th></tr>
-                        <tr><th colspan="17" class="text-end">VAT</th><th class="text-end" id="vatText">0.00</th><th></th></tr>
-                        <tr><th colspan="17" class="text-end">WHT</th><th class="text-end" id="whtText">0.00</th><th></th></tr>
-                        <tr><th colspan="17" class="text-end">Total</th><th class="text-end" id="totalText">0.00</th><th></th></tr>
+                        <tr><th colspan="7" class="text-end">Subtotal</th><th class="text-end" id="subtotalText">0.00</th><th></th></tr>
+                        <tr><th colspan="7" class="text-end">Header Discount</th><th class="text-end" id="discountText">0.00</th><th></th></tr>
+                        <tr><th colspan="7" class="text-end">Freight + Special + Other</th><th class="text-end" id="chargeText">0.00</th><th></th></tr>
+                        <tr><th colspan="7" class="text-end">VAT</th><th class="text-end" id="vatText">0.00</th><th></th></tr>
+                        <tr><th colspan="7" class="text-end">WHT</th><th class="text-end" id="whtText">0.00</th><th></th></tr>
+                        <tr><th colspan="7" class="text-end">Total</th><th class="text-end" id="totalText">0.00</th><th></th></tr>
                     </tfoot>
                 </table>
             </div>
@@ -236,50 +217,26 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function recalc() {
-        let subtotal = 0, lineDiscount = 0, lineFreight = 0, lineSpecial = 0, lineVat = 0, lineWht = 0;
+        let subtotal = 0;
         tbody.querySelectorAll('tr').forEach(function (row) {
             const qty = number(row.querySelector('[name="qty[]"]').value);
             const price = number(row.querySelector('[name="unit_price[]"]').value);
-            const gross = qty * price;
-            const discPctInput = row.querySelector('[name="discount_percent_line[]"]');
-            const discAmtInput = row.querySelector('[name="discount_amount_line[]"]');
-            const freight = number(row.querySelector('[name="freight_amount_line[]"]').value);
-            const special = number(row.querySelector('[name="special_charge_amount_line[]"]').value);
-            const vatPctInput = row.querySelector('[name="vat_percent_line[]"]');
-            const vatAmtInput = row.querySelector('[name="vat_amount_line[]"]');
-            const whtPctInput = row.querySelector('[name="wht_percent_line[]"]');
-            const whtAmtInput = row.querySelector('[name="wht_amount_line[]"]');
-
-            let disc = number(discAmtInput.value);
-            if (disc <= 0 && number(discPctInput.value) > 0) disc = gross * number(discPctInput.value) / 100;
-            const taxBase = Math.max(0, gross - disc + freight + special);
-            let vat = number(vatAmtInput.value);
-            if (vat <= 0 && number(vatPctInput.value) > 0) vat = taxBase * number(vatPctInput.value) / 100;
-            let wht = number(whtAmtInput.value);
-            if (wht <= 0 && number(whtPctInput.value) > 0) wht = taxBase * number(whtPctInput.value) / 100;
-            const lineTotal = taxBase + vat - wht;
-
-            subtotal += gross;
-            lineDiscount += disc;
-            lineFreight += freight;
-            lineSpecial += special;
-            lineVat += vat;
-            lineWht += wht;
+            const lineTotal = qty * price;
+            subtotal += lineTotal;
             row.querySelector('.line-total').textContent = money(lineTotal);
         });
 
         let headerDiscount = header('discount_amount');
         if (headerDiscount <= 0 && header('discount_percent') > 0) {
-            headerDiscount = Math.max(0, subtotal - lineDiscount) * header('discount_percent') / 100;
+            headerDiscount = subtotal * header('discount_percent') / 100;
         }
-        const totalDiscount = lineDiscount + headerDiscount;
-        const charges = lineFreight + lineSpecial + header('freight_amount') + header('special_charge_amount') + header('other_amount');
-        const vat = lineVat + header('vat_amount');
-        const wht = lineWht + header('wht_amount');
-        const total = subtotal - totalDiscount + charges + vat - wht;
+        const charges = header('freight_amount') + header('special_charge_amount') + header('other_amount');
+        const vat = header('vat_amount');
+        const wht = header('wht_amount');
+        const total = subtotal - headerDiscount + charges + vat - wht;
 
         document.getElementById('subtotalText').textContent = money(subtotal);
-        document.getElementById('discountText').textContent = money(totalDiscount);
+        document.getElementById('discountText').textContent = money(headerDiscount);
         document.getElementById('chargeText').textContent = money(charges);
         document.getElementById('vatText').textContent = money(vat);
         document.getElementById('whtText').textContent = money(wht);
@@ -320,7 +277,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
             if (input.name === 'uom_code[]') input.value = 'PCS';
-            else if (input.type === 'date') input.value = '';
             else if (input.classList.contains('calc')) input.value = '0';
             else input.value = '';
         });
