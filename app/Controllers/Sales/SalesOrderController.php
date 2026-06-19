@@ -6,9 +6,11 @@ use App\Controllers\BaseController;
 use App\Models\SalesOrderLineModel;
 use App\Models\SalesOrderModel;
 use App\Services\Sales\SalesOrderService;
+use App\Services\Support\DocumentNumberService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use Config\Database;
+use DateTimeImmutable;
 use RuntimeException;
 
 class SalesOrderController extends BaseController
@@ -49,6 +51,7 @@ class SalesOrderController extends BaseController
             'title' => 'Create Sales Order',
             'customers' => $this->masterRows('customers'),
             'items' => $this->masterRows('items'),
+            'suggestedSoNo' => $this->previewDocumentNumber('SO'),
         ]);
     }
 
@@ -59,7 +62,7 @@ class SalesOrderController extends BaseController
         if ($companyId === null || $companyId < 1) {
             return redirect()->back()->withInput()->with('error', 'Active company is required.');
         }
-        if (! $this->validate(['so_no' => 'required|max_length[60]', 'so_date' => 'required|valid_date[Y-m-d]'])) {
+        if (! $this->validate(['so_no' => 'permit_empty|max_length[60]', 'so_date' => 'required|valid_date[Y-m-d]'])) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
         $lines = $this->postedLines();
@@ -214,5 +217,19 @@ class SalesOrderController extends BaseController
             $builder->where('site_id', $tenant->activeSiteId());
         }
         return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get()->getResultArray();
+    }
+
+    private function previewDocumentNumber(string $transactionCode): string
+    {
+        try {
+            return (new DocumentNumberService())->preview($transactionCode, new DateTimeImmutable(), [
+                'prefix' => $transactionCode,
+                'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+                'reset_period' => 'monthly',
+                'padding' => 5,
+            ]);
+        } catch (\Throwable) {
+            return '';
+        }
     }
 }
