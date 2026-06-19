@@ -18,6 +18,16 @@
             </div>
         </div>
 
+        <div class="alert alert-light border">
+            <div class="fw-semibold mb-2">Bank Statement Data Flow</div>
+            <div class="row g-3 small text-muted">
+                <div class="col-md-3"><span class="badge bg-primary me-1">1</span> Import rekening koran Excel sebagai data bank-side.</div>
+                <div class="col-md-3"><span class="badge bg-primary me-1">2</span> Auto Match cocokkan mutasi bank dengan Bank Entry yang sudah diposting.</div>
+                <div class="col-md-3"><span class="badge bg-primary me-1">3</span> Buat Bank Entry adjustment untuk baris yang belum match seperti biaya admin atau bunga.</div>
+                <div class="col-md-3"><span class="badge bg-primary me-1">4</span> Jika semua baris matched, buat Bank Reconcile untuk mengunci hasil rekonsiliasi.</div>
+            </div>
+        </div>
+
         <div class="table-responsive">
             <table class="table table-nowrap table-hover align-middle mb-0">
                 <thead class="table-light">

@@ -52,7 +52,17 @@
 
         <?php if (($import['status'] ?? '') !== 'reconciled' && ! $allMatched): ?>
             <div class="alert alert-warning">
-                Reconciliation can be created after every statement line is matched. Run Auto Match or create controlled Bank Entry adjustments for unmatched lines.
+                <div class="fw-semibold mb-1">Next step: complete matching.</div>
+                Reconciliation can be created after every statement line is matched. Run Auto Match first. For rows that still stay unmatched, create controlled Bank Entry adjustments from the row action.
+            </div>
+        <?php elseif (($import['status'] ?? '') !== 'reconciled' && $allMatched): ?>
+            <div class="alert alert-success">
+                <div class="fw-semibold mb-1">Ready for reconciliation.</div>
+                Every statement line is matched. Click <strong>Create Reconcile</strong> to create the Bank Reconcile batch and link it back to this statement import.
+            </div>
+        <?php elseif (($import['status'] ?? '') === 'reconciled'): ?>
+            <div class="alert alert-info">
+                This statement import has been reconciled. It is kept as audit evidence for the posted Bank Reconcile.
             </div>
         <?php endif ?>
 
