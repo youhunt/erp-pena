@@ -13,7 +13,8 @@
                     <?= csrf_field() ?>
                     <button type="submit" class="btn btn-primary"><i class="bx bx-link me-1"></i> Auto Match</button>
                 </form>
-                <?php if (($import['status'] ?? '') !== 'reconciled' && (int) ($import['matched_count'] ?? 0) > 0): ?>
+                <?php $allMatched = (int) ($import['line_count'] ?? 0) > 0 && (int) ($import['matched_count'] ?? 0) === (int) ($import['line_count'] ?? 0); ?>
+                <?php if (($import['status'] ?? '') !== 'reconciled' && $allMatched): ?>
                     <a href="<?= site_url('cash-bank/reconciliations/new?statement_import_id=' . $import['id']) ?>" class="btn btn-success">
                         <i class="bx bx-check-circle me-1"></i> Create Reconcile
                     </a>
@@ -44,10 +45,16 @@
             <div class="col-md-3">
                 <div class="p-3 border rounded">
                     <div class="text-muted">Lines</div>
-                    <div class="fw-semibold text-end"><?= esc($import['line_count'] ?? 0) ?></div>
+                    <div class="fw-semibold text-end"><?= esc($import['matched_count'] ?? 0) ?> / <?= esc($import['line_count'] ?? 0) ?></div>
                 </div>
             </div>
         </div>
+
+        <?php if (($import['status'] ?? '') !== 'reconciled' && ! $allMatched): ?>
+            <div class="alert alert-warning">
+                Reconciliation can be created after every statement line is matched. Run Auto Match or create controlled Bank Entry adjustments for unmatched lines.
+            </div>
+        <?php endif ?>
 
         <div class="table-responsive">
             <table class="table table-nowrap table-hover align-middle mb-0">

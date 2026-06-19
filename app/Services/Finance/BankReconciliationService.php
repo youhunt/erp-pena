@@ -38,6 +38,7 @@ class BankReconciliationService
             throw new RuntimeException('Bank account not found or inactive.');
         }
         if ($statementImportId > 0) {
+            $db = Database::connect();
             $statementImport = Database::connect()->table('bank_statement_imports')
                 ->where('id', $statementImportId)
                 ->where('company_id', $companyId)
@@ -50,6 +51,33 @@ class BankReconciliationService
             }
             if (($statementImport['status'] ?? '') === 'reconciled') {
                 throw new RuntimeException('Selected bank statement import is already reconciled.');
+            }
+
+            $lineCount = (int) $db->table('bank_statement_lines')
+                ->where('bank_statement_import_id', $statementImportId)
+                ->countAllResults();
+            $matchedLineCount = (int) $db->table('bank_statement_lines')
+                ->where('bank_statement_import_id', $statementImportId)
+                ->where('match_status', 'matched')
+                ->where('cash_bank_entry_id IS NOT NULL', null, false)
+                ->countAllResults();
+            if ($lineCount < 1 || $matchedLineCount !== $lineCount) {
+                throw new RuntimeException('All bank statement lines must be matched before reconciliation can be posted.');
+            }
+
+            $matchedEntryIds = $db->table('bank_statement_lines')
+                ->select('cash_bank_entry_id')
+                ->where('bank_statement_import_id', $statementImportId)
+                ->where('match_status', 'matched')
+                ->where('cash_bank_entry_id IS NOT NULL', null, false)
+                ->get()
+                ->getResultArray();
+            $matchedEntryIds = array_values(array_unique(array_map(static fn (array $row): int => (int) $row['cash_bank_entry_id'], $matchedEntryIds)));
+            sort($matchedEntryIds);
+            $selectedEntryIds = $entryIds;
+            sort($selectedEntryIds);
+            if ($selectedEntryIds !== $matchedEntryIds) {
+                throw new RuntimeException('Selected bank entries must match the bank statement matched entries.');
             }
         }
 

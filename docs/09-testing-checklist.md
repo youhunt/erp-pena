@@ -49,6 +49,7 @@
 - Bank Statement Import accepts `.xlsx` and stores statement lines without posting Cash/Bank Entry
 - Bank Statement Auto Match links only one safe candidate and skips ambiguous rows
 - Create Reconcile from Bank Statement Import pre-fills reconcile fields and pre-selects matched bank entries
+- Create Reconcile from Bank Statement Import is only available after all statement lines are matched
 - Posted Bank Reconcile links back to the source Bank Statement Import when created from statement import
 - Unmatched Bank Statement Line can open a prefilled Bank Entry form for controlled adjustment posting
 - Bank Entry from statement line refuses changed bank/date/direction/amount before linking back to statement line
