@@ -17,7 +17,7 @@
             <div class="row">
                 <div class="col-md-3 mb-3">
                     <label class="form-label">SO No</label>
-                    <input type="text" name="so_no" class="form-control" placeholder="Auto if blank" value="<?= esc(old('so_no', $suggestedSoNo ?? '')) ?>">
+                    <input type="text" name="so_no" class="form-control" placeholder="<?= esc(($suggestedSoNo ?? '') !== '' ? $suggestedSoNo : 'Auto if blank', 'attr') ?>" value="<?= esc(old('so_no')) ?>">
                     <small class="text-muted">Kosongkan untuk nomor otomatis.</small>
                 </div>
                 <div class="col-md-3 mb-3">
