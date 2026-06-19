@@ -37,8 +37,8 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
                 </div>
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Warehouse</label>
-                    <select name="warehouse_id" class="form-select">
-                        <option value="">No Warehouse</option>
+                    <select name="warehouse_id" id="receiptWarehouse" class="form-select" required>
+                        <option value="">Select Warehouse</option>
                         <?php foreach ($warehouses as $warehouse): ?>
                             <?php $warehouseId = (int) $warehouse['id']; ?>
                             <option value="<?= $warehouseId ?>" <?= $selectedWarehouseId === $warehouseId ? 'selected' : '' ?>><?= esc(($warehouse['code'] ?? $warehouse['id']) . ' - ' . ($warehouse['name'] ?? '-')) ?></option>
@@ -47,11 +47,11 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
                 </div>
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Location</label>
-                    <select name="location_id" class="form-select">
-                        <option value="">No Location</option>
+                    <select name="location_id" id="receiptLocation" class="form-select" required>
+                        <option value="" data-warehouse-id="">Select Location</option>
                         <?php foreach ($locations as $location): ?>
                             <?php $locationId = (int) $location['id']; ?>
-                            <option value="<?= $locationId ?>" <?= $selectedLocationId === $locationId ? 'selected' : '' ?>><?= esc(($location['code'] ?? $location['id']) . ' - ' . ($location['name'] ?? '-')) ?></option>
+                            <option value="<?= $locationId ?>" data-warehouse-id="<?= (int) ($location['warehouse_id'] ?? 0) ?>" <?= $selectedLocationId === $locationId ? 'selected' : '' ?>><?= esc(($location['code'] ?? $location['id']) . ' - ' . ($location['name'] ?? '-')) ?></option>
                         <?php endforeach ?>
                     </select>
                 </div>
@@ -125,4 +125,36 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
         </div>
     </div>
 </form>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const warehouse = document.getElementById('receiptWarehouse');
+    const location = document.getElementById('receiptLocation');
+    if (!warehouse || !location) return;
+
+    function syncLocations() {
+        const warehouseId = warehouse.value;
+        let selectedVisible = false;
+
+        Array.from(location.options).forEach(function (option) {
+            if (option.value === '') {
+                option.hidden = false;
+                return;
+            }
+            const visible = warehouseId !== '' && option.dataset.warehouseId === warehouseId;
+            option.hidden = !visible;
+            if (visible && option.selected) selectedVisible = true;
+        });
+
+        if (!selectedVisible) {
+            const firstVisible = Array.from(location.options).find(function (option) {
+                return option.value !== '' && !option.hidden;
+            });
+            location.value = firstVisible ? firstVisible.value : '';
+        }
+    }
+
+    warehouse.addEventListener('change', syncLocations);
+    syncLocations();
+});
+</script>
 <?= $this->endSection() ?>

@@ -406,7 +406,7 @@ class FulfillmentImportController extends BaseController
     {
         $code = trim($code);
         if ($code === '') {
-            return null;
+            throw new RuntimeException(ucfirst(str_replace('_', ' ', rtrim($table, 's'))) . ' code is required.');
         }
 
         $db = Database::connect();

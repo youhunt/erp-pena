@@ -27,6 +27,7 @@ class PurchaseReceiptService
         if ($lines === []) {
             throw new RuntimeException('At least one receipt line is required.');
         }
+        $this->assertStorageLocation($header);
 
         $this->assertPeriodOpen('purchase', $header, 'receipt_date');
         $this->assertPeriodOpen('inventory', $header, 'receipt_date');
@@ -337,6 +338,46 @@ class PurchaseReceiptService
             (string) ($document[$dateField] ?? date('Y-m-d')),
             ! empty($document['site_id']) ? (int) $document['site_id'] : null
         );
+    }
+
+    private function assertStorageLocation(array $header): void
+    {
+        $warehouseId = (int) ($header['warehouse_id'] ?? 0);
+        $locationId = (int) ($header['location_id'] ?? 0);
+        if ($warehouseId < 1 || $locationId < 1) {
+            throw new RuntimeException('Warehouse and location are required before posting purchase receipt.');
+        }
+
+        $db = Database::connect();
+        $warehouse = $db->table('warehouses')->where('id', $warehouseId);
+        $location = $db->table('locations')->where('id', $locationId);
+
+        if (! empty($header['company_id'])) {
+            $warehouse->where('company_id', (int) $header['company_id']);
+            $location->where('company_id', (int) $header['company_id']);
+        }
+        if (! empty($header['site_id'])) {
+            $warehouse->where('site_id', (int) $header['site_id']);
+            $location->where('site_id', (int) $header['site_id']);
+        }
+        if ($db->fieldExists('deleted_at', 'warehouses')) {
+            $warehouse->where('deleted_at', null);
+        }
+        if ($db->fieldExists('deleted_at', 'locations')) {
+            $location->where('deleted_at', null);
+        }
+
+        $warehouseRow = $warehouse->get()->getRowArray();
+        $locationRow = $location->get()->getRowArray();
+        if ($warehouseRow === null) {
+            throw new RuntimeException('Selected warehouse is not valid for this receipt.');
+        }
+        if ($locationRow === null) {
+            throw new RuntimeException('Selected location is not valid for this receipt.');
+        }
+        if ((int) ($locationRow['warehouse_id'] ?? 0) !== $warehouseId) {
+            throw new RuntimeException('Selected location does not belong to selected warehouse.');
+        }
     }
 
     private function refreshPoStatus(int $poId, ?int $userId = null): void

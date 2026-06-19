@@ -27,6 +27,8 @@ $statusClass = match ($status) {
                         <tr><th>Date</th><td><?= esc($receipt['receipt_date']) ?></td></tr>
                         <tr><th>PO No</th><td><a href="<?= site_url('purchase/orders/' . $receipt['purchase_order_id']) ?>"><?= esc($receipt['po_no']) ?></a></td></tr>
                         <tr><th>Supplier</th><td><?= esc(($receipt['supplier_code'] ?? '-') . ' ' . ($receipt['supplier_name'] ?? '')) ?></td></tr>
+                        <tr><th>Warehouse</th><td><?= esc($warehouseLabel ?? '-') ?></td></tr>
+                        <tr><th>Location</th><td><?= esc($locationLabel ?? '-') ?></td></tr>
                         <tr><th>Receipt GL Entry</th><td><?= ! empty($receipt['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $receipt['gl_entry_id']) . '">#' . esc($receipt['gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Posted</th><td><?= esc($receipt['posted_at'] ?? '-') ?></td></tr>
                         <?php if ($status === 'reversed'): ?>

@@ -64,14 +64,17 @@ class PurchaseReceiptController extends BaseController
         $warehouses = $this->masterRows('warehouses');
         $locations = $this->masterRows('locations');
 
+        $selectedWarehouseId = $this->oldOrDefaultId('warehouse_id', $warehouses);
+        $selectedLocationId = $this->oldOrDefaultLocationId($locations, $selectedWarehouseId);
+
         return view('purchase/receipts/form', [
             'title' => 'Receive Purchase Order',
             'po' => $po,
             'lines' => (new PurchaseOrderLineModel())->where('purchase_order_id', $poId)->where('qty_outstanding >', 0)->orderBy('line_no', 'ASC')->findAll(),
             'warehouses' => $warehouses,
             'locations' => $locations,
-            'selectedWarehouseId' => $this->oldOrDefaultId('warehouse_id', $warehouses),
-            'selectedLocationId' => $this->oldOrDefaultId('location_id', $locations),
+            'selectedWarehouseId' => $selectedWarehouseId,
+            'selectedLocationId' => $selectedLocationId,
         ]);
     }
 
@@ -93,7 +96,10 @@ class PurchaseReceiptController extends BaseController
             return redirect()->to($receiveUrl)->withInput()->with('error', 'At least one receipt line qty is required.');
         }
 
+        $warehouseId = $this->nullableInt($this->request->getPost('warehouse_id'));
+        $locationId = $this->nullableInt($this->request->getPost('location_id'));
         try {
+            $this->assertStorageLocation($tenant, $warehouseId, $locationId);
             $receiptId = (new PurchaseReceiptService())->post([
                 'company_id' => $po['company_id'],
                 'site_id' => $po['site_id'] ?? null,
@@ -106,8 +112,8 @@ class PurchaseReceiptController extends BaseController
                 'supplier_id' => $po['supplier_id'] ?? null,
                 'supplier_code' => $po['supplier_code'] ?? $po['supplier'] ?? null,
                 'supplier_name' => $po['supplier_name'] ?? null,
-                'warehouse_id' => $this->nullableInt($this->request->getPost('warehouse_id')),
-                'location_id' => $this->nullableInt($this->request->getPost('location_id')),
+                'warehouse_id' => $warehouseId,
+                'location_id' => $locationId,
                 'notes' => trim((string) $this->request->getPost('notes')),
             ], $lines, auth()->id());
         } catch (RuntimeException $e) {
@@ -136,6 +142,8 @@ class PurchaseReceiptController extends BaseController
             'title' => 'Purchase Receipt Detail',
             'receipt' => $receipt,
             'lines' => (new PurchaseReceiptLineModel())->where('purchase_receipt_id', $id)->orderBy('line_no', 'ASC')->findAll(),
+            'warehouseLabel' => $this->masterLabel('warehouses', $receipt['warehouse_id'] ?? null),
+            'locationLabel' => $this->masterLabel('locations', $receipt['location_id'] ?? null),
         ]);
     }
 
@@ -222,6 +230,78 @@ class PurchaseReceiptController extends BaseController
         }
 
         return isset($rows[0]['id']) ? (int) $rows[0]['id'] : null;
+    }
+
+    private function oldOrDefaultLocationId(array $locations, ?int $warehouseId): ?int
+    {
+        $old = $this->nullableInt(old('location_id'));
+        if ($old !== null) {
+            return $old;
+        }
+
+        foreach ($locations as $location) {
+            if ($warehouseId === null || (int) ($location['warehouse_id'] ?? 0) === $warehouseId) {
+                return isset($location['id']) ? (int) $location['id'] : null;
+            }
+        }
+
+        return null;
+    }
+
+    private function assertStorageLocation(TenantContext $tenant, ?int $warehouseId, ?int $locationId): void
+    {
+        if ($warehouseId === null || $locationId === null) {
+            throw new RuntimeException('Warehouse and location are required before posting purchase receipt.');
+        }
+
+        $db = Database::connect();
+        $warehouse = $db->table('warehouses')->where('id', $warehouseId);
+        if ($tenant->activeCompanyId() !== null) {
+            $warehouse->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $warehouse->where('site_id', $tenant->activeSiteId());
+        }
+        if ($db->fieldExists('deleted_at', 'warehouses')) {
+            $warehouse->where('deleted_at', null);
+        }
+        $warehouseRow = $warehouse->get()->getRowArray();
+        if ($warehouseRow === null) {
+            throw new RuntimeException('Selected warehouse is not valid for the active company/site.');
+        }
+
+        $location = $db->table('locations')->where('id', $locationId);
+        if ($tenant->activeCompanyId() !== null) {
+            $location->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $location->where('site_id', $tenant->activeSiteId());
+        }
+        if ($db->fieldExists('deleted_at', 'locations')) {
+            $location->where('deleted_at', null);
+        }
+        $locationRow = $location->get()->getRowArray();
+        if ($locationRow === null) {
+            throw new RuntimeException('Selected location is not valid for the active company/site.');
+        }
+        if ((int) ($locationRow['warehouse_id'] ?? 0) !== $warehouseId) {
+            throw new RuntimeException('Selected location does not belong to selected warehouse.');
+        }
+    }
+
+    private function masterLabel(string $table, mixed $id): string
+    {
+        $id = (int) $id;
+        if ($id < 1) {
+            return '-';
+        }
+
+        $row = Database::connect()->table($table)->where('id', $id)->get()->getRowArray();
+        if ($row === null) {
+            return '#' . $id;
+        }
+
+        return trim((string) (($row['code'] ?? $id) . ' - ' . ($row['name'] ?? '-')));
     }
 
     private function nullableInt(mixed $value): ?int
