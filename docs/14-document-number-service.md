@@ -6,7 +6,7 @@ Dokumen ini menjelaskan standar nomor dokumen ERP untuk PENA ERP.
 
 ## 1. Tujuan
 
-`DocumentNumberService` dibuat agar nomor transaksi seperti PO, SO, DO, Invoice, Payment, Receipt, Journal, dan dokumen AI conversion tidak dibuat manual di controller.
+`DocumentNumberService` dibuat agar nomor transaksi seperti PO, SO, DO, Invoice, Payment, Receipt, Journal, dan dokumen AI conversion tidak dibuat manual terus-menerus di form.
 
 Service ini memastikan:
 
@@ -14,7 +14,7 @@ Service ini memastikan:
 - Nomor dokumen bisa per site/branch.
 - Sequence bisa reset harian, bulanan, tahunan, atau tidak pernah reset.
 - Format nomor fleksibel.
-- Generate nomor dilakukan dalam database transaction.
+- Generate nomor dilakukan dengan sequence table khusus.
 - Risiko duplicate number lebih kecil karena memakai dedicated sequence table dan row lock.
 
 ## 2. File yang Ditambahkan
@@ -137,27 +137,30 @@ Generate PO:
 php spark pena:docno PO --company=1 --site=1 --prefix=PO --format="{PREFIX}/{YY}{MM}/{SEQ}" --reset-period=monthly --padding=5
 ```
 
-## 7. Integrasi ke Controller/Service Modul
+## 7. Integrasi Saat Ini
 
-Nomor dokumen sebaiknya digenerate di service, bukan controller.
+Nomor otomatis sudah diintegrasikan ke create form berikut:
 
-Contoh pola di Sales Order Service:
+| Modul | Field | Transaction Code | Format Default |
+|---|---|---|---|
+| Sales Order | `so_no` | `SO` | `{PREFIX}/{YYYY}{MM}/{SEQ}` |
+| Purchase Order | `po_no` | `PO` | `{PREFIX}/{YYYY}{MM}/{SEQ}` |
 
-```php
-$db->transStart();
+Cara kerja:
 
-$documentNo = (new DocumentNumberService($db))->next('SO', $documentDate, [
-    'prefix' => 'SO',
-    'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
-]);
+1. Form create menampilkan preview nomor sebagai placeholder.
+2. Field nomor boleh dikosongkan.
+3. Saat submit, controller membuat nomor otomatis jika field kosong.
+4. Jika user mengisi nomor manual, nomor manual tetap dipakai.
+5. Edit PO tetap mempertahankan nomor existing.
 
-$salesOrderModel->insert([
-    'document_no' => $documentNo,
-    'document_date' => $documentDate->format('Y-m-d'),
-    // field lain...
-]);
+File yang terintegrasi:
 
-$db->transComplete();
+```text
+app/Controllers/Sales/SalesOrderController.php
+app/Views/sales/orders/form.php
+app/Controllers/Purchase/PurchaseOrderController.php
+app/Views/purchase/orders/form.php
 ```
 
 ## 8. Integrasi dengan Transaction Code dan Prefix Code
@@ -174,11 +177,16 @@ Service sudah mencoba membaca tabel setup seperti `prefix_codes` jika tersedia d
 
 Namun explicit options saat memanggil `next()` atau `preview()` tetap menjadi prioritas tertinggi.
 
-## 9. Next Step
+## 9. Catatan Risiko
 
-1. Integrasikan ke Sales Order create.
-2. Integrasikan ke Purchase Order create.
-3. Integrasikan ke Delivery Order dan Purchase Receipt.
-4. Integrasikan ke Sales Invoice dan Purchase Invoice.
-5. Integrasikan ke Payment, Receipt, dan Journal Entry.
-6. Tambahkan UI setup untuk format nomor dokumen jika field prefix/format belum lengkap.
+Saat ini SO/PO generate nomor dilakukan di controller sebelum memanggil service transaksi existing. Ini sengaja dipilih agar tidak mengubah service transaksi yang sudah besar dan sensitif.
+
+Risiko kecil: jika nomor sudah digenerate tetapi create transaksi gagal setelahnya, sequence tetap naik. Ini masih normal untuk banyak ERP karena nomor dokumen tidak harus selalu gapless. Jika nanti dibutuhkan nomor benar-benar gapless, perlu desain khusus berbasis draft reservation dan posting final.
+
+## 10. Next Step
+
+1. Integrasikan ke Delivery Order dan Purchase Receipt.
+2. Integrasikan ke Sales Invoice dan Purchase Invoice.
+3. Integrasikan ke Payment, Receipt, dan Journal Entry.
+4. Tambahkan UI setup untuk format nomor dokumen jika field prefix/format belum lengkap.
+5. Refactor generation ke service transaksi jika flow SO/PO sudah stabil dan test coverage tersedia.
