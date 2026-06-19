@@ -76,13 +76,19 @@ class SalesOrderController extends BaseController
         $customerName = $customer['customern'] ?? $customer['name'] ?? trim((string) $this->request->getPost('customer_name'));
 
         try {
+            $soDate = (string) $this->request->getPost('so_date');
+            $soNo = trim((string) $this->request->getPost('so_no'));
+            if ($soNo === '') {
+                $soNo = $this->issueDocumentNumber('SO', $soDate, $companyId, $tenant->activeSiteId());
+            }
+
             $soId = (new SalesOrderService())->create([
                 'company_id' => $companyId,
                 'site_id' => $tenant->activeSiteId(),
                 'company' => session('active_company_code'),
                 'site' => session('active_site_code'),
-                'so_no' => trim((string) $this->request->getPost('so_no')),
-                'so_date' => (string) $this->request->getPost('so_date'),
+                'so_no' => $soNo,
+                'so_date' => $soDate,
                 'customer_id' => $customerId > 0 ? $customerId : null,
                 'customer' => $customerCode,
                 'customer_code' => $customerCode,
@@ -231,5 +237,17 @@ class SalesOrderController extends BaseController
         } catch (\Throwable) {
             return '';
         }
+    }
+
+    private function issueDocumentNumber(string $transactionCode, string $date, int $companyId, ?int $siteId): string
+    {
+        return (new DocumentNumberService())->next($transactionCode, new DateTimeImmutable($date), [
+            'company_id' => $companyId,
+            'site_id' => $siteId ?? 0,
+            'prefix' => $transactionCode,
+            'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+            'reset_period' => 'monthly',
+            'padding' => 5,
+        ]);
     }
 }
