@@ -25,7 +25,9 @@ The current continuation adds:
 
 - Formal repository audit documentation
 - Reusable tenant scope helper: `App\Services\Support\TenantScope`
+- Enterprise document numbering service: `App\Services\Support\DocumentNumberService`
 - Local readiness command: `php spark pena:health`
+- Document number CLI helper: `php spark pena:docno`
 - Tenant and permission hardening guide
 - Updated continuation plan for staged development
 
@@ -83,6 +85,13 @@ Run local readiness check:
 php spark pena:health
 ```
 
+Preview/generate document number:
+
+```bash
+php spark pena:docno SO --preview --company=1 --site=1 --prefix=SO --format="{PREFIX}/{YYYY}{MM}/{SEQ}" --reset-period=monthly --padding=5
+php spark pena:docno SO --company=1 --site=1 --prefix=SO --format="{PREFIX}/{YYYY}{MM}/{SEQ}" --reset-period=monthly --padding=5
+```
+
 Start the app:
 
 ```bash
@@ -110,6 +119,7 @@ Change the password immediately after first login.
 - Route-level permission is guarded by `PermissionGuardFilter`.
 - Sidebar visibility is not treated as security; direct URL access must also pass permission checks.
 - New service/controller code should use `App\Services\Support\TenantScope` for active `company_id` and `site_id` handling.
+- New transactional modules should use `App\Services\Support\DocumentNumberService` for PO, SO, invoice, receipt, payment, and journal numbers.
 
 ## Development Rule
 
@@ -120,8 +130,9 @@ Before adding a new module or route:
 3. Add route.
 4. Add permission mapping in `PermissionGuardFilter` when the route is protected.
 5. Use `TenantScope` for tenant-owned query/insert/update.
-6. Add audit log for important changes.
-7. Test with Super Admin and non-admin role.
+6. Use `DocumentNumberService` for transaction document numbers.
+7. Add audit log for important changes.
+8. Test with Super Admin and non-admin role.
 
 ## Documentation
 
@@ -139,3 +150,4 @@ Before adding a new module or route:
 - [Continuation Plan](docs/11-continuation-plan.md)
 - [Development Priority Plan](docs/12-development-priority-plan.md)
 - [Tenant and Permission Hardening](docs/13-tenant-permission-hardening.md)
+- [Document Number Service](docs/14-document-number-service.md)
