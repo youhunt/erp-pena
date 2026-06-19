@@ -8,9 +8,14 @@
                 <h4 class="card-title mb-1">Bank Reconcile</h4>
                 <p class="text-muted mb-0">Posted bank reconciliation batches and matched bank entries.</p>
             </div>
-            <a href="<?= site_url('cash-bank/reconciliations/new') ?>" class="btn btn-primary">
-                <i class="bx bx-plus me-1"></i> New Reconcile
-            </a>
+            <div class="d-flex gap-2">
+                <a href="<?= site_url('cash-bank/statements') ?>" class="btn btn-outline-secondary">
+                    <i class="bx bx-spreadsheet me-1"></i> Statement Imports
+                </a>
+                <a href="<?= site_url('cash-bank/reconciliations/new') ?>" class="btn btn-primary">
+                    <i class="bx bx-plus me-1"></i> New Reconcile
+                </a>
+            </div>
         </div>
 
         <div class="table-responsive">

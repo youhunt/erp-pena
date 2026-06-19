@@ -17,6 +17,7 @@ class BankReconciliationService
         $companyId = (int) ($data['company_id'] ?? 0);
         $cashBankCode = trim((string) ($data['cash_bank_code'] ?? ''));
         $statementDate = (string) ($data['statement_date'] ?? '');
+        $statementImportId = (int) ($data['bank_statement_import_id'] ?? 0);
         $entryIds = array_values(array_unique(array_map('intval', $entryIds)));
 
         if ($companyId < 1 || $cashBankCode === '' || $statementDate === '') {
@@ -35,6 +36,21 @@ class BankReconciliationService
             ->first();
         if ($account === null) {
             throw new RuntimeException('Bank account not found or inactive.');
+        }
+        if ($statementImportId > 0) {
+            $statementImport = Database::connect()->table('bank_statement_imports')
+                ->where('id', $statementImportId)
+                ->where('company_id', $companyId)
+                ->where('cash_bank_account_id', (int) $account['id'])
+                ->where('cash_bank_code', $cashBankCode)
+                ->get(1)
+                ->getRowArray();
+            if ($statementImport === null) {
+                throw new RuntimeException('Selected bank statement import does not match this bank account.');
+            }
+            if (($statementImport['status'] ?? '') === 'reconciled') {
+                throw new RuntimeException('Selected bank statement import is already reconciled.');
+            }
         }
 
         $entryModel = new CashBankEntryModel();
@@ -63,6 +79,7 @@ class BankReconciliationService
                 'company_id' => $companyId,
                 'site_id' => $data['site_id'] ?? null,
                 'cash_bank_account_id' => (int) $account['id'],
+                'bank_statement_import_id' => $statementImportId > 0 ? $statementImportId : null,
                 'cash_bank_code' => $cashBankCode,
                 'reconcile_no' => trim((string) ($data['reconcile_no'] ?? 'BR-' . date('Ymd-His'))),
                 'statement_date' => $statementDate,
@@ -91,6 +108,17 @@ class BankReconciliationService
                     'reconciled_by' => $userId,
                     'updated_by' => $userId,
                 ]);
+            }
+
+            if ($statementImportId > 0) {
+                $db->table('bank_statement_imports')
+                    ->where('id', $statementImportId)
+                    ->where('company_id', $companyId)
+                    ->update([
+                        'status' => 'reconciled',
+                        'updated_by' => $userId,
+                        'updated_at' => date('Y-m-d H:i:s'),
+                    ]);
             }
 
             if ($db->transStatus() === false) {

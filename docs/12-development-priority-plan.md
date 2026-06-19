@@ -51,9 +51,9 @@ Acuan utama: `pena_erp_data_dictionary_filled.xlsx`.
 | Phase 5 - Purchase Core | Partial | Purchase Order, Purchase Receipt with Inventory/GRNI posting, Purchase Invoice/AP Payable baseline, controller, service, views, schema ensure |
 | Phase 6 - Sales Core | Partial | Sales Order, Allocation Order, Delivery Order with COGS posting, Sales Invoice/AR Receivable baseline, controller, service, views, schema ensure |
 | Phase 7 - Finance Backbone | Partial | GL Entry, Posting Profile, dan auto journal untuk AR/AP invoice serta cash/bank settlement baseline sudah tersedia |
-| Phase 8 - AP dan AR | Partial | Sales Invoice/AR Receivable/AR Receipt dan Purchase Invoice/AP Payable/AP Payment baseline sudah ada; aging dan period close belum selesai |
+| Phase 8 - AP dan AR | Partial | Sales Invoice/AR Receivable/AR Receipt dan Purchase Invoice/AP Payable/AP Payment baseline sudah ada; aging route dan AP/AR period close guard tersedia |
 | Phase 9 - Costing | Pending | Baru rencana/menu placeholder, belum ada item cost engine |
-| Phase 10 - Planning dan Production | Pending | Baru menu placeholder, belum ada BOM/MRP/work order engine |
+| Phase 10 - Planning dan Production | Partial | BOM, Work Center, Routing, Work Order, Work Order In, component allocation, dan production period guard baseline tersedia; MRP/MPS belum ada |
 | Phase 11 - POS dan Fixed Asset | Pending | Baru menu placeholder, belum ada transaksi POS/asset |
 | Phase 12 - AI/OCR Document Processing | Partial | Upload, document tables, OCR/AI interfaces, diagnostics/sample, review, convert service ke PO/SO |
 | Phase 13 - Reporting, Dashboard, Enhancement UI | Partial | Dashboard awal, audit log viewer, sidebar Skote, placeholder modul |
@@ -328,7 +328,8 @@ Sisa pekerjaan:
 - Purchase intransit dan cost purchase receipt belum ada sebagai workflow penuh.
 - Approval PO dan status lifecycle perlu dipoles.
 - Posting ke GL sudah baseline untuk receipt dan invoice, tetapi belum lengkap untuk landed cost, return, reversal, dan approval.
-- Aging, GL posting, dan A/P period close belum selesai.
+- AP aging route sudah tersedia dan AP period close guard sudah dipakai oleh invoice/payment.
+- Purchase intransit, landed cost/cost purchase receipt, dan variance approval masih perlu diperdalam.
 
 ## Phase 6 - Sales Core
 
@@ -374,7 +375,8 @@ Sisa pekerjaan:
 - Allocation Order masih baseline; partial allocation per line/manual split warehouse-location perlu diperdalam.
 - Stock issue perlu dipastikan end-to-end untuk warehouse/location/batch yang lebih rinci.
 - Approval SO dan status lifecycle perlu dipoles.
-- Aging, GL posting, dan A/R period close belum selesai.
+- AR aging route sudah tersedia dan AR period close guard sudah dipakai oleh invoice/receipt.
+- Allocation Order masih baseline; partial allocation per line/manual split warehouse-location perlu diperdalam.
 
 ## Phase 7 - Finance Backbone
 
@@ -421,17 +423,24 @@ Yang sudah dikerjakan:
 - GL Entry manual dan Posting Profile tersedia.
 - Manual A/R Invoice, Sales Invoice dari Delivery Order, Manual A/P Invoice, dan Purchase Invoice dari Receipt sudah bisa membuat jurnal GL otomatis.
 - A/R Receipt dan A/P Payment sudah terhubung ke Cash/Bank Entry dan GL Entry.
+- Bank Reconcile sudah bisa memilih posted bank entries dan menyimpan statement balance, book balance, difference, serta status reconcile.
+- Bank Statement Import `.xlsx` baseline tersedia untuk menyimpan rekening koran sebagai bank-side statement lines tanpa mengubah Cash/Bank Entry atau GL.
+- Bank Statement Auto Match baseline tersedia untuk menghubungkan statement line dengan posted bank entry berdasarkan bank, tanggal, arah uang, nominal, dan referensi jika tersedia.
+- Matched bank statement import bisa diteruskan menjadi Bank Reconcile; form reconcile otomatis prefill statement date, balance, reference, dan pre-select matched bank entries.
+- Unmatched bank statement line bisa dibuat menjadi Bank Entry terkontrol; form bank entry prefill dari statement line dan tetap melewati `CashBankService`, GL posting, serta cashbank period guard.
 
 Sisa pekerjaan:
 - GL Book, GL Column, Account No, Chart of Account masih perlu CRUD enterprise-grade yang lebih lengkap.
-- Recurring, reversal, approval journal, dan period close GL perlu diperdalam.
-- Journal generation inventory movement, receipt valuation, COGS, production, POS, dan fixed asset belum selesai.
+- Period Close GL/AP/AR/CashBank/Inventory/Production baseline tersedia melalui `PeriodCloseService`.
+- Bank Reconcile masih baseline: statement line, auto-match, create reconcile, dan adjustment entry baseline sudah ada; layar review variance yang lebih nyaman dan rule matching lanjutan masih perlu diperdalam.
+- Recurring, reversal journal, approval journal, dan laporan GL enterprise perlu diperdalam.
+- Journal generation untuk invoice, receipt, delivery COGS, inventory adjustment, dan cash/bank settlement sudah baseline; production, POS, dan fixed asset masih belum lengkap.
 
 ## Phase 8 - AP dan AR
 
 Tujuan: hutang dan piutang terhubung ke purchase, sales, cash bank, dan GL.
 
-Status: Pending.
+Status: Partial.
 
 Scope AP:
 - Manual A/P Invoice.
@@ -468,11 +477,13 @@ Yang sudah dikerjakan:
 - Payment Invoice baseline tersedia melalui `ap_payments`.
 - Payment Receipt baseline tersedia melalui `ar_receipts`.
 - Menu Sales Invoice dan Purchase Invoice sudah diarahkan ke modul nyata.
+- Manual A/P Invoice dan Manual A/R Invoice baseline tersedia dan posting ke GL.
+- AP Aging dan AR Aging route tersedia.
+- AP/AR period close guard sudah dipakai saat invoice, payment, receipt, dan cancellation.
 
 Sisa pekerjaan:
-- Aging AP/AR belum tersedia.
-- Posting AP/AR ke GL belum tersedia.
-- Manual invoice, proforma invoice, advance invoice/receipt, dan period close belum tersedia.
+- Proforma invoice, advance invoice/receipt, dan aging bucket/report polish masih perlu diperdalam.
+- Approval untuk invoice/payment/receipt dan variance workflow belum lengkap.
 
 ## Phase 9 - Costing
 
@@ -509,7 +520,7 @@ Sisa pekerjaan:
 
 Tujuan: manufaktur berjalan setelah item, stock, UoM, batch, dan costing siap.
 
-Status: Pending.
+Status: Partial.
 
 Scope Planning:
 - Forecast.
@@ -545,10 +556,11 @@ Done jika:
 Yang sudah dikerjakan:
 - BOM, Work Center, Routing, dan Work Order baseline tersedia.
 - Work Center Machine dan Work Center Cost child table tersedia sesuai workbook.
+- Work Order service sudah mendukung create dari BOM/routing, release, component allocation, material issue/receipt, Work Order In, dan production period close guard.
 
 Sisa pekerjaan:
 - Planning MRP/MPS belum tersedia.
-- Work Order labor, period close, dan costing produksi belum selesai.
+- Work Order labor/costing, WIP/variance GL posting, dan production cost rollup belum selesai.
 
 ## Phase 11 - POS dan Fixed Asset
 

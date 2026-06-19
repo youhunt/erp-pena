@@ -24,37 +24,47 @@
 <form method="post" action="<?= site_url('cash-bank/reconciliations') ?>">
     <?= csrf_field() ?>
     <input type="hidden" name="cash_bank_code" value="<?= esc($selectedCode) ?>">
+    <input type="hidden" name="bank_statement_import_id" value="<?= esc(old('bank_statement_import_id', $defaults['bank_statement_import_id'] ?? '')) ?>">
 
     <div class="card">
         <div class="card-body">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
                 <div>
                     <h4 class="card-title mb-1">Create Bank Reconcile</h4>
-                    <p class="text-muted mb-0">Match posted bank entries with the bank statement.</p>
+                    <p class="text-muted mb-0">Match posted bank entries with the bank statement balance. Bank statement Excel import will use a separate statement-line flow.</p>
                 </div>
                 <a href="<?= site_url('cash-bank/reconciliations') ?>" class="btn btn-light">Back</a>
             </div>
 
+            <div class="alert alert-info">
+                Current flow reconciles existing posted bank entries. Do not upload bank statement rows as Cash/Bank Entry because that would change book balance.
+            </div>
+            <?php if (! empty($defaults['bank_statement_import_id'])): ?>
+                <div class="alert alert-success">
+                    This reconcile is prepared from bank statement import #<?= esc($defaults['bank_statement_import_id']) ?>. Matched bank entries are pre-selected below.
+                </div>
+            <?php endif ?>
+
             <div class="row g-3">
                 <div class="col-md-3">
                     <label class="form-label">Reconcile No</label>
-                    <input type="text" name="reconcile_no" class="form-control" required value="<?= esc(old('reconcile_no', 'BR-' . date('Ymd-His'))) ?>">
+                    <input type="text" name="reconcile_no" class="form-control" required value="<?= esc(old('reconcile_no', $defaults['reconcile_no'] ?? ('BR-' . date('Ymd-His')))) ?>">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Statement Date</label>
-                    <input type="date" name="statement_date" class="form-control" required value="<?= esc(old('statement_date', date('Y-m-d'))) ?>">
+                    <input type="date" name="statement_date" class="form-control" required value="<?= esc(old('statement_date', $defaults['statement_date'] ?? date('Y-m-d'))) ?>">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Statement Balance</label>
-                    <input type="number" name="statement_balance" class="form-control text-end" required step="0.01" value="<?= esc(old('statement_balance', '0.00')) ?>">
+                    <input type="number" name="statement_balance" class="form-control text-end" required step="0.01" value="<?= esc(old('statement_balance', $defaults['statement_balance'] ?? '0.00')) ?>">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Statement Ref</label>
-                    <input type="text" name="statement_ref" class="form-control" value="<?= esc(old('statement_ref')) ?>">
+                    <input type="text" name="statement_ref" class="form-control" value="<?= esc(old('statement_ref', $defaults['statement_ref'] ?? '')) ?>">
                 </div>
                 <div class="col-12">
                     <label class="form-label">Notes</label>
-                    <input type="text" name="notes" class="form-control" value="<?= esc(old('notes')) ?>">
+                    <input type="text" name="notes" class="form-control" value="<?= esc(old('notes', $defaults['notes'] ?? '')) ?>">
                 </div>
             </div>
         </div>
@@ -80,8 +90,9 @@
                     <tbody>
                     <?php foreach ($entries as $entry): ?>
                         <?php $signed = str_ends_with((string) ($entry['entry_type'] ?? ''), '_in') ? (float) $entry['amount'] : -(float) $entry['amount']; ?>
+                        <?php $checked = in_array((int) $entry['id'], $selectedEntryIds ?? [], true); ?>
                         <tr>
-                            <td><input type="checkbox" class="form-check-input entry-check" name="entry_ids[]" value="<?= esc($entry['id']) ?>" data-signed="<?= esc($signed) ?>"></td>
+                            <td><input type="checkbox" class="form-check-input entry-check" name="entry_ids[]" value="<?= esc($entry['id']) ?>" data-signed="<?= esc($signed) ?>" <?= $checked ? 'checked' : '' ?>></td>
                             <td><?= esc($entry['entry_date'] ?? '-') ?></td>
                             <td class="fw-semibold"><?= esc($entry['entry_no'] ?? '-') ?></td>
                             <td><span class="badge bg-<?= $signed >= 0 ? 'success' : 'danger' ?>"><?= esc($entry['entry_type'] ?? '-') ?></span></td>
@@ -125,6 +136,7 @@
         checks.forEach((check) => check.checked = checkAll.checked);
         recalc();
     });
+    recalc();
 })();
 </script>
 <?= $this->endSection() ?>

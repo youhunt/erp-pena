@@ -6,7 +6,7 @@ This note documents the current import/export status and the next hardening task
 
 ## 1. Current Implementation
 
-PENA ERP already has CSV template, import, and export support for setup/master resources through:
+PENA ERP started with CSV template, import, and export support for setup/master resources through:
 
 - `app/Controllers/Setup/MasterDataTransferController.php`
 - `app/Views/setup/master/import.php`
@@ -14,11 +14,22 @@ PENA ERP already has CSV template, import, and export support for setup/master r
 - `setup/{resource}/import`
 - `setup/{resource}/export`
 
+The user-facing direction is Excel-first. Current newer flows already support native `.xlsx` preview/import/export through:
+
+- `app/Controllers/System/ExcelLiteTransferController.php`
+- `app/Controllers/System/OrderImportController.php`
+- `app/Controllers/System/FulfillmentImportController.php`
+- `app/Controllers/Finance/LegacyGlExcelController.php`
+
+CSV/TXT should be treated as legacy fallback where it still exists, not as the preferred user workflow.
+
 The Data Import Export Center also supports finance and inventory import/export through:
 
 - `app/Controllers/System/DataImportController.php`
 - `app/Views/system/data_import/index.php`
 - `app/Views/system/data_import/import.php`
+
+Opening stock and COA import accept spreadsheet uploads; the UI should keep recommending `.xlsx`.
 
 ## 2. Completed Fixes
 
@@ -57,6 +68,31 @@ Master data import now requires:
 This prevents site-level data such as items, customers, suppliers, departments, warehouses, and locations from being imported with empty `site_id`.
 
 ## 3. Next Required Hardening
+
+### 3.0 Bank Statement Excel Import
+
+Bank Reconcile reconciles posted `cash_bank_entries` against a manually entered statement balance. Bank statement `.xlsx` import baseline now stores bank-side rows in:
+
+- `bank_statement_imports`
+- `bank_statement_lines`
+
+Do not import rekening koran rows directly as Cash/Bank Entry. Statement rows represent bank-side evidence, while Cash/Bank Entry represents book-side transactions. Mixing them would change book balance incorrectly.
+
+Implemented baseline:
+
+- Download template from `/cash-bank/statements/template`.
+- Upload `.xlsx` from `/cash-bank/statements/import`.
+- Store statement date, reference, source filename, debit total, credit total, net amount, and line count.
+- Store line date, value date, reference, description, debit, credit, signed amount, running balance, currency, and `unmatched` status.
+- Auto-match baseline links statement lines to posted `cash_bank_entries` when one safe candidate exists by bank, date, direction, amount, and optional reference number.
+- Create Reconcile from a statement import pre-fills the reconcile form and links `bank_reconciliations.bank_statement_import_id` back to the source import.
+- Unmatched statement lines can start a Bank Entry form for controlled adjustment posting. The source line must keep the same bank, date, direction, and amount before it can be linked to the posted entry.
+
+Next matching design:
+
+- Add matching status such as `unmatched`, `matched`, `ignored`, or `adjustment_required`.
+- Add review UI for duplicate candidates and configurable matching tolerance.
+- Add richer adjustment categories for bank charges, interest income, and bank correction items.
 
 ### 3.1 Database Transaction for Master Import
 

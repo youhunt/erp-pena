@@ -171,6 +171,7 @@ class ErpMenuStructureSeeder extends Seeder
                     ['label' => 'Rate Master', 'route' => 'modules/rate-master'],
                     ['label' => 'Cash Entry', 'route' => 'cash-bank/cash-entries'],
                     ['label' => 'Bank Entry', 'route' => 'cash-bank/bank-entries'],
+                    ['label' => 'Bank Statement Import', 'route' => 'cash-bank/statements'],
                     ['label' => 'Bank Reconcile', 'route' => 'cash-bank/reconciliations'],
                 ],
             ],

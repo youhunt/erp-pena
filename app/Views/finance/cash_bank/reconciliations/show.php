@@ -15,6 +15,12 @@
                 <table class="table table-sm mb-0">
                     <tr><th>Statement Date</th><td><?= esc($reconciliation['statement_date'] ?? '-') ?></td></tr>
                     <tr><th>Reference</th><td><?= esc($reconciliation['statement_ref'] ?? '-') ?></td></tr>
+                    <?php if (! empty($reconciliation['bank_statement_import_id'])): ?>
+                        <tr>
+                            <th>Statement Import</th>
+                            <td><a href="<?= site_url('cash-bank/statements/' . $reconciliation['bank_statement_import_id']) ?>">#<?= esc($reconciliation['bank_statement_import_id']) ?></a></td>
+                        </tr>
+                    <?php endif ?>
                     <tr><th>Book Balance</th><td class="text-end"><?= esc(number_format((float) ($reconciliation['book_balance'] ?? 0), 2)) ?></td></tr>
                     <tr><th>Statement Balance</th><td class="text-end"><?= esc(number_format((float) ($reconciliation['statement_balance'] ?? 0), 2)) ?></td></tr>
                     <tr><th>Difference</th><td class="text-end fw-semibold"><?= esc(number_format((float) ($reconciliation['difference_amount'] ?? 0), 2)) ?></td></tr>

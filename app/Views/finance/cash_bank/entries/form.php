@@ -3,6 +3,7 @@
 <?= $this->section('content') ?>
 <form method="post" action="<?= site_url('cash-bank/' . ($type === 'cash' ? 'cash-entries' : 'bank-entries')) ?>">
     <?= csrf_field() ?>
+    <input type="hidden" name="statement_line_id" value="<?= esc(old('statement_line_id', $defaults['statement_line_id'] ?? '')) ?>">
     <div class="card">
         <div class="card-body">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
@@ -13,25 +14,32 @@
                 <a href="<?= site_url('cash-bank/' . ($type === 'cash' ? 'cash-entries' : 'bank-entries')) ?>" class="btn btn-light">Back</a>
             </div>
 
+            <?php if (! empty($defaults['statement_line_id'])): ?>
+                <div class="alert alert-info">
+                    This bank entry is prepared from bank statement line #<?= esc($defaults['statement_line_id']) ?>. Bank, date, direction, and amount must stay aligned with the statement line.
+                </div>
+            <?php endif ?>
+
             <div class="row">
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Entry No</label>
-                    <input type="text" name="entry_no" class="form-control" required value="<?= esc(old('entry_no', strtoupper($type) . '-' . date('Ymd-His'))) ?>">
+                    <input type="text" name="entry_no" class="form-control" required value="<?= esc(old('entry_no', $defaults['entry_no'] ?? (strtoupper($type) . '-' . date('Ymd-His')))) ?>">
                 </div>
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Entry Date</label>
-                    <input type="date" name="entry_date" class="form-control" required value="<?= esc(old('entry_date', date('Y-m-d'))) ?>">
+                    <input type="date" name="entry_date" class="form-control" required value="<?= esc(old('entry_date', $defaults['entry_date'] ?? date('Y-m-d'))) ?>">
                 </div>
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Direction</label>
                     <select name="direction" class="form-select" required>
-                        <option value="in"><?= $type === 'cash' ? 'Cash In' : 'Bank In' ?></option>
-                        <option value="out"><?= $type === 'cash' ? 'Cash Out' : 'Bank Out' ?></option>
+                        <?php $direction = old('direction', $defaults['direction'] ?? 'in'); ?>
+                        <option value="in" <?= $direction === 'in' ? 'selected' : '' ?>><?= $type === 'cash' ? 'Cash In' : 'Bank In' ?></option>
+                        <option value="out" <?= $direction === 'out' ? 'selected' : '' ?>><?= $type === 'cash' ? 'Cash Out' : 'Bank Out' ?></option>
                     </select>
                 </div>
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Currency</label>
-                    <input type="text" name="currency_code" class="form-control" value="<?= esc(old('currency_code', 'IDR')) ?>">
+                    <input type="text" name="currency_code" class="form-control" value="<?= esc(old('currency_code', $defaults['currency_code'] ?? 'IDR')) ?>">
                 </div>
             </div>
 
@@ -40,8 +48,11 @@
                     <label class="form-label">Cash/Bank Account</label>
                     <select name="cash_bank_code" class="form-select" required>
                         <option value="">Select Account</option>
+                        <?php $cashBankCode = old('cash_bank_code', $defaults['cash_bank_code'] ?? ''); ?>
                         <?php foreach ($accounts as $account): ?>
-                            <option value="<?= esc($account['cash_bank_code']) ?>"><?= esc($account['cash_bank_code'] . ' - ' . $account['cash_bank_name'] . ' / Balance ' . number_format((float) $account['current_balance'], 2)) ?></option>
+                            <option value="<?= esc($account['cash_bank_code']) ?>" <?= $cashBankCode === $account['cash_bank_code'] ? 'selected' : '' ?>>
+                                <?= esc($account['cash_bank_code'] . ' - ' . $account['cash_bank_name'] . ' / Balance ' . number_format((float) $account['current_balance'], 2)) ?>
+                            </option>
                         <?php endforeach ?>
                     </select>
                 </div>
@@ -60,15 +71,15 @@
             <div class="row">
                 <div class="col-md-4 mb-3">
                     <label class="form-label">Amount</label>
-                    <input type="number" step="0.01" name="amount" class="form-control text-end" required value="<?= esc(old('amount', '0')) ?>">
+                    <input type="number" step="0.01" name="amount" class="form-control text-end" required value="<?= esc(old('amount', $defaults['amount'] ?? '0')) ?>">
                 </div>
                 <div class="col-md-4 mb-3">
                     <label class="form-label">Reference No</label>
-                    <input type="text" name="reference_no" class="form-control" value="<?= esc(old('reference_no')) ?>">
+                    <input type="text" name="reference_no" class="form-control" value="<?= esc(old('reference_no', $defaults['reference_no'] ?? '')) ?>">
                 </div>
                 <div class="col-md-4 mb-3">
                     <label class="form-label">Description</label>
-                    <input type="text" name="description" class="form-control" value="<?= esc(old('description')) ?>">
+                    <input type="text" name="description" class="form-control" value="<?= esc(old('description', $defaults['description'] ?? '')) ?>">
                 </div>
             </div>
 
