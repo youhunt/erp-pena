@@ -61,6 +61,7 @@ final class PenaHealthCheck extends BaseCommand
                 'user_site_access',
                 'menu_items',
                 'audit_logs',
+                'document_number_sequences',
             ];
 
             foreach ($requiredTables as $table) {
