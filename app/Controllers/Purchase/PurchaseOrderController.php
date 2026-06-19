@@ -6,9 +6,11 @@ use App\Controllers\BaseController;
 use App\Models\PurchaseOrderLineModel;
 use App\Models\PurchaseOrderModel;
 use App\Services\Purchase\PurchaseOrderService;
+use App\Services\Support\DocumentNumberService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use Config\Database;
+use DateTimeImmutable;
 use RuntimeException;
 
 class PurchaseOrderController extends BaseController
@@ -55,6 +57,7 @@ class PurchaseOrderController extends BaseController
             'action' => site_url('purchase/orders'),
             'suppliers' => $this->masterRows('suppliers'),
             'items' => $this->masterRows('items'),
+            'suggestedPoNo' => $this->previewDocumentNumber('PO'),
         ]);
     }
 
@@ -66,7 +69,7 @@ class PurchaseOrderController extends BaseController
             return redirect()->back()->withInput()->with('error', 'Active company is required.');
         }
 
-        if (! $this->validate(['po_no' => 'required|max_length[60]', 'po_date' => 'required|valid_date[Y-m-d]'])) {
+        if (! $this->validate(['po_no' => 'permit_empty|max_length[60]', 'po_date' => 'required|valid_date[Y-m-d]'])) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
 
@@ -76,7 +79,12 @@ class PurchaseOrderController extends BaseController
         }
 
         try {
-            $poId = (new PurchaseOrderService())->create($this->postedHeader($tenant), $lines, auth()->id());
+            $header = $this->postedHeader($tenant);
+            if (trim((string) ($header['po_no'] ?? '')) === '') {
+                $header['po_no'] = $this->issueDocumentNumber('PO', (string) $header['po_date'], $companyId, $tenant->activeSiteId());
+            }
+
+            $poId = (new PurchaseOrderService())->create($header, $lines, auth()->id());
         } catch (RuntimeException $exception) {
             return redirect()->back()->withInput()->with('error', $exception->getMessage());
         }
@@ -117,7 +125,7 @@ class PurchaseOrderController extends BaseController
             throw PageNotFoundException::forPageNotFound();
         }
 
-        if (! $this->validate(['po_no' => 'required|max_length[60]', 'po_date' => 'required|valid_date[Y-m-d]'])) {
+        if (! $this->validate(['po_no' => 'permit_empty|max_length[60]', 'po_date' => 'required|valid_date[Y-m-d]'])) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
 
@@ -205,13 +213,17 @@ class PurchaseOrderController extends BaseController
         $supplier = $supplierId > 0 ? Database::connect()->table('suppliers')->where('id', $supplierId)->get()->getRowArray() : null;
         $supplierCode = $supplier['supplier'] ?? $supplier['code'] ?? $existing['supplier_code'] ?? $existing['supplier'] ?? null;
         $supplierName = $supplier['supplierna'] ?? $supplier['name'] ?? trim((string) $this->request->getPost('supplier_name'));
+        $poNo = trim((string) $this->request->getPost('po_no'));
+        if ($poNo === '' && isset($existing['po_no'])) {
+            $poNo = (string) $existing['po_no'];
+        }
 
         return [
             'company_id' => $companyId,
             'site_id' => $tenant->activeSiteId(),
             'company' => session('active_company_code') ?: ($existing['company'] ?? null),
             'site' => session('active_site_code') ?: ($existing['site'] ?? null),
-            'po_no' => trim((string) $this->request->getPost('po_no')),
+            'po_no' => $poNo,
             'po_date' => (string) $this->request->getPost('po_date'),
             'delivery_date' => $this->nullableDate($this->request->getPost('delivery_date')),
             'arrive_date' => $this->nullableDate($this->request->getPost('arrive_date')),
@@ -279,7 +291,6 @@ class PurchaseOrderController extends BaseController
                 return true;
             }
         }
-
         return false;
     }
 
@@ -307,5 +318,31 @@ class PurchaseOrderController extends BaseController
     {
         $value = trim((string) $value);
         return $value !== '' ? $value : null;
+    }
+
+    private function previewDocumentNumber(string $transactionCode): string
+    {
+        try {
+            return (new DocumentNumberService())->preview($transactionCode, new DateTimeImmutable(), [
+                'prefix' => $transactionCode,
+                'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+                'reset_period' => 'monthly',
+                'padding' => 5,
+            ]);
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    private function issueDocumentNumber(string $transactionCode, string $date, int $companyId, ?int $siteId): string
+    {
+        return (new DocumentNumberService())->next($transactionCode, new DateTimeImmutable($date), [
+            'company_id' => $companyId,
+            'site_id' => $siteId ?? 0,
+            'prefix' => $transactionCode,
+            'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+            'reset_period' => 'monthly',
+            'padding' => 5,
+        ]);
     }
 }
