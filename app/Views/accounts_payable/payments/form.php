@@ -12,8 +12,8 @@
                     <table class="table table-sm mb-0">
                         <tr><th>Invoice Amount</th><td class="text-end"><?= esc(number_format((float) $payable['invoice_amount'], 2)) ?></td></tr>
                         <tr><th>Paid</th><td class="text-end"><?= esc(number_format((float) $payable['paid_amount'], 2)) ?></td></tr>
-                        <tr><th>Outstanding</th><td class="text-end fw-semibold"><?= esc(number_format((float) $payable['outstanding_amount'], 2)) ?></td></tr>
-                        <tr><th>Status</th><td><?= esc($payable['status'] ?? '-') ?></td></tr>
+                        <tr><th>Outstanding</th><td class="text-end fw-semibold text-primary"><?= esc(number_format((float) $payable['outstanding_amount'], 2)) ?></td></tr>
+                        <tr><th>Status</th><td><span class="badge bg-secondary"><?= esc($payable['status'] ?? '-') ?></span></td></tr>
                     </table>
                 </div>
             </div>
@@ -24,14 +24,23 @@
                     <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
                         <div>
                             <h4 class="card-title mb-1">Post Supplier Payment</h4>
-                            <p class="text-muted mb-0">This will reduce A/P outstanding, cash/bank balance, and post GL when account setup is available.</p>
+                            <p class="text-muted mb-0">Posting ini akan mengurangi A/P outstanding, mengurangi cash/bank, dan membuat jurnal jika setup account tersedia.</p>
                         </div>
-                        <a href="<?= site_url('ap/purchase-invoices/' . $payable['purchase_invoice_id']) ?>" class="btn btn-light">Back</a>
+                        <a href="<?= site_url('ap/purchase-invoices/' . $payable['purchase_invoice_id']) ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to Invoice</a>
                     </div>
+
+                    <?php if (session('error')): ?>
+                        <div class="alert alert-danger"><?= esc(session('error')) ?></div>
+                    <?php endif ?>
+                    <?php if (session('message')): ?>
+                        <div class="alert alert-success"><?= esc(session('message')) ?></div>
+                    <?php endif ?>
+
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label">Payment No</label>
-                            <input type="text" name="payment_no" class="form-control" required value="<?= esc(old('payment_no', 'APP-' . date('Ymd-His'))) ?>">
+                            <input type="text" name="payment_no" class="form-control" placeholder="<?= esc(($suggestedPaymentNo ?? '') !== '' ? $suggestedPaymentNo : 'Auto if blank', 'attr') ?>" value="<?= esc(old('payment_no')) ?>">
+                            <small class="text-muted">Kosongkan untuk nomor otomatis.</small>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Payment Date</label>
@@ -39,7 +48,8 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Payment Amount</label>
-                            <input type="number" step="0.01" min="0.01" max="<?= esc($payable['outstanding_amount']) ?>" name="payment_amount" class="form-control" required value="<?= esc(old('payment_amount', number_format((float) $payable['outstanding_amount'], 2, '.', ''))) ?>">
+                            <input type="text" inputmode="decimal" name="payment_amount" class="form-control text-end" required value="<?= esc(old('payment_amount', number_format((float) $payable['outstanding_amount'], 2, '.', ''))) ?>" data-outstanding="<?= esc((string) $payable['outstanding_amount'], 'attr') ?>">
+                            <small class="text-muted">Maksimal <?= esc(number_format((float) $payable['outstanding_amount'], 2)) ?>.</small>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Method</label>
@@ -54,7 +64,8 @@
                             <select name="cash_bank_code" class="form-select" required>
                                 <option value="">Choose cash/bank</option>
                                 <?php foreach ($cashBankAccounts ?? [] as $account): ?>
-                                    <option value="<?= esc($account['cash_bank_code']) ?>" <?= old('cash_bank_code', 'BANK-IDR') === $account['cash_bank_code'] ? 'selected' : '' ?>>
+                                    <?php $selected = old('cash_bank_code', $cashBankAccounts[0]['cash_bank_code'] ?? '') === $account['cash_bank_code']; ?>
+                                    <option value="<?= esc($account['cash_bank_code']) ?>" <?= $selected ? 'selected' : '' ?>>
                                         <?= esc($account['cash_bank_code'] . ' - ' . $account['cash_bank_name'] . ' (' . number_format((float) $account['current_balance'], 2) . ')') ?>
                                     </option>
                                 <?php endforeach ?>
@@ -70,8 +81,8 @@
                         </div>
                     </div>
                     <div class="mt-4">
-                        <button type="submit" class="btn btn-primary" onclick="return confirm('Post this A/P payment?')"><i class="bx bx-money me-1"></i> Post Payment</button>
-                        <a href="<?= site_url('ap/purchase-invoices/' . $payable['purchase_invoice_id']) ?>" class="btn btn-light">Cancel</a>
+                        <button type="submit" class="btn btn-primary" onclick="return confirm('Post A/P payment ini? Invoice balance dan cash/bank akan berubah.')"><i class="bx bx-money me-1"></i> Post Payment & Update A/P</button>
+                        <a href="<?= site_url('ap/purchase-invoices/' . $payable['purchase_invoice_id']) ?>" class="btn btn-light">Back to Invoice</a>
                     </div>
                 </div>
             </div>
