@@ -8,9 +8,11 @@ use App\Models\PurchaseOrderModel;
 use App\Models\PurchaseReceiptLineModel;
 use App\Models\PurchaseReceiptModel;
 use App\Services\Purchase\PurchaseReceiptService;
+use App\Services\Support\DocumentNumberService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use Config\Database;
+use DateTimeImmutable;
 use RuntimeException;
 
 class PurchaseReceiptController extends BaseController
@@ -75,6 +77,7 @@ class PurchaseReceiptController extends BaseController
             'locations' => $locations,
             'selectedWarehouseId' => $selectedWarehouseId,
             'selectedLocationId' => $selectedLocationId,
+            'suggestedReceiptNo' => $this->previewDocumentNumber('PR'),
         ]);
     }
 
@@ -87,7 +90,7 @@ class PurchaseReceiptController extends BaseController
         }
 
         $receiveUrl = '/purchase/orders/' . $poId . '/receive';
-        if (! $this->validate(['receipt_no' => 'required|max_length[60]', 'receipt_date' => 'required|valid_date[Y-m-d]'])) {
+        if (! $this->validate(['receipt_no' => 'permit_empty|max_length[60]', 'receipt_date' => 'required|valid_date[Y-m-d]'])) {
             return redirect()->to($receiveUrl)->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
 
@@ -98,15 +101,22 @@ class PurchaseReceiptController extends BaseController
 
         $warehouseId = $this->nullableInt($this->request->getPost('warehouse_id'));
         $locationId = $this->nullableInt($this->request->getPost('location_id'));
+        $receiptDate = (string) $this->request->getPost('receipt_date');
+        $receiptNo = trim((string) $this->request->getPost('receipt_no'));
+
         try {
             $this->assertStorageLocation($tenant, $warehouseId, $locationId);
+            if ($receiptNo === '') {
+                $receiptNo = $this->issueDocumentNumber('PR', $receiptDate, (int) $po['company_id'], $po['site_id'] ?? null);
+            }
+
             $receiptId = (new PurchaseReceiptService())->post([
                 'company_id' => $po['company_id'],
                 'site_id' => $po['site_id'] ?? null,
                 'company' => $po['company'] ?? session('active_company_code'),
                 'site' => $po['site'] ?? session('active_site_code'),
-                'receipt_no' => trim((string) $this->request->getPost('receipt_no')),
-                'receipt_date' => (string) $this->request->getPost('receipt_date'),
+                'receipt_no' => $receiptNo,
+                'receipt_date' => $receiptDate,
                 'purchase_order_id' => $po['id'],
                 'po_no' => $po['po_no'],
                 'supplier_id' => $po['supplier_id'] ?? null,
@@ -120,7 +130,7 @@ class PurchaseReceiptController extends BaseController
             return redirect()->to($receiveUrl)->withInput()->with('error', $e->getMessage());
         }
 
-        return redirect()->to('/purchase/receipts/' . $receiptId)->with('message', 'Purchase receipt posted.');
+        return redirect()->to('/purchase/receipts/' . $receiptId)->with('message', 'Purchase receipt posted and PO quantities updated.');
     }
 
     public function show(int $id): string
@@ -168,7 +178,7 @@ class PurchaseReceiptController extends BaseController
             return redirect()->back()->with('error', $e->getMessage());
         }
 
-        return redirect()->to('/purchase/receipts/' . $id)->with('message', 'Purchase receipt reversed.');
+        return redirect()->to('/purchase/receipts/' . $id)->with('message', 'Purchase receipt reversed and PO quantities recalculated.');
     }
 
     private function scopedPo(TenantContext $tenant, int $poId): ?array
@@ -322,5 +332,31 @@ class PurchaseReceiptController extends BaseController
             $value = str_replace(',', '', $value);
         }
         return (float) $value;
+    }
+
+    private function previewDocumentNumber(string $transactionCode): string
+    {
+        try {
+            return (new DocumentNumberService())->preview($transactionCode, new DateTimeImmutable(), [
+                'prefix' => $transactionCode,
+                'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+                'reset_period' => 'monthly',
+                'padding' => 5,
+            ]);
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    private function issueDocumentNumber(string $transactionCode, string $date, int $companyId, mixed $siteId): string
+    {
+        return (new DocumentNumberService())->next($transactionCode, new DateTimeImmutable($date), [
+            'company_id' => $companyId,
+            'site_id' => ! empty($siteId) ? (int) $siteId : 0,
+            'prefix' => $transactionCode,
+            'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+            'reset_period' => 'monthly',
+            'padding' => 5,
+        ]);
     }
 }
