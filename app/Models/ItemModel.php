@@ -11,6 +11,9 @@ class ItemModel extends Model
     protected $returnType = 'array';
     protected $useSoftDeletes = true;
     protected $useTimestamps = true;
+    protected $beforeInsert = ['normalizeMaster'];
+    protected $beforeUpdate = ['normalizeMaster'];
+
     protected $allowedFields = [
         'company_id', 'site_id', 'company', 'site',
         'code', 'name',
@@ -25,4 +28,94 @@ class ItemModel extends Model
         'item_type', 'item_subty', 'item_atribu',
         'active', 'is_active', 'created_by', 'updated_by', 'deleted_by',
     ];
+
+    protected function normalizeMaster(array $payload): array
+    {
+        $data = $payload['data'] ?? [];
+
+        foreach ($data as $field => $value) {
+            if (is_string($value)) {
+                $data[$field] = trim($value);
+            }
+        }
+
+        $code = $this->firstNonEmpty($data, ['item_code', 'code', 'item_coded']);
+        $name = $this->firstNonEmpty($data, ['item_name', 'name', 'item_named']);
+
+        if ($code !== '') {
+            $code = strtoupper($code);
+            $data['item_code'] = $data['item_code'] ?? $code;
+            $data['code'] = $data['code'] ?? $code;
+        }
+
+        if ($name !== '') {
+            $data['item_name'] = $data['item_name'] ?? $name;
+            $data['name'] = $data['name'] ?? $name;
+        }
+
+        foreach (['stockuom', 'purchaseuom', 'sellinguom'] as $uomField) {
+            if (! empty($data[$uomField])) {
+                $data[$uomField] = strtoupper((string) $data[$uomField]);
+            }
+        }
+        if (empty($data['purchaseuom']) && ! empty($data['stockuom'])) {
+            $data['purchaseuom'] = $data['stockuom'];
+        }
+        if (empty($data['sellinguom']) && ! empty($data['stockuom'])) {
+            $data['sellinguom'] = $data['stockuom'];
+        }
+
+        foreach (['item_price', 'purchasep', 'sellingprice'] as $amountField) {
+            if (array_key_exists($amountField, $data)) {
+                $data[$amountField] = $this->toNumber($data[$amountField]);
+            }
+        }
+
+        if (! array_key_exists('item_price', $data) && array_key_exists('sellingprice', $data)) {
+            $data['item_price'] = $data['sellingprice'];
+        }
+        if (! array_key_exists('sellingprice', $data) && array_key_exists('item_price', $data)) {
+            $data['sellingprice'] = $data['item_price'];
+        }
+        if (! array_key_exists('purchasep', $data) && array_key_exists('item_price', $data)) {
+            $data['purchasep'] = $data['item_price'];
+        }
+
+        if (array_key_exists('active', $data) && ! array_key_exists('is_active', $data)) {
+            $data['is_active'] = (int) (bool) $data['active'];
+        }
+        if (! array_key_exists('is_active', $data) && ! array_key_exists('active', $data)) {
+            $data['is_active'] = 1;
+            $data['active'] = 1;
+        }
+
+        $payload['data'] = $data;
+        return $payload;
+    }
+
+    private function firstNonEmpty(array $data, array $fields): string
+    {
+        foreach ($fields as $field) {
+            if (isset($data[$field]) && trim((string) $data[$field]) !== '') {
+                return trim((string) $data[$field]);
+            }
+        }
+
+        return '';
+    }
+
+    private function toNumber(mixed $value): float
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0.0;
+        }
+        if (str_contains($value, ',') && ! str_contains($value, '.')) {
+            $value = str_replace(',', '.', $value);
+        } else {
+            $value = str_replace(',', '', $value);
+        }
+
+        return (float) $value;
+    }
 }
