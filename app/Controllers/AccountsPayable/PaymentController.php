@@ -7,8 +7,10 @@ use App\Models\ApPayableModel;
 use App\Models\ApPaymentModel;
 use App\Models\CashBankAccountModel;
 use App\Services\Finance\SettlementService;
+use App\Services\Support\DocumentNumberService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
+use DateTimeImmutable;
 use RuntimeException;
 
 class PaymentController extends BaseController
@@ -32,11 +34,15 @@ class PaymentController extends BaseController
         if ($payable === null) {
             throw PageNotFoundException::forPageNotFound();
         }
+        if ((float) ($payable['outstanding_amount'] ?? 0) <= 0) {
+            return view('errors/html/error_404', ['message' => 'A/P invoice has no outstanding amount to pay.']);
+        }
 
         return view('accounts_payable/payments/form', [
             'title' => 'Post A/P Payment',
             'payable' => $payable,
             'cashBankAccounts' => $this->cashBankAccounts($tenant),
+            'suggestedPaymentNo' => $this->previewDocumentNumber('APP'),
         ]);
     }
 
@@ -49,9 +55,9 @@ class PaymentController extends BaseController
         }
 
         if (! $this->validate([
-            'payment_no' => 'required|max_length[60]',
+            'payment_no' => 'permit_empty|max_length[60]',
             'payment_date' => 'required|valid_date[Y-m-d]',
-            'payment_amount' => 'required|numeric|greater_than[0]',
+            'payment_amount' => 'required',
             'payment_method' => 'required|max_length[40]',
             'cash_bank_code' => 'required|max_length[80]',
         ])) {
@@ -59,13 +65,19 @@ class PaymentController extends BaseController
         }
 
         try {
+            $paymentDate = (string) $this->request->getPost('payment_date');
+            $paymentNo = trim((string) $this->request->getPost('payment_no'));
+            if ($paymentNo === '') {
+                $paymentNo = $this->issueDocumentNumber('APP', $paymentDate, (int) $payable['company_id'], $payable['site_id'] ?? null);
+            }
+
             $paymentId = (new SettlementService())->postApPayment([
                 'company_id' => $payable['company_id'],
                 'site_id' => $payable['site_id'] ?? null,
                 'ap_payable_id' => $payable['id'],
-                'payment_no' => trim((string) $this->request->getPost('payment_no')),
-                'payment_date' => (string) $this->request->getPost('payment_date'),
-                'payment_amount' => (float) $this->request->getPost('payment_amount'),
+                'payment_no' => $paymentNo,
+                'payment_date' => $paymentDate,
+                'payment_amount' => $this->toNumber($this->request->getPost('payment_amount')),
                 'payment_method' => trim((string) $this->request->getPost('payment_method')),
                 'cash_bank_code' => trim((string) $this->request->getPost('cash_bank_code')),
                 'reference_no' => trim((string) $this->request->getPost('reference_no')),
@@ -75,7 +87,7 @@ class PaymentController extends BaseController
             return redirect()->back()->withInput()->with('error', $e->getMessage());
         }
 
-        return redirect()->to('/ap/payments/' . $paymentId)->with('message', 'A/P payment posted.');
+        return redirect()->to('/ap/payments/' . $paymentId)->with('message', 'A/P payment posted and invoice balance updated.');
     }
 
     public function show(int $id): string
@@ -115,7 +127,7 @@ class PaymentController extends BaseController
             return redirect()->back()->with('error', $e->getMessage());
         }
 
-        return redirect()->to('/ap/payments/' . $id)->with('message', 'A/P payment cancelled.');
+        return redirect()->to('/ap/payments/' . $id)->with('message', 'A/P payment cancelled and invoice balance reopened.');
     }
 
     private function payableFromInvoice(TenantContext $tenant, int $invoiceId): ?array
@@ -152,5 +164,45 @@ class PaymentController extends BaseController
             ->orderBy('account_type', 'ASC')
             ->orderBy('cash_bank_code', 'ASC')
             ->findAll();
+    }
+
+    private function previewDocumentNumber(string $transactionCode): string
+    {
+        try {
+            return (new DocumentNumberService())->preview($transactionCode, new DateTimeImmutable(), [
+                'prefix' => $transactionCode,
+                'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+                'reset_period' => 'monthly',
+                'padding' => 5,
+            ]);
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    private function issueDocumentNumber(string $transactionCode, string $date, int $companyId, mixed $siteId): string
+    {
+        return (new DocumentNumberService())->next($transactionCode, new DateTimeImmutable($date), [
+            'company_id' => $companyId,
+            'site_id' => ! empty($siteId) ? (int) $siteId : 0,
+            'prefix' => $transactionCode,
+            'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+            'reset_period' => 'monthly',
+            'padding' => 5,
+        ]);
+    }
+
+    private function toNumber(mixed $value): float
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0.0;
+        }
+        if (str_contains($value, ',') && ! str_contains($value, '.')) {
+            $value = str_replace(',', '.', $value);
+        } else {
+            $value = str_replace(',', '', $value);
+        }
+        return (float) $value;
     }
 }
