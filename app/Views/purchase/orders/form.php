@@ -27,7 +27,7 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
                 <div>
                     <h4 class="card-title mb-1"><?= esc($title ?? ($isEdit ? 'Edit Purchase Order' : 'Create Purchase Order')) ?></h4>
-                    <p class="text-muted mb-0">Commercial fields are entered at header level. Detail lines only contain item, description, quantity, UoM, and price.</p>
+                    <p class="text-muted mb-0">Header berisi biaya global. Line detail bisa override discount, VAT, dan WHT per item.</p>
                 </div>
                 <a href="<?= $isEdit ? site_url('purchase/orders/' . (int) $order['id']) : site_url('purchase/orders') ?>" class="btn btn-light">Back</a>
             </div>
@@ -89,8 +89,8 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
                 <div class="col-md-3 mb-3"><label class="form-label">Freight</label><input type="number" step="0.01" name="freight_amount" class="form-control calc-header text-end" value="<?= esc($value('freight_amount', '0')) ?>"></div>
                 <div class="col-md-3 mb-3"><label class="form-label">Other Amount</label><input type="number" step="0.01" name="other_amount" class="form-control calc-header text-end" value="<?= esc($value('other_amount', '0')) ?>"></div>
                 <div class="col-md-3 mb-3"><label class="form-label">Special Charge</label><input type="number" step="0.01" name="special_charge_amount" class="form-control calc-header text-end" value="<?= esc($value('special_charge_amount', '0')) ?>"></div>
-                <div class="col-md-3 mb-3"><label class="form-label">VAT</label><input type="number" step="0.01" name="vat_amount" class="form-control calc-header text-end" value="<?= esc($value('vat_amount', '0')) ?>"></div>
-                <div class="col-md-3 mb-3"><label class="form-label">WHT</label><input type="number" step="0.01" name="wht_amount" class="form-control calc-header text-end" value="<?= esc($value('wht_amount', '0')) ?>"></div>
+                <div class="col-md-3 mb-3"><label class="form-label">Header VAT</label><input type="number" step="0.01" name="vat_amount" class="form-control calc-header text-end" value="<?= esc($value('vat_amount', '0')) ?>"></div>
+                <div class="col-md-3 mb-3"><label class="form-label">Header WHT</label><input type="number" step="0.01" name="wht_amount" class="form-control calc-header text-end" value="<?= esc($value('wht_amount', '0')) ?>"></div>
                 <div class="col-md-3 mb-3"><label class="form-label">Notes</label><input type="text" name="notes" class="form-control" value="<?= esc($value('notes')) ?>"></div>
                 <div class="col-md-12 mb-3"><label class="form-label">Remarks</label><textarea name="remarks" class="form-control" rows="2"><?= esc($value('remarks')) ?></textarea></div>
             </div>
@@ -107,7 +107,21 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
             <div class="table-responsive po-lines-scroll">
                 <table class="table table-nowrap align-middle" id="poLinesTable">
                     <thead class="table-light">
-                        <tr><th>Line</th><th>Item Code</th><th>Item Name</th><th>Description</th><th>Qty</th><th>UoM</th><th>Price</th><th class="text-end">Line Total</th><th></th></tr>
+                        <tr>
+                            <th>Line</th>
+                            <th style="min-width: 180px;">Item Code</th>
+                            <th style="min-width: 160px;">Item Name</th>
+                            <th style="min-width: 160px;">Description</th>
+                            <th>Qty</th>
+                            <th>UoM</th>
+                            <th>Price</th>
+                            <th>Disc %</th>
+                            <th>Disc Amt</th>
+                            <th>VAT</th>
+                            <th>WHT</th>
+                            <th class="text-end">Line Total</th>
+                            <th></th>
+                        </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($lineRows as $i => $line): ?>
@@ -134,18 +148,22 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
                                 <td><input type="number" step="0.0001" name="qty[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'qty', $line['qty_ordered'] ?? ($i === 0 ? '1' : ''))) ?>"></td>
                                 <td><input type="text" name="uom_code[]" class="form-control" value="<?= esc($lineValue($line, $i, 'uom_code', 'PCS')) ?>"></td>
                                 <td><input type="number" step="0.01" name="unit_price[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'unit_price', '0')) ?>"></td>
+                                <td><input type="number" step="0.0001" name="line_discount_percent[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'discount_percent', '0')) ?>"></td>
+                                <td><input type="number" step="0.01" name="line_discount_amount[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'discount_amount', '0')) ?>"></td>
+                                <td><input type="number" step="0.01" name="line_vat_amount[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'vat_amount', '0')) ?>"></td>
+                                <td><input type="number" step="0.01" name="line_wht_amount[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'wht_amount', '0')) ?>"></td>
                                 <td class="text-end fw-semibold line-total">0.00</td>
                                 <td><button type="button" class="btn btn-sm btn-outline-danger remove-line"><i class="bx bx-trash"></i></button></td>
                             </tr>
                         <?php endforeach ?>
                     </tbody>
                     <tfoot class="table-light">
-                        <tr><th colspan="7" class="text-end">Subtotal</th><th class="text-end" id="subtotalText">0.00</th><th></th></tr>
-                        <tr><th colspan="7" class="text-end">Total Discount</th><th class="text-end" id="discountText">0.00</th><th></th></tr>
-                        <tr><th colspan="7" class="text-end">Freight + Special + Other</th><th class="text-end" id="chargeText">0.00</th><th></th></tr>
-                        <tr><th colspan="7" class="text-end">VAT</th><th class="text-end" id="vatText">0.00</th><th></th></tr>
-                        <tr><th colspan="7" class="text-end">WHT</th><th class="text-end" id="whtText">0.00</th><th></th></tr>
-                        <tr><th colspan="7" class="text-end">Total</th><th class="text-end" id="totalText">0.00</th><th></th></tr>
+                        <tr><th colspan="11" class="text-end">Subtotal</th><th class="text-end" id="subtotalText">0.00</th><th></th></tr>
+                        <tr><th colspan="11" class="text-end">Total Discount</th><th class="text-end" id="discountText">0.00</th><th></th></tr>
+                        <tr><th colspan="11" class="text-end">Freight + Special + Other</th><th class="text-end" id="chargeText">0.00</th><th></th></tr>
+                        <tr><th colspan="11" class="text-end">VAT</th><th class="text-end" id="vatText">0.00</th><th></th></tr>
+                        <tr><th colspan="11" class="text-end">WHT</th><th class="text-end" id="whtText">0.00</th><th></th></tr>
+                        <tr><th colspan="11" class="text-end">Total</th><th class="text-end" id="totalText">0.00</th><th></th></tr>
                     </tfoot>
                 </table>
             </div>
@@ -168,21 +186,31 @@ document.addEventListener('DOMContentLoaded', function () {
     function number(value) { const parsed = parseFloat(value || '0'); return Number.isFinite(parsed) ? parsed : 0; }
     function money(value) { return number(value).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
     function header(name) { const el = document.querySelector('[name="' + name + '"]'); return el ? number(el.value) : 0; }
+    function lineInput(row, name) { const el = row.querySelector('[name="' + name + '[]"]'); return el ? number(el.value) : 0; }
     function recalc() {
-        let subtotal = 0;
+        let subtotal = 0, lineDiscount = 0, lineVat = 0, lineWht = 0;
         tbody.querySelectorAll('tr').forEach(function (row) {
-            const qty = number(row.querySelector('[name="qty[]"]').value);
-            const price = number(row.querySelector('[name="unit_price[]"]').value);
-            const lineTotal = qty * price;
-            subtotal += lineTotal;
+            const qty = lineInput(row, 'qty');
+            const price = lineInput(row, 'unit_price');
+            const gross = qty * price;
+            const discPct = lineInput(row, 'line_discount_percent');
+            const discAmt = lineInput(row, 'line_discount_amount');
+            const discount = (gross * discPct / 100) + discAmt;
+            const vat = lineInput(row, 'line_vat_amount');
+            const wht = lineInput(row, 'line_wht_amount');
+            const lineTotal = gross - discount + vat - wht;
+            subtotal += gross;
+            lineDiscount += discount;
+            lineVat += vat;
+            lineWht += wht;
             row.querySelector('.line-total').textContent = money(lineTotal);
         });
         const percentDiscount = subtotal * header('discount_percent') / 100;
         const manualDiscount = header('discount_amount');
-        const totalDiscount = percentDiscount + manualDiscount;
+        const totalDiscount = percentDiscount + manualDiscount + lineDiscount;
         const charges = header('freight_amount') + header('special_charge_amount') + header('other_amount');
-        const vat = header('vat_amount');
-        const wht = header('wht_amount');
+        const vat = header('vat_amount') + lineVat;
+        const wht = header('wht_amount') + lineWht;
         const total = subtotal - totalDiscount + charges + vat - wht;
         document.getElementById('subtotalText').textContent = money(subtotal);
         document.getElementById('discountText').textContent = money(totalDiscount);
