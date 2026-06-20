@@ -13,7 +13,7 @@ Tanggal verifikasi: 2026-06-20
 - Setiap action hanya menerima status asal yang telah ditentukan.
 - Action replay, direct URL, dan request POST manual tetap ditolak oleh service.
 - Period close guard tetap berlaku bersama status guard.
-- Perubahan ini tidak memerlukan tabel atau migration baru.
+- Stock reversal harus diikuti GL reversal jika dokumen asal memiliki GL entry.
 
 ---
 
@@ -79,7 +79,31 @@ View detail juga sudah mengikuti status:
 
 ---
 
-## 5. Invoice dan Settlement Guard
+## 5. Receipt / Delivery Reversal GL
+
+Saat Purchase Receipt atau Sales Delivery di-reverse:
+
+| Dokumen | Stock Reversal | GL Reversal |
+|---|---|---|
+| Purchase Receipt | Stock out dari lokasi receipt | Membalik jurnal inventory/GRNI jika `gl_entry_id` ada |
+| Sales Delivery | Stock in ke lokasi delivery | Membalik jurnal COGS/inventory jika `gl_entry_id` ada |
+
+Rule:
+
+- Jika dokumen asal tidak punya `gl_entry_id`, reversal GL dilewati.
+- Jika dokumen asal punya `gl_entry_id`, sistem membuat jurnal baru dengan debit/credit dibalik.
+- ID jurnal reversal disimpan di `reversal_gl_entry_id`.
+- Jika periode GL tertutup, reversal akan ditolak oleh `GeneralLedgerService`.
+
+SQL kolom tambahan:
+
+```text
+database/hosting/2026-06-20_update_receipt_delivery_reversal_gl.sql
+```
+
+---
+
+## 6. Invoice dan Settlement Guard
 
 | Dokumen/Status | Action yang Diizinkan | Guard Utama |
 |---|---|---|
@@ -117,7 +141,7 @@ View detail juga sudah mengikuti status:
 
 ---
 
-## 6. Pesan Error
+## 7. Pesan Error
 
 Pesan penolakan harus menyebut action yang valid atau status saat ini, misalnya:
 
@@ -128,7 +152,7 @@ Pesan penolakan harus menyebut action yang valid atau status saat ini, misalnya:
 
 ---
 
-## 7. UAT Minimum
+## 8. UAT Minimum
 
 Gunakan bagian Transaction Status Guard pada `docs/16-core-uat-status-checklist.md`. Uji melalui tombol normal dan request URL langsung untuk memastikan service tetap menolak action yang tidak valid.
 
@@ -144,21 +168,23 @@ Minimum test:
 8. Post receipt/payment ke invoice yang sudah paid.
 9. Cancel payment/receipt dua kali.
 10. Proses action pada periode closed.
+11. Reverse receipt posted yang punya GL entry dan cek reversal GL muncul.
+12. Reverse delivery posted yang punya GL entry dan cek reversal GL muncul.
+13. Cek GL Entries difference tetap 0 setelah reversal.
 
 ---
 
-## 8. Gap / Next Guard
+## 9. Gap / Next Guard
 
 | Area | Status | Catatan |
 |---|---|---|
 | Sales Order edit/update | Needs check | Jika fitur edit SO aktif, pastikan hanya draft seperti PO |
-| Delivery/Receipt GL reversal | Pending | Reverse stock sudah ada, GL reversal untuk receipt/delivery reversal bisa diperkuat nanti |
 | Database unique index | Pending | Setelah data duplicate clean, bisa tambah unique index fisik |
 | Automated test | Pending | Manual UAT dulu, lalu unit/feature test |
 
 ---
 
-## 9. Status
+## 10. Status
 
 | Area | Status |
 |---|---|
@@ -166,6 +192,8 @@ Minimum test:
 | SO basic transition guard | Verified in service |
 | Receipt reverse/invoice guard | Verified in service |
 | Delivery reverse/invoice guard | Verified in service |
+| Receipt reversal GL | Patched |
+| Delivery reversal GL | Patched |
 | AR invoice paid cancel guard | Verified in service |
 | AP invoice paid cancel guard | Verified in service |
 | Settlement outstanding/reconciliation guard | Verified/Patched previously |
