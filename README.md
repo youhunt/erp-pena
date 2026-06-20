@@ -40,6 +40,7 @@ The current continuation adds:
 - GL Entries validation summary and trial balance summary
 - Route permission hardening for transaction URLs and system routes
 - Core master data normalization for customer, supplier, item, warehouse, and location aliases
+- Core master data code guard for customer, supplier, item, warehouse, and location
 - Development journey/status documentation and formal core UAT checklist
 
 Skote assets are stored in `resources.zip` and extracted into `public/assets/skote` for the current layout.
@@ -135,6 +136,12 @@ database/hosting/2026-06-20_update_sales_delivery_core.sql
 database/hosting/2026-06-20_normalize_core_master_data.sql
 ```
 
+Optional audit SQL:
+
+```text
+database/hosting/2026-06-20_audit_core_master_codes.sql
+```
+
 Always back up the database before running SQL scripts.
 
 ## Core Security Notes
@@ -187,3 +194,4 @@ Order import fixes from runtime feedback:
 - [Core Settlement Hardening](docs/17-core-settlement-hardening.md)
 - [Route Permission Hardening](docs/18-permission-hardening.md)
 - [Core Master Data Hardening](docs/19-master-data-hardening.md)
+- [Core Master Data Code Guard](docs/20-master-data-code-guard.md)
