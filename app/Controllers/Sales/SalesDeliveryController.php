@@ -8,9 +8,11 @@ use App\Models\SalesDeliveryModel;
 use App\Models\SalesOrderLineModel;
 use App\Models\SalesOrderModel;
 use App\Services\Sales\SalesDeliveryService;
+use App\Services\Support\DocumentNumberService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use Config\Database;
+use DateTimeImmutable;
 use RuntimeException;
 
 class SalesDeliveryController extends BaseController
@@ -64,7 +66,7 @@ class SalesDeliveryController extends BaseController
         $warehouses = $this->masterRows('warehouses');
         $locations = $this->masterRows('locations');
         $warehouseId = $this->oldOrDefaultId('warehouse_id', $warehouses);
-        $locationId = $this->oldOrDefaultId('location_id', $locations);
+        $locationId = $this->oldOrDefaultLocationId($locations, $warehouseId);
         $lines = (new SalesOrderLineModel())->where('sales_order_id', $soId)->where('qty_outstanding >', 0)->orderBy('line_no', 'ASC')->findAll();
 
         return view('sales/deliveries/form', [
@@ -76,6 +78,7 @@ class SalesDeliveryController extends BaseController
             'selectedWarehouseId' => $warehouseId,
             'selectedLocationId' => $locationId,
             'stockByItem' => $this->stockByItemCode($lines, $tenant, $warehouseId, $locationId),
+            'suggestedDeliveryNo' => $this->previewDocumentNumber('DO'),
         ]);
     }
 
@@ -87,37 +90,48 @@ class SalesDeliveryController extends BaseController
             throw PageNotFoundException::forPageNotFound();
         }
 
-        if (! $this->validate(['delivery_no' => 'required|max_length[60]', 'delivery_date' => 'required|valid_date[Y-m-d]'])) {
-            return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
+        $deliveryUrl = '/sales/orders/' . $soId . '/deliver';
+        if (! $this->validate(['delivery_no' => 'permit_empty|max_length[60]', 'delivery_date' => 'required|valid_date[Y-m-d]'])) {
+            return redirect()->to($deliveryUrl)->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
 
         $lines = $this->postedLines();
         if ($lines === []) {
-            return redirect()->back()->withInput()->with('error', 'At least one delivery line qty is required.');
+            return redirect()->to($deliveryUrl)->withInput()->with('error', 'At least one delivery line qty is required.');
         }
 
+        $warehouseId = $this->nullableInt($this->request->getPost('warehouse_id'));
+        $locationId = $this->nullableInt($this->request->getPost('location_id'));
+        $deliveryDate = (string) $this->request->getPost('delivery_date');
+        $deliveryNo = trim((string) $this->request->getPost('delivery_no'));
+
         try {
+            $this->assertStorageLocation($tenant, $warehouseId, $locationId);
+            if ($deliveryNo === '') {
+                $deliveryNo = $this->issueDocumentNumber('DO', $deliveryDate, (int) $so['company_id'], $so['site_id'] ?? null);
+            }
+
             $deliveryId = (new SalesDeliveryService())->post([
                 'company_id' => $so['company_id'],
                 'site_id' => $so['site_id'] ?? null,
                 'company' => $so['company'] ?? session('active_company_code'),
                 'site' => $so['site'] ?? session('active_site_code'),
-                'delivery_no' => trim((string) $this->request->getPost('delivery_no')),
-                'delivery_date' => (string) $this->request->getPost('delivery_date'),
+                'delivery_no' => $deliveryNo,
+                'delivery_date' => $deliveryDate,
                 'sales_order_id' => $so['id'],
                 'so_no' => $so['so_no'],
                 'customer_id' => $so['customer_id'] ?? null,
                 'customer_code' => $so['customer_code'] ?? $so['customer'] ?? null,
                 'customer_name' => $so['customer_name'] ?? null,
-                'warehouse_id' => $this->nullableInt($this->request->getPost('warehouse_id')) ?? $this->defaultMasterId('warehouses'),
-                'location_id' => $this->nullableInt($this->request->getPost('location_id')) ?? $this->defaultMasterId('locations'),
+                'warehouse_id' => $warehouseId,
+                'location_id' => $locationId,
                 'notes' => trim((string) $this->request->getPost('notes')),
             ], $lines, auth()->id());
         } catch (RuntimeException $e) {
-            return redirect()->back()->withInput()->with('error', $e->getMessage());
+            return redirect()->to($deliveryUrl)->withInput()->with('error', $e->getMessage());
         }
 
-        return redirect()->to('/sales/deliveries/' . $deliveryId)->with('message', 'Delivery order posted.');
+        return redirect()->to('/sales/deliveries/' . $deliveryId)->with('message', 'Delivery order posted and SO quantities updated.');
     }
 
     public function show(int $id): string
@@ -163,7 +177,7 @@ class SalesDeliveryController extends BaseController
             return redirect()->back()->with('error', $e->getMessage());
         }
 
-        return redirect()->to('/sales/deliveries/' . $id)->with('message', 'Delivery order reversed.');
+        return redirect()->to('/sales/deliveries/' . $id)->with('message', 'Delivery order reversed and SO quantities recalculated.');
     }
 
     private function scopedSo(TenantContext $tenant, int $soId): ?array
@@ -185,7 +199,7 @@ class SalesDeliveryController extends BaseController
         $batchNos = (array) $this->request->getPost('batch_no');
         $lines = [];
         foreach ($lineIds as $index => $lineId) {
-            $qty = (float) ($qtys[$index] ?? 0);
+            $qty = $this->toNumber($qtys[$index] ?? 0);
             if ((int) $lineId > 0 && $qty > 0) {
                 $lines[] = [
                     'sales_order_line_id' => (int) $lineId,
@@ -227,11 +241,20 @@ class SalesDeliveryController extends BaseController
         return isset($rows[0]['id']) ? (int) $rows[0]['id'] : null;
     }
 
-    private function defaultMasterId(string $table): ?int
+    private function oldOrDefaultLocationId(array $locations, ?int $warehouseId): ?int
     {
-        $rows = $this->masterRows($table);
+        $old = $this->nullableInt(old('location_id'));
+        if ($old !== null) {
+            return $old;
+        }
 
-        return isset($rows[0]['id']) ? (int) $rows[0]['id'] : null;
+        foreach ($locations as $location) {
+            if ($warehouseId === null || (int) ($location['warehouse_id'] ?? 0) === $warehouseId) {
+                return isset($location['id']) ? (int) $location['id'] : null;
+            }
+        }
+
+        return null;
     }
 
     private function stockByItemCode(array $lines, TenantContext $tenant, ?int $warehouseId, ?int $locationId): array
@@ -278,9 +301,90 @@ class SalesDeliveryController extends BaseController
         return $stock;
     }
 
+    private function assertStorageLocation(TenantContext $tenant, ?int $warehouseId, ?int $locationId): void
+    {
+        if ($warehouseId === null || $locationId === null) {
+            throw new RuntimeException('Warehouse and location are required before posting sales delivery.');
+        }
+
+        $db = Database::connect();
+        $warehouse = $db->table('warehouses')->where('id', $warehouseId);
+        if ($tenant->activeCompanyId() !== null) {
+            $warehouse->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $warehouse->where('site_id', $tenant->activeSiteId());
+        }
+        if ($db->fieldExists('deleted_at', 'warehouses')) {
+            $warehouse->where('deleted_at', null);
+        }
+        $warehouseRow = $warehouse->get()->getRowArray();
+        if ($warehouseRow === null) {
+            throw new RuntimeException('Selected warehouse is not valid for the active company/site.');
+        }
+
+        $location = $db->table('locations')->where('id', $locationId);
+        if ($tenant->activeCompanyId() !== null) {
+            $location->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $location->where('site_id', $tenant->activeSiteId());
+        }
+        if ($db->fieldExists('deleted_at', 'locations')) {
+            $location->where('deleted_at', null);
+        }
+        $locationRow = $location->get()->getRowArray();
+        if ($locationRow === null) {
+            throw new RuntimeException('Selected location is not valid for the active company/site.');
+        }
+        if ((int) ($locationRow['warehouse_id'] ?? 0) !== $warehouseId) {
+            throw new RuntimeException('Selected location does not belong to selected warehouse.');
+        }
+    }
+
     private function nullableInt(mixed $value): ?int
     {
         $int = (int) $value;
         return $int > 0 ? $int : null;
+    }
+
+    private function toNumber(mixed $value): float
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0.0;
+        }
+        if (str_contains($value, ',') && ! str_contains($value, '.')) {
+            $value = str_replace(',', '.', $value);
+        } else {
+            $value = str_replace(',', '', $value);
+        }
+        return (float) $value;
+    }
+
+    private function previewDocumentNumber(string $transactionCode): string
+    {
+        try {
+            return (new DocumentNumberService())->preview($transactionCode, new DateTimeImmutable(), [
+                'prefix' => $transactionCode,
+                'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+                'reset_period' => 'monthly',
+                'padding' => 5,
+            ]);
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    private function issueDocumentNumber(string $transactionCode, string $date, int $companyId, mixed $siteId): string
+    {
+        return (new DocumentNumberService())->next($transactionCode, new DateTimeImmutable($date), [
+            'company_id' => $companyId,
+            'site_id' => ! empty($siteId) ? (int) $siteId : 0,
+            'prefix' => $transactionCode,
+            'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+            'reset_period' => 'monthly',
+            'padding' => 5,
+        ]);
     }
 }
