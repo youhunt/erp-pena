@@ -71,7 +71,7 @@ class CustomerModel extends Model
         }
 
         $payload['data'] = $data;
-        return $payload;
+        return $this->assertUniqueCode($payload);
     }
 
     private function firstNonEmpty(array $data, array $fields): string
@@ -83,5 +83,44 @@ class CustomerModel extends Model
         }
 
         return '';
+    }
+
+    private function assertUniqueCode(array $payload): array
+    {
+        $data = $payload['data'] ?? [];
+        $code = trim((string) ($data['code'] ?? ''));
+        if ($code === '' || empty($data['company_id'])) {
+            return $payload;
+        }
+
+        $builder = db_connect()->table($this->table)
+            ->where('company_id', (int) $data['company_id'])
+            ->where('code', $code)
+            ->where('deleted_at', null);
+
+        if (array_key_exists('site_id', $data)) {
+            empty($data['site_id']) ? $builder->where('site_id', null) : $builder->where('site_id', (int) $data['site_id']);
+        }
+
+        $currentId = $this->callbackId($payload['id'] ?? null);
+        if ($currentId !== null) {
+            $builder->where('id !=', $currentId);
+        }
+
+        if ($builder->countAllResults() > 0) {
+            throw new \RuntimeException('Customer code already exists for active company/site: ' . $code);
+        }
+
+        return $payload;
+    }
+
+    private function callbackId(mixed $id): ?int
+    {
+        if (is_array($id)) {
+            $id = reset($id);
+        }
+        $id = (int) $id;
+
+        return $id > 0 ? $id : null;
     }
 }
