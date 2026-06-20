@@ -6,9 +6,11 @@ use App\Controllers\BaseController;
 use App\Models\SalesOrderLineModel;
 use App\Models\SalesOrderModel;
 use App\Services\Sales\SalesOrderService;
+use App\Services\Support\DocumentNumberService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use Config\Database;
+use DateTimeImmutable;
 use RuntimeException;
 
 class SalesOrderController extends BaseController
@@ -49,6 +51,7 @@ class SalesOrderController extends BaseController
             'title' => 'Create Sales Order',
             'customers' => $this->masterRows('customers'),
             'items' => $this->masterRows('items'),
+            'suggestedSoNo' => $this->previewDocumentNumber('SO'),
         ]);
     }
 
@@ -59,7 +62,7 @@ class SalesOrderController extends BaseController
         if ($companyId === null || $companyId < 1) {
             return redirect()->back()->withInput()->with('error', 'Active company is required.');
         }
-        if (! $this->validate(['so_no' => 'required|max_length[60]', 'so_date' => 'required|valid_date[Y-m-d]'])) {
+        if (! $this->validate(['so_no' => 'permit_empty|max_length[60]', 'so_date' => 'required|valid_date[Y-m-d]'])) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
         $lines = $this->postedLines();
@@ -73,13 +76,19 @@ class SalesOrderController extends BaseController
         $customerName = $customer['customern'] ?? $customer['name'] ?? trim((string) $this->request->getPost('customer_name'));
 
         try {
+            $soDate = (string) $this->request->getPost('so_date');
+            $soNo = trim((string) $this->request->getPost('so_no'));
+            if ($soNo === '') {
+                $soNo = $this->issueDocumentNumber('SO', $soDate, $companyId, $tenant->activeSiteId());
+            }
+
             $soId = (new SalesOrderService())->create([
                 'company_id' => $companyId,
                 'site_id' => $tenant->activeSiteId(),
                 'company' => session('active_company_code'),
                 'site' => session('active_site_code'),
-                'so_no' => trim((string) $this->request->getPost('so_no')),
-                'so_date' => (string) $this->request->getPost('so_date'),
+                'so_no' => $soNo,
+                'so_date' => $soDate,
                 'customer_id' => $customerId > 0 ? $customerId : null,
                 'customer' => $customerCode,
                 'customer_code' => $customerCode,
@@ -214,5 +223,31 @@ class SalesOrderController extends BaseController
             $builder->where('site_id', $tenant->activeSiteId());
         }
         return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get()->getResultArray();
+    }
+
+    private function previewDocumentNumber(string $transactionCode): string
+    {
+        try {
+            return (new DocumentNumberService())->preview($transactionCode, new DateTimeImmutable(), [
+                'prefix' => $transactionCode,
+                'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+                'reset_period' => 'monthly',
+                'padding' => 5,
+            ]);
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    private function issueDocumentNumber(string $transactionCode, string $date, int $companyId, ?int $siteId): string
+    {
+        return (new DocumentNumberService())->next($transactionCode, new DateTimeImmutable($date), [
+            'company_id' => $companyId,
+            'site_id' => $siteId ?? 0,
+            'prefix' => $transactionCode,
+            'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+            'reset_period' => 'monthly',
+            'padding' => 5,
+        ]);
     }
 }

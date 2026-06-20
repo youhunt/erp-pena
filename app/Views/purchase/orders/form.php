@@ -35,7 +35,8 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
             <div class="row">
                 <div class="col-md-3 mb-3">
                     <label class="form-label">PO No</label>
-                    <input type="text" name="po_no" class="form-control" required value="<?= esc($value('po_no', 'PO-' . date('Ymd-His'))) ?>">
+                    <input type="text" name="po_no" class="form-control" placeholder="<?= esc($isEdit ? 'Required' : (($suggestedPoNo ?? '') !== '' ? $suggestedPoNo : 'Auto if blank'), 'attr') ?>" value="<?= esc($value('po_no')) ?>">
+                    <small class="text-muted">Kosongkan saat create untuk nomor otomatis.</small>
                 </div>
                 <div class="col-md-3 mb-3">
                     <label class="form-label">PO Date</label>

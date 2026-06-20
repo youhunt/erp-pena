@@ -4,7 +4,9 @@ PENA ERP is an enterprise ERP foundation built with CodeIgniter 4, CodeIgniter S
 
 ## Current Stage
 
-This repository was empty at audit time, so the first implementation creates the ERP foundation only:
+This repository was empty at initial audit time, so the first implementation created the ERP foundation. The current codebase must be continued, not regenerated from scratch.
+
+Implemented foundation includes:
 
 - CodeIgniter 4 appstarter `v4.7.3`
 - CodeIgniter Shield `v1.3.0`
@@ -19,6 +21,15 @@ This repository was empty at audit time, so the first implementation creates the
 - Vendor-neutral OCR/AI service contracts
 - Documentation under `docs/`
 
+The current continuation adds:
+
+- Reusable tenant scope helper: `App\Services\Support\TenantScope`
+- Enterprise document numbering service: `App\Services\Support\DocumentNumberService`
+- Local readiness command: `php spark pena:health`
+- Document number CLI helper: `php spark pena:docno`
+- Automatic SO/PO numbering when document number is left blank
+- SO/PO import fixes for site lookup, PO+site key, and PO line discount/tax fields
+
 Skote assets are stored in `resources.zip` and extracted into `public/assets/skote` for the current layout.
 
 ## Requirements
@@ -31,6 +42,9 @@ Skote assets are stored in `resources.zip` and extracted into `public/assets/sko
 ## Quick Start
 
 ```bash
+git clone https://github.com/youhunt/erp-pena.git
+cd erp-pena
+composer install
 cp env .env
 ```
 
@@ -51,10 +65,10 @@ wilayah.baseUrl = 'https://api-wilayah.belajardisiniaja.com'
 wilayah.apiToken = 'YOUR_WILAYAH_API_TOKEN'
 ```
 
-Install dependencies:
+Create database:
 
-```bash
-composer install
+```sql
+CREATE DATABASE pena_erp CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
 Run migrations and seeders:
@@ -64,12 +78,29 @@ php spark migrate --all
 php spark db:seed PenaErpSeeder
 ```
 
-Run the seeder again after menu or baseline master updates; it refreshes `menu_items` without deleting transactional data.
+Run local readiness check:
+
+```bash
+php spark pena:health
+```
+
+Preview/generate document number:
+
+```bash
+php spark pena:docno SO --preview --company=1 --site=1 --prefix=SO --format="{PREFIX}/{YYYY}{MM}/{SEQ}" --reset-period=monthly --padding=5
+php spark pena:docno SO --company=1 --site=1 --prefix=SO --format="{PREFIX}/{YYYY}{MM}/{SEQ}" --reset-period=monthly --padding=5
+```
 
 Start the app:
 
 ```bash
 php spark serve
+```
+
+Open:
+
+```text
+http://localhost:8080
 ```
 
 Default admin:
@@ -78,6 +109,35 @@ Default admin:
 - Password: `Admin123!`
 
 Change the password immediately after first login.
+
+## Core Security Notes
+
+- ERP routes are protected by Shield session authentication.
+- New service/controller code should use `App\Services\Support\TenantScope` for active `company_id` and `site_id` handling.
+- New transactional modules should use `App\Services\Support\DocumentNumberService` for PO, SO, invoice, receipt, payment, and journal numbers.
+- Sidebar visibility is not treated as security; direct URL access must also pass permission checks.
+
+## Development Rule
+
+Before adding a new module or route:
+
+1. Add or verify migration.
+2. Add or verify seeder/menu entry.
+3. Add route.
+4. Add permission mapping when the route is protected.
+5. Use `TenantScope` for tenant-owned query/insert/update.
+6. Use `DocumentNumberService` for transaction document numbers.
+7. Add audit log for important changes.
+8. Test with Super Admin and non-admin role.
+
+## Testing Notes
+
+Order import fixes from runtime feedback:
+
+- Site lookup no longer queries `sites.site` unless the column exists.
+- PO duplicate/import grouping uses `PO No + Site`.
+- PO line discount/tax columns are supported: `line_discount_percent`, `line_discount_amount`, `line_vat_amount`, `line_wht_amount`.
+- Legacy import headers `discount_percent` and `discount_amount` are treated as PO line discount fields.
 
 ## Documentation
 
@@ -92,3 +152,4 @@ Change the password immediately after first login.
 - [Testing Checklist](docs/09-testing-checklist.md)
 - [Roadmap](docs/10-roadmap.md)
 - [Development Priority Plan](docs/12-development-priority-plan.md)
+- [Document Number Service](docs/14-document-number-service.md)

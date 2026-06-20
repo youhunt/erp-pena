@@ -178,23 +178,29 @@ class PurchaseOrderService
     public function calculateTotals(array $lines, array $header = []): array
     {
         $subtotal = 0.0;
+        $lineDiscount = 0.0;
+        $lineVat = 0.0;
+        $lineWht = 0.0;
 
         foreach ($lines as $line) {
             $qty = (float) ($line['qty'] ?? $line['qty_ordered'] ?? 0);
             $unitPrice = (float) ($line['unit_price'] ?? 0);
             $subtotal += $qty * $unitPrice;
+            $lineDiscount += (float) ($line['discount_amount'] ?? 0);
+            $lineVat += (float) ($line['vat_amount'] ?? 0);
+            $lineWht += (float) ($line['wht_amount'] ?? 0);
         }
 
         $discountPercent = (float) ($header['discount_percent'] ?? 0);
         $manualDiscountAmount = (float) ($header['discount_amount'] ?? 0);
         $discountPercentAmount = round($subtotal * $discountPercent / 100, 2);
-        $totalDiscountAmount = round($discountPercentAmount + $manualDiscountAmount, 2);
+        $totalDiscountAmount = round($discountPercentAmount + $manualDiscountAmount + $lineDiscount, 2);
 
         $freight = (float) ($header['freight_amount'] ?? 0);
         $other = (float) ($header['other_amount'] ?? 0);
         $special = (float) ($header['special_charge_amount'] ?? 0);
-        $vat = (float) ($header['vat_amount'] ?? 0);
-        $wht = (float) ($header['wht_amount'] ?? 0);
+        $vat = (float) ($header['vat_amount'] ?? 0) + $lineVat;
+        $wht = (float) ($header['wht_amount'] ?? 0) + $lineWht;
         $total = $subtotal - $totalDiscountAmount + $freight + $other + $special + $vat - $wht;
 
         return [
@@ -229,10 +235,22 @@ class PurchaseOrderService
             $qty = (float) ($line['qty'] ?? $line['qty_ordered'] ?? 0);
             $unitPrice = (float) ($line['unit_price'] ?? 0);
             $gross = round($qty * $unitPrice, 2);
+            $discountPercent = (float) ($line['discount_percent'] ?? 0);
+            $discountAmount = (float) ($line['discount_amount'] ?? 0);
+            if ($discountPercent > 0) {
+                $discountAmount += round($gross * $discountPercent / 100, 2);
+            }
+            $vatAmount = (float) ($line['vat_amount'] ?? 0);
+            $whtAmount = (float) ($line['wht_amount'] ?? 0);
 
             $line['po_line'] = $displayLine;
             $line['line_no'] = $displayLine;
-            $line['line_total'] = $gross;
+            $line['discount_percent'] = $discountPercent;
+            $line['discount_amount'] = $discountAmount;
+            $line['vat_amount'] = $vatAmount;
+            $line['wht_amount'] = $whtAmount;
+            $line['tax_amount'] = $vatAmount - $whtAmount;
+            $line['line_total'] = $gross - $discountAmount + $vatAmount - $whtAmount;
 
             $seen[$displayLine] = true;
             $normalized[] = $line;
@@ -271,6 +289,11 @@ class PurchaseOrderService
             'qty_outstanding' => $qty,
             'uom_code' => $line['uom_code'] ?? null,
             'unit_price' => (float) ($line['unit_price'] ?? 0),
+            'discount_percent' => (float) ($line['discount_percent'] ?? 0),
+            'discount_amount' => (float) ($line['discount_amount'] ?? 0),
+            'vat_amount' => (float) ($line['vat_amount'] ?? 0),
+            'wht_amount' => (float) ($line['wht_amount'] ?? 0),
+            'tax_amount' => (float) ($line['tax_amount'] ?? 0),
             'line_total' => (float) ($line['line_total'] ?? 0),
             'line_status' => $status === 'approved' ? 'approved' : 'open',
         ];
