@@ -40,8 +40,9 @@ The current continuation adds:
 - GL Entries validation summary and trial balance summary
 - Route permission hardening for transaction URLs and system routes
 - Core master data normalization for customer, supplier, item, warehouse, and location aliases
-- Core master data code guard for customer, supplier, item, warehouse, and location
+- Core master data code guard and physical unique indexes for core master data
 - ERP core transaction status guard documentation and UAT checklist
+- Purchase Receipt and Sales Delivery reversal GL reference tracking
 - Development journey/status documentation and formal core UAT checklist
 
 Skote assets are stored in `resources.zip` and extracted into `public/assets/skote` for the current layout.
@@ -135,6 +136,13 @@ database/hosting/2026-06-20_update_document_number_and_po_line_tax.sql
 database/hosting/2026-06-20_update_purchase_receipt_core.sql
 database/hosting/2026-06-20_update_sales_delivery_core.sql
 database/hosting/2026-06-20_normalize_core_master_data.sql
+database/hosting/2026-06-20_update_receipt_delivery_reversal_gl.sql
+```
+
+Run this only after duplicate audit returns zero rows:
+
+```text
+database/hosting/2026-06-20_add_unique_core_master_indexes.sql
 ```
 
 Optional audit SQL:
@@ -199,3 +207,5 @@ Order import fixes from runtime feedback:
 - [Core Master Data Hardening](docs/19-master-data-hardening.md)
 - [Core Master Data Code Guard](docs/20-master-data-code-guard.md)
 - [Transaction Status Guard](docs/21-transaction-status-guard.md)
+- [Receipt and Delivery Reversal GL](docs/22-receipt-delivery-reversal-gl.md)
+- [Unique Core Master Indexes](docs/23-unique-core-master-indexes.md)
