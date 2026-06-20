@@ -30,7 +30,7 @@
                 </table>
 
                 <div class="d-flex flex-wrap gap-2 mt-3">
-                    <a href="<?= site_url('sales/orders') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back</a>
+                    <a href="<?= site_url('sales/orders') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to List</a>
                     <a href="<?= site_url('print/sales-orders/' . (int) $order['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
                     <?php if ($status === 'draft'): ?>
                         <form method="post" action="<?= site_url('sales/orders/' . $order['id'] . '/submit') ?>"><?= csrf_field() ?><button class="btn btn-info" onclick="return confirm('Submit this SO?')">Submit</button></form>
@@ -45,7 +45,18 @@
                         <a href="<?= site_url('sales/orders/' . $order['id'] . '/deliver') ?>" class="btn btn-success"><i class="bx bx-send me-1"></i> Create DO</a>
                     <?php endif ?>
                     <?php if (in_array($status, ['draft','submitted'], true)): ?>
-                        <form method="post" action="<?= site_url('sales/orders/' . $order['id'] . '/cancel') ?>"><?= csrf_field() ?><input type="hidden" name="cancel_reason" value="Cancelled from SO detail"><button class="btn btn-outline-danger" onclick="return confirm('Cancel this SO?')">Cancel</button></form>
+                        <form method="post" action="<?= site_url('sales/orders/' . $order['id'] . '/cancel') ?>">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="cancel_reason" value="Cancelled from SO detail">
+                            <button class="btn btn-outline-danger" onclick="return confirm('Cancel this SO? This is not Back.')"><i class="bx bx-x-circle me-1"></i> Cancel SO</button>
+                        </form>
+                    <?php endif ?>
+                    <?php if ($status === 'cancelled'): ?>
+                        <form method="post" action="<?= site_url('sales/orders/' . $order['id'] . '/cancel') ?>">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="reopen">
+                            <button class="btn btn-warning" onclick="return confirm('Aktifkan kembali SO ini sebagai draft?')"><i class="bx bx-rotate-left me-1"></i> Reopen as Draft</button>
+                        </form>
                     <?php endif ?>
                 </div>
             </div>
