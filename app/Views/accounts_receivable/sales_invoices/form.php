@@ -11,13 +11,21 @@
                     <h4 class="card-title mb-1">Create Sales Invoice</h4>
                     <p class="text-muted mb-0"><?= esc($delivery['delivery_no']) ?> - <?= esc($delivery['customer_name'] ?? '-') ?></p>
                 </div>
-                <a href="<?= site_url('sales/deliveries/' . $delivery['id']) ?>" class="btn btn-light">Back to DO</a>
+                <a href="<?= site_url('sales/deliveries/' . $delivery['id']) ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to DO</a>
             </div>
+
+            <?php if (session('error')): ?>
+                <div class="alert alert-danger"><?= esc(session('error')) ?></div>
+            <?php endif ?>
+            <?php if (session('message')): ?>
+                <div class="alert alert-success"><?= esc(session('message')) ?></div>
+            <?php endif ?>
 
             <div class="row">
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Invoice No</label>
-                    <input type="text" name="invoice_no" class="form-control" required value="<?= esc(old('invoice_no', 'SI-' . date('Ymd-His'))) ?>">
+                    <input type="text" name="invoice_no" class="form-control" placeholder="<?= esc(($suggestedInvoiceNo ?? '') !== '' ? $suggestedInvoiceNo : 'Auto if blank', 'attr') ?>" value="<?= esc(old('invoice_no')) ?>">
+                    <small class="text-muted">Kosongkan untuk nomor otomatis.</small>
                 </div>
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Invoice Date</label>
@@ -42,6 +50,9 @@
     <div class="card">
         <div class="card-body">
             <h4 class="card-title mb-3">Delivery Lines</h4>
+            <div class="alert alert-info py-2">
+                Posting invoice ini akan membuat A/R receivable dari delivery yang sudah posted.
+            </div>
             <div class="table-responsive">
                 <table class="table table-nowrap align-middle mb-0">
                     <thead class="table-light"><tr><th>#</th><th>Item</th><th class="text-end">Qty</th><th>UoM</th><th class="text-end">Price</th><th class="text-end">Subtotal</th></tr></thead>
@@ -66,8 +77,8 @@
             </div>
 
             <div class="d-flex gap-2 mt-4">
-                <button type="submit" class="btn btn-primary" onclick="return confirm('Post this sales invoice and open A/R receivable?')"><i class="bx bx-receipt me-1"></i> Post Invoice</button>
-                <a href="<?= site_url('sales/deliveries/' . $delivery['id']) ?>" class="btn btn-light">Cancel</a>
+                <button type="submit" class="btn btn-primary" onclick="return confirm('Post sales invoice ini dan buka A/R receivable?')"><i class="bx bx-receipt me-1"></i> Post Invoice & Open A/R</button>
+                <a href="<?= site_url('sales/deliveries/' . $delivery['id']) ?>" class="btn btn-light">Back to DO</a>
             </div>
         </div>
     </div>
