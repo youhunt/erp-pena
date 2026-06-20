@@ -30,6 +30,7 @@ $statusClass = match ($status) {
                         <tr><th>Warehouse</th><td><?= esc($warehouseLabel ?? '-') ?></td></tr>
                         <tr><th>Location</th><td><?= esc($locationLabel ?? '-') ?></td></tr>
                         <tr><th>Receipt GL Entry</th><td><?= ! empty($receipt['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $receipt['gl_entry_id']) . '">#' . esc($receipt['gl_entry_id']) . '</a>' : '-' ?></td></tr>
+                        <tr><th>Reversal GL</th><td><?= ! empty($receipt['reversal_gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $receipt['reversal_gl_entry_id']) . '">#' . esc($receipt['reversal_gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Posted</th><td><?= esc($receipt['posted_at'] ?? '-') ?></td></tr>
                         <?php if ($status === 'reversed'): ?>
                             <tr><th>Reversed</th><td><?= esc($receipt['reversed_at'] ?? '-') ?></td></tr>
