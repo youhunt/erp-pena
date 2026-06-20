@@ -22,9 +22,13 @@ class SalesDeliveryLineModel extends Model
         'batch_no',
         'item_name',
         'qty_delivered',
+        'reversed_qty',
         'uom_code',
         'unit_price',
         'warehouse_id',
         'location_id',
+        'reversed_at',
+        'reversed_by',
+        'reversal_reason',
     ];
 }
