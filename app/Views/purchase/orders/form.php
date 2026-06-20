@@ -16,6 +16,15 @@ $lineValue = static function (array $line, int $index, string $field, mixed $def
 
     return (string) ($line[$field] ?? $default);
 };
+$pick = static function (array $row, array $keys, mixed $default = ''): mixed {
+    foreach ($keys as $key) {
+        if (array_key_exists($key, $row) && $row[$key] !== null && trim((string) $row[$key]) !== '') {
+            return $row[$key];
+        }
+    }
+
+    return $default;
+};
 
 $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
 ?>
@@ -98,11 +107,12 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
                         <?php foreach ($suppliers as $supplier): ?>
                             <?php
                             $supplierId = (int) ($supplier['id'] ?? 0);
-                            $supplierCode = (string) ($supplier['supplier'] ?? $supplier['code'] ?? '');
-                            $supplierName = (string) ($supplier['supplierna'] ?? $supplier['name'] ?? '');
+                            $supplierCode = (string) $pick($supplier, ['supplier_code', 'supplier', 'code', 'vendor_code', 'vend_code']);
+                            $supplierName = (string) $pick($supplier, ['supplier_name', 'supplierna', 'suppliern', 'name', 'vendor_name', 'description']);
+                            $supplierTerms = (string) $pick($supplier, ['terms_code', 'terms', 'payment_terms']);
                             $selectedSupplier = (int) old('supplier_id', $order['supplier_id'] ?? 0) === $supplierId;
                             ?>
-                            <option value="<?= $supplierId ?>" <?= $selectedSupplier ? 'selected' : '' ?> data-name="<?= esc($supplierName, 'attr') ?>" data-terms="<?= esc((string) ($supplier['terms_code'] ?? $supplier['terms'] ?? ''), 'attr') ?>"><?= esc($supplierCode . ' - ' . $supplierName) ?></option>
+                            <option value="<?= $supplierId ?>" <?= $selectedSupplier ? 'selected' : '' ?> data-code="<?= esc($supplierCode, 'attr') ?>" data-name="<?= esc($supplierName, 'attr') ?>" data-terms="<?= esc($supplierTerms, 'attr') ?>"><?= esc(trim($supplierCode . ' - ' . $supplierName, ' -')) ?></option>
                         <?php endforeach ?>
                     </select>
                 </div>
@@ -192,13 +202,13 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
                                         <option value="">Pilih / cari data</option>
                                         <?php foreach ($items as $item): ?>
                                             <?php
-                                            $code = (string) ($item['item_code'] ?? $item['code'] ?? '');
-                                            $name = (string) ($item['item_name'] ?? $item['name'] ?? '');
-                                            $uom = (string) ($item['purchaseuom'] ?? $item['stockuom'] ?? 'PCS');
-                                            $price = (float) ($item['purchasep'] ?? $item['item_price'] ?? 0);
+                                            $code = (string) $pick($item, ['item_code', 'item', 'code', 'sku', 'product_code']);
+                                            $name = (string) $pick($item, ['item_name', 'itemn', 'itemna', 'name', 'product_name', 'description']);
+                                            $uom = (string) $pick($item, ['purchaseuom', 'purchase_uom', 'stockuom', 'stock_uom', 'uom_code', 'uom'], 'PCS');
+                                            $price = (float) $pick($item, ['purchasep', 'purchase_price', 'item_price', 'price', 'cost_price'], 0);
                                             $selectedItem = (string) $lineValue($line, $i, 'item_code') === $code;
                                             ?>
-                                            <option value="<?= esc($code) ?>" <?= $selectedItem ? 'selected' : '' ?> data-id="<?= (int) ($item['id'] ?? 0) ?>" data-name="<?= esc($name, 'attr') ?>" data-uom="<?= esc($uom, 'attr') ?>" data-price="<?= esc((string) $price, 'attr') ?>"><?= esc($code . ' - ' . $name) ?></option>
+                                            <option value="<?= esc($code) ?>" <?= $selectedItem ? 'selected' : '' ?> data-id="<?= (int) ($item['id'] ?? 0) ?>" data-code="<?= esc($code, 'attr') ?>" data-name="<?= esc($name, 'attr') ?>" data-uom="<?= esc($uom, 'attr') ?>" data-price="<?= esc((string) $price, 'attr') ?>"><?= esc(trim($code . ' - ' . $name, ' -')) ?></option>
                                         <?php endforeach ?>
                                     </select>
                                 </td>
@@ -246,6 +256,23 @@ document.addEventListener('DOMContentLoaded', function () {
     function money(value) { return number(value).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
     function header(name) { const el = document.querySelector('[name="' + name + '"]'); return el ? number(el.value) : 0; }
     function lineInput(row, name) { const el = row.querySelector('[name="' + name + '[]"]'); return el ? number(el.value) : 0; }
+    function optionName(option) {
+        if (!option) return '';
+        if (option.dataset && option.dataset.name) return option.dataset.name.trim();
+        const text = (option.textContent || '').trim();
+        const separatorIndex = text.indexOf(' - ');
+        return separatorIndex >= 0 ? text.slice(separatorIndex + 3).trim() : '';
+    }
+    function optionTerms(option) {
+        return option && option.dataset && option.dataset.terms ? option.dataset.terms.trim() : '';
+    }
+    function fillSupplierFromSelected(force = false) {
+        const option = supplierSelect.options[supplierSelect.selectedIndex];
+        const selectedName = optionName(option);
+        const selectedTerms = optionTerms(option);
+        if ((force || supplierName.value.trim() === '') && selectedName !== '') supplierName.value = selectedName;
+        if ((force || termsCode.value.trim() === '') && selectedTerms !== '') termsCode.value = selectedTerms;
+    }
     function recalc() {
         let subtotal = 0, lineDiscount = 0, lineVat = 0, lineWht = 0;
         tbody.querySelectorAll('tr').forEach(function (row) {
@@ -284,7 +311,7 @@ document.addEventListener('DOMContentLoaded', function () {
         row.querySelector('.item-select').addEventListener('change', function () {
             const option = this.options[this.selectedIndex];
             row.querySelector('.item-id').value = option?.dataset.id || '';
-            row.querySelector('[name="item_name[]"]').value = option?.dataset.name || '';
+            row.querySelector('[name="item_name[]"]').value = optionName(option) || '';
             row.querySelector('[name="uom_code[]"]').value = option?.dataset.uom || 'PCS';
             row.querySelector('[name="unit_price[]"]').value = option?.dataset.price || '0';
             recalc();
@@ -305,12 +332,9 @@ document.addEventListener('DOMContentLoaded', function () {
         clone.querySelectorAll('select').forEach(function (select) { select.selectedIndex = 0; });
         tbody.appendChild(clone); renumberLines(); bindRow(clone); recalc();
     });
-    supplierSelect.addEventListener('change', function () {
-        const option = supplierSelect.options[supplierSelect.selectedIndex];
-        if (option && option.dataset.name) supplierName.value = option.dataset.name;
-        if (option && option.dataset.terms) termsCode.value = option.dataset.terms;
-    });
+    supplierSelect.addEventListener('change', function () { fillSupplierFromSelected(true); });
     tbody.querySelectorAll('tr').forEach(bindRow);
+    fillSupplierFromSelected(false);
     recalc();
 });
 </script>
