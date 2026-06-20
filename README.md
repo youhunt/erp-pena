@@ -27,8 +27,18 @@ The current continuation adds:
 - Enterprise document numbering service: `App\Services\Support\DocumentNumberService`
 - Local readiness command: `php spark pena:health`
 - Document number CLI helper: `php spark pena:docno`
-- Automatic SO/PO numbering when document number is left blank
+- Automatic SO/PO/PR/DO/SI/PI/ARR/APP numbering when document number is left blank
 - SO/PO import fixes for site lookup, PO+site key, and PO line discount/tax fields
+- Relaxed PO import header charges validation: freight, other amount, special charge, VAT, and WHT can differ per row and are summed per PO+Site
+- SO and PO form master auto-fill fixes for Select2/customer/supplier/item mapping
+- Clear SO cancel vs back actions and `Reopen as Draft` for cancelled SO
+- Hardened Purchase Receipt posting with stock-in and PO received/outstanding recalculation
+- Hardened Sales Delivery posting with stock-out and SO delivered/outstanding recalculation
+- Automatic AR/AP invoice numbering and clearer invoice posting forms
+- Automatic AR receipt/AP payment numbering and clearer settlement forms
+- Stock Card value audit: value in/out and running value
+- GL Entries validation summary and trial balance summary
+- Development journey/status documentation and formal core UAT checklist
 
 Skote assets are stored in `resources.zip` and extracted into `public/assets/skote` for the current layout.
 
@@ -110,6 +120,20 @@ Default admin:
 
 Change the password immediately after first login.
 
+## Hosting Update Notes
+
+For cPanel/phpMyAdmin hosting, run required SQL files under `database/hosting/` after pulling the latest source code.
+
+Minimum SQL for the latest core flow:
+
+```text
+database/hosting/2026-06-20_update_document_number_and_po_line_tax.sql
+database/hosting/2026-06-20_update_purchase_receipt_core.sql
+database/hosting/2026-06-20_update_sales_delivery_core.sql
+```
+
+Always back up the database before running SQL scripts.
+
 ## Core Security Notes
 
 - ERP routes are protected by Shield session authentication.
@@ -129,6 +153,7 @@ Before adding a new module or route:
 6. Use `DocumentNumberService` for transaction document numbers.
 7. Add audit log for important changes.
 8. Test with Super Admin and non-admin role.
+9. Update `docs/15-development-journey-status.md` and `docs/16-core-uat-status-checklist.md` when development status changes.
 
 ## Testing Notes
 
@@ -138,6 +163,7 @@ Order import fixes from runtime feedback:
 - PO duplicate/import grouping uses `PO No + Site`.
 - PO line discount/tax columns are supported: `line_discount_percent`, `line_discount_amount`, `line_vat_amount`, `line_wht_amount`.
 - Legacy import headers `discount_percent` and `discount_amount` are treated as PO line discount fields.
+- `freight_amount`, `other_amount`, `special_charge_amount`, `vat_amount`, and `wht_amount` are summed per PO+Site and no longer forced to be identical across rows.
 
 ## Documentation
 
@@ -153,3 +179,5 @@ Order import fixes from runtime feedback:
 - [Roadmap](docs/10-roadmap.md)
 - [Development Priority Plan](docs/12-development-priority-plan.md)
 - [Document Number Service](docs/14-document-number-service.md)
+- [Development Journey & Status](docs/15-development-journey-status.md)
+- [Core UAT Status Checklist](docs/16-core-uat-status-checklist.md)
