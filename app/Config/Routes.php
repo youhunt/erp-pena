@@ -22,6 +22,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->get('print/sales-invoices/(:num)', 'DocumentPrintController::salesInvoice/$1');
 
     $routes->group('system', static function (RouteCollection $routes): void {
+        $routes->get('development-status', 'System\DevelopmentStatusController::index');
         $routes->get('data-import', 'System\DataImportController::index');
         $routes->get('data-import/coa/template', 'System\DataImportController::coaTemplate');
         $routes->get('data-import/coa/import', 'System\DataImportController::coaImportForm');
