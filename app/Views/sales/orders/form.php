@@ -12,6 +12,44 @@ $pick = static function (array $row, array $keys, mixed $default = ''): mixed {
     return $default;
 };
 ?>
+<style>
+    .so-lines-scroll {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid #eff2f7;
+        border-radius: .25rem;
+    }
+    .so-lines-table {
+        min-width: 1500px;
+        width: 1500px;
+        table-layout: fixed;
+        margin-bottom: 0;
+    }
+    .so-lines-table th,
+    .so-lines-table td {
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+    .so-lines-table .form-control,
+    .so-lines-table .form-select,
+    .so-lines-table .select2-container {
+        width: 100% !important;
+        min-width: 0;
+    }
+    .so-col-line { width: 80px; }
+    .so-col-item-code { width: 260px; }
+    .so-col-item-name { width: 260px; }
+    .so-col-qty { width: 130px; }
+    .so-col-uom { width: 110px; }
+    .so-col-price { width: 160px; }
+    .so-col-discount { width: 150px; }
+    .so-col-tax { width: 140px; }
+    .so-col-total { width: 150px; }
+    .so-col-action { width: 60px; }
+</style>
 <form method="post" action="<?= site_url('sales/orders') ?>">
     <?= csrf_field() ?>
 
@@ -76,35 +114,50 @@ $pick = static function (array $row, array $keys, mixed $default = ''): mixed {
     <div class="card">
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4 class="card-title mb-0">Line Items</h4>
+                <div>
+                    <h4 class="card-title mb-0">Line Items</h4>
+                    <small class="text-muted">Geser tabel ke kanan/kiri untuk melihat semua kolom line.</small>
+                </div>
                 <button type="button" class="btn btn-sm btn-outline-primary" id="addLineBtn">
                     <i class="bx bx-plus me-1"></i> Add Line
                 </button>
             </div>
 
-            <div class="table-responsive">
-                <table class="table table-nowrap align-middle" id="soLinesTable">
+            <div class="so-lines-scroll">
+                <table class="table table-bordered table-sm align-middle so-lines-table" id="soLinesTable">
+                    <colgroup>
+                        <col class="so-col-line">
+                        <col class="so-col-item-code">
+                        <col class="so-col-item-name">
+                        <col class="so-col-qty">
+                        <col class="so-col-uom">
+                        <col class="so-col-price">
+                        <col class="so-col-discount">
+                        <col class="so-col-tax">
+                        <col class="so-col-total">
+                        <col class="so-col-action">
+                    </colgroup>
                     <thead class="table-light">
                         <tr>
-                            <th style="width:80px;">Line</th>
-                            <th style="min-width:220px;">Item Code</th>
-                            <th style="min-width:220px;">Item Name</th>
-                            <th style="width:110px;">Qty</th>
-                            <th style="width:100px;">UoM</th>
-                            <th style="width:140px;">Unit Price</th>
-                            <th style="width:140px;">Discount</th>
-                            <th style="width:140px;">Tax</th>
-                            <th style="width:140px;" class="text-end">Line Total</th>
-                            <th style="width:60px;"></th>
+                            <th>Line</th>
+                            <th>Item Code</th>
+                            <th>Item Name</th>
+                            <th>Qty</th>
+                            <th>UoM</th>
+                            <th>Unit Price</th>
+                            <th>Discount</th>
+                            <th>Tax</th>
+                            <th class="text-end">Line Total</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php for ($i = 0; $i < 3; $i++): ?>
                             <tr>
-                                <td><input type="number" name="so_line[]" class="form-control text-end line-number" min="1" step="1" value="<?= esc((string) ($i + 1)) ?>" required></td>
+                                <td><input type="number" name="so_line[]" class="form-control form-control-sm text-end line-number" min="1" step="1" value="<?= esc((string) ($i + 1)) ?>" required></td>
                                 <td>
                                     <input type="hidden" name="item_id[]" class="item-id">
-                                    <select name="item_code[]" class="form-select item-select">
+                                    <select name="item_code[]" class="form-select form-select-sm item-select">
                                         <option value="">Pilih / cari data</option>
                                         <?php foreach ($items as $item): ?>
                                             <?php
@@ -126,14 +179,14 @@ $pick = static function (array $row, array $keys, mixed $default = ''): mixed {
                                         <?php endforeach ?>
                                     </select>
                                 </td>
-                                <td><input type="text" name="item_name[]" class="form-control item-name"></td>
-                                <td><input type="number" step="0.0001" name="qty[]" class="form-control calc text-end" value="<?= $i === 0 ? '1' : '' ?>"></td>
-                                <td><input type="text" name="uom_code[]" class="form-control" value="PCS"></td>
-                                <td><input type="number" step="0.01" name="unit_price[]" class="form-control calc text-end" value="0"></td>
-                                <td><input type="number" step="0.01" name="discount_amount[]" class="form-control calc text-end" value="0"></td>
-                                <td><input type="number" step="0.01" name="tax_amount[]" class="form-control calc text-end" value="0"></td>
+                                <td><input type="text" name="item_name[]" class="form-control form-control-sm item-name"></td>
+                                <td><input type="number" step="0.0001" name="qty[]" class="form-control form-control-sm calc text-end" value="<?= $i === 0 ? '1' : '' ?>"></td>
+                                <td><input type="text" name="uom_code[]" class="form-control form-control-sm" value="PCS"></td>
+                                <td><input type="number" step="0.01" name="unit_price[]" class="form-control form-control-sm calc text-end" value="0"></td>
+                                <td><input type="number" step="0.01" name="discount_amount[]" class="form-control form-control-sm calc text-end" value="0"></td>
+                                <td><input type="number" step="0.01" name="tax_amount[]" class="form-control form-control-sm calc text-end" value="0"></td>
                                 <td class="text-end fw-semibold line-total">0.00</td>
-                                <td><button type="button" class="btn btn-sm btn-outline-danger remove-line"><i class="bx bx-trash"></i></button></td>
+                                <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger remove-line"><i class="bx bx-trash"></i></button></td>
                             </tr>
                         <?php endfor ?>
                     </tbody>
@@ -148,7 +201,7 @@ $pick = static function (array $row, array $keys, mixed $default = ''): mixed {
 
             <div class="d-flex gap-2 mt-3">
                 <button type="submit" class="btn btn-primary"><i class="bx bx-save me-1"></i> Save SO</button>
-                <a href="<?= site_url('sales/orders') ?>" class="btn btn-light">Cancel</a>
+                <a href="<?= site_url('sales/orders') ?>" class="btn btn-light">Back to List</a>
             </div>
         </div>
     </div>
@@ -184,26 +237,41 @@ document.addEventListener('DOMContentLoaded', function () {
         return rendered ? rendered.textContent.trim().replace(/^×\s*/, '') : '';
     }
 
+    function optionIsPlaceholder(option) {
+        return !option || option.value === '';
+    }
+
     function optionName(option, select = null) {
+        if (optionIsPlaceholder(option)) return '';
         if (option && option.dataset && option.dataset.name && option.dataset.name.trim() !== '') return option.dataset.name.trim();
         if (option && option.textContent && option.textContent.trim() !== '') return splitLabel(option.textContent);
         return splitLabel(renderedSelect2Text(select));
     }
 
     function optionTerms(option) {
+        if (optionIsPlaceholder(option)) return '';
         return option && option.dataset && option.dataset.terms ? option.dataset.terms.trim() : '';
     }
 
     function fillCustomerFromSelected(force = false) {
         const option = customerSelect.options[customerSelect.selectedIndex];
+        if (optionIsPlaceholder(option)) {
+            if (force && customerName.value.trim() === 'Manual / No Customer Master') customerName.value = '';
+            return;
+        }
         const selectedName = optionName(option, customerSelect);
         const selectedTerms = optionTerms(option);
-        if ((force || customerName.value.trim() === '') && selectedName !== '') customerName.value = selectedName;
+        if ((force || customerName.value.trim() === '' || customerName.value.trim() === 'Manual / No Customer Master') && selectedName !== '') customerName.value = selectedName;
         if ((force || termsCode.value.trim() === '') && selectedTerms !== '') termsCode.value = selectedTerms;
     }
 
     function fillItemRow(row, select) {
         const option = select.options[select.selectedIndex];
+        if (optionIsPlaceholder(option)) {
+            row.querySelector('.item-id').value = '';
+            recalc();
+            return;
+        }
         row.querySelector('.item-id').value = option && option.dataset ? (option.dataset.id || '') : '';
         row.querySelector('[name="item_name[]"]').value = optionName(option, select) || '';
         row.querySelector('[name="uom_code[]"]').value = option && option.dataset ? (option.dataset.uom || 'PCS') : 'PCS';
