@@ -58,6 +58,7 @@ class Filters extends BaseFilters
                 'dashboard',
                 'tenant/*',
                 'modules/*',
+                'system/*',
                 'setup/*',
                 'admin/*',
                 'sales/*',
@@ -89,6 +90,7 @@ class Filters extends BaseFilters
             'before' => [
                 'dashboard',
                 'modules/*',
+                'system/*',
                 'setup/*',
                 'admin/*',
                 'sales/*',
