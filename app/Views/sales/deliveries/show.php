@@ -28,6 +28,7 @@ $statusClass = match ($status) {
                         <tr><th>SO No</th><td><a href="<?= site_url('sales/orders/' . $delivery['sales_order_id']) ?>"><?= esc($delivery['so_no']) ?></a></td></tr>
                         <tr><th>Customer</th><td><?= esc(($delivery['customer_code'] ?? '-') . ' ' . ($delivery['customer_name'] ?? '')) ?></td></tr>
                         <tr><th>COGS GL Entry</th><td><?= ! empty($delivery['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $delivery['gl_entry_id']) . '">#' . esc($delivery['gl_entry_id']) . '</a>' : '-' ?></td></tr>
+                        <tr><th>Reversal GL</th><td><?= ! empty($delivery['reversal_gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $delivery['reversal_gl_entry_id']) . '">#' . esc($delivery['reversal_gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Posted</th><td><?= esc($delivery['posted_at'] ?? '-') ?></td></tr>
                         <?php if ($status === 'reversed'): ?>
                             <tr><th>Reversed</th><td><?= esc($delivery['reversed_at'] ?? '-') ?></td></tr>
