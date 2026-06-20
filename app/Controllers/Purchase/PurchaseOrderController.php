@@ -257,6 +257,10 @@ class PurchaseOrderController extends BaseController
         $qtys = (array) $this->request->getPost('qty');
         $uoms = (array) $this->request->getPost('uom_code');
         $prices = (array) $this->request->getPost('unit_price');
+        $discountPercents = (array) $this->request->getPost('line_discount_percent');
+        $discountAmounts = (array) $this->request->getPost('line_discount_amount');
+        $vatAmounts = (array) $this->request->getPost('line_vat_amount');
+        $whtAmounts = (array) $this->request->getPost('line_wht_amount');
         $lines = [];
 
         foreach ($itemCodes as $index => $code) {
@@ -279,6 +283,10 @@ class PurchaseOrderController extends BaseController
                 'qty' => $qty,
                 'uom_code' => trim((string) ($uoms[$index] ?? 'PCS')),
                 'unit_price' => $price,
+                'discount_percent' => (float) ($discountPercents[$index] ?? 0),
+                'discount_amount' => (float) ($discountAmounts[$index] ?? 0),
+                'vat_amount' => (float) ($vatAmounts[$index] ?? 0),
+                'wht_amount' => (float) ($whtAmounts[$index] ?? 0),
             ];
         }
         return $lines;
