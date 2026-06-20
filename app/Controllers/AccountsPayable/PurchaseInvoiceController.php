@@ -11,8 +11,10 @@ use App\Models\PurchaseReceiptLineModel;
 use App\Models\PurchaseReceiptModel;
 use App\Models\SupplierModel;
 use App\Services\Purchase\PurchaseInvoiceService;
+use App\Services\Support\DocumentNumberService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
+use DateTimeImmutable;
 use RuntimeException;
 
 class PurchaseInvoiceController extends BaseController
@@ -65,6 +67,7 @@ class PurchaseInvoiceController extends BaseController
             'title' => 'Create Purchase Invoice',
             'receipt' => $receipt,
             'lines' => (new PurchaseReceiptLineModel())->where('purchase_receipt_id', $receiptId)->orderBy('line_no', 'ASC')->findAll(),
+            'suggestedInvoiceNo' => $this->previewDocumentNumber('PI'),
         ]);
     }
 
@@ -76,6 +79,7 @@ class PurchaseInvoiceController extends BaseController
             'title' => 'Manual A/P Invoice',
             'suppliers' => $this->suppliers($tenant),
             'items' => $this->items($tenant),
+            'suggestedInvoiceNo' => $this->previewDocumentNumber('PI'),
         ]);
     }
 
@@ -88,7 +92,7 @@ class PurchaseInvoiceController extends BaseController
         }
 
         if (! $this->validate([
-            'invoice_no' => 'required|max_length[60]',
+            'invoice_no' => 'permit_empty|max_length[60]',
             'invoice_date' => 'required|valid_date[Y-m-d]',
             'due_date' => 'permit_empty|valid_date[Y-m-d]',
             'supplier_id' => 'required|is_natural_no_zero',
@@ -102,14 +106,20 @@ class PurchaseInvoiceController extends BaseController
         }
 
         try {
+            $invoiceDate = (string) $this->request->getPost('invoice_date');
+            $invoiceNo = trim((string) $this->request->getPost('invoice_no'));
+            if ($invoiceNo === '') {
+                $invoiceNo = $this->issueDocumentNumber('PI', $invoiceDate, $companyId, $tenant->activeSiteId());
+            }
+
             $invoiceId = (new PurchaseInvoiceService())->postManual([
                 'company_id' => $companyId,
                 'site_id' => $tenant->activeSiteId(),
                 'company' => session('active_company_code'),
                 'site' => session('active_site_code'),
-                'invoice_no' => trim((string) $this->request->getPost('invoice_no')),
-                'invoice_date' => (string) $this->request->getPost('invoice_date'),
-                'due_date' => (string) ($this->request->getPost('due_date') ?: $this->request->getPost('invoice_date')),
+                'invoice_no' => $invoiceNo,
+                'invoice_date' => $invoiceDate,
+                'due_date' => (string) ($this->request->getPost('due_date') ?: $invoiceDate),
                 'supplier_id' => $supplier['id'],
                 'supplier_code' => $supplier['code'] ?? $supplier['supplier'] ?? null,
                 'supplier_name' => $supplier['name'] ?? $supplier['supplierna'] ?? null,
@@ -131,7 +141,7 @@ class PurchaseInvoiceController extends BaseController
             throw PageNotFoundException::forPageNotFound();
         }
         if (! $this->validate([
-            'invoice_no' => 'required|max_length[60]',
+            'invoice_no' => 'permit_empty|max_length[60]',
             'invoice_date' => 'required|valid_date[Y-m-d]',
             'due_date' => 'permit_empty|valid_date[Y-m-d]',
         ])) {
@@ -139,14 +149,20 @@ class PurchaseInvoiceController extends BaseController
         }
 
         try {
+            $invoiceDate = (string) $this->request->getPost('invoice_date');
+            $invoiceNo = trim((string) $this->request->getPost('invoice_no'));
+            if ($invoiceNo === '') {
+                $invoiceNo = $this->issueDocumentNumber('PI', $invoiceDate, (int) $receipt['company_id'], $receipt['site_id'] ?? null);
+            }
+
             $invoiceId = (new PurchaseInvoiceService())->postFromReceipt([
                 'company_id' => $receipt['company_id'],
                 'site_id' => $receipt['site_id'] ?? null,
                 'company' => $receipt['company'] ?? session('active_company_code'),
                 'site' => $receipt['site'] ?? session('active_site_code'),
-                'invoice_no' => trim((string) $this->request->getPost('invoice_no')),
-                'invoice_date' => (string) $this->request->getPost('invoice_date'),
-                'due_date' => (string) ($this->request->getPost('due_date') ?: $this->request->getPost('invoice_date')),
+                'invoice_no' => $invoiceNo,
+                'invoice_date' => $invoiceDate,
+                'due_date' => (string) ($this->request->getPost('due_date') ?: $invoiceDate),
                 'purchase_receipt_id' => $receipt['id'],
                 'currency_code' => trim((string) ($this->request->getPost('currency_code') ?: 'IDR')),
                 'notes' => trim((string) $this->request->getPost('notes')),
@@ -274,5 +290,31 @@ class PurchaseInvoiceController extends BaseController
         }
 
         return $lines;
+    }
+
+    private function previewDocumentNumber(string $transactionCode): string
+    {
+        try {
+            return (new DocumentNumberService())->preview($transactionCode, new DateTimeImmutable(), [
+                'prefix' => $transactionCode,
+                'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+                'reset_period' => 'monthly',
+                'padding' => 5,
+            ]);
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    private function issueDocumentNumber(string $transactionCode, string $date, int $companyId, mixed $siteId): string
+    {
+        return (new DocumentNumberService())->next($transactionCode, new DateTimeImmutable($date), [
+            'company_id' => $companyId,
+            'site_id' => ! empty($siteId) ? (int) $siteId : 0,
+            'prefix' => $transactionCode,
+            'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+            'reset_period' => 'monthly',
+            'padding' => 5,
+        ]);
     }
 }
