@@ -27,6 +27,8 @@ The current continuation adds:
 - Enterprise document numbering service: `App\Services\Support\DocumentNumberService`
 - Local readiness command: `php spark pena:health`
 - Document number CLI helper: `php spark pena:docno`
+- Automatic SO/PO numbering when document number is left blank
+- SO/PO import fixes for site lookup, PO+site key, and PO line discount/tax fields
 
 Skote assets are stored in `resources.zip` and extracted into `public/assets/skote` for the current layout.
 
@@ -127,6 +129,15 @@ Before adding a new module or route:
 6. Use `DocumentNumberService` for transaction document numbers.
 7. Add audit log for important changes.
 8. Test with Super Admin and non-admin role.
+
+## Testing Notes
+
+Order import fixes from runtime feedback:
+
+- Site lookup no longer queries `sites.site` unless the column exists.
+- PO duplicate/import grouping uses `PO No + Site`.
+- PO line discount/tax columns are supported: `line_discount_percent`, `line_discount_amount`, `line_vat_amount`, `line_wht_amount`.
+- Legacy import headers `discount_percent` and `discount_amount` are treated as PO line discount fields.
 
 ## Documentation
 
