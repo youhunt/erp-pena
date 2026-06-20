@@ -121,6 +121,7 @@ class GeneralLedgerController extends BaseController
     public function entries(): string
     {
         $tenant = new TenantContext(session());
+        $filters = $this->glFilters();
         $entries = new GlEntryModel();
         if ($tenant->activeCompanyId() !== null) {
             $entries->where('company_id', $tenant->activeCompanyId());
@@ -128,10 +129,23 @@ class GeneralLedgerController extends BaseController
         if ($tenant->activeSiteId() !== null) {
             $entries->where('site_id', $tenant->activeSiteId());
         }
+        if ($filters['date_from'] !== '') {
+            $entries->where('journal_date >=', $filters['date_from']);
+        }
+        if ($filters['date_to'] !== '') {
+            $entries->where('journal_date <=', $filters['date_to']);
+        }
+        if ($filters['source_module'] !== '') {
+            $entries->where('source_module', $filters['source_module']);
+        }
 
         return view('finance/gl/entries/index', [
             'title' => 'GL Entries',
             'entries' => $entries->orderBy('journal_date', 'DESC')->orderBy('id', 'DESC')->findAll(100),
+            'filters' => $filters,
+            'validation' => $this->glValidationSummary($tenant, $filters),
+            'trialBalanceRows' => $this->trialBalanceRows($tenant, $filters),
+            'sourceModules' => $this->sourceModules($tenant),
         ]);
     }
 
@@ -271,6 +285,154 @@ class GeneralLedgerController extends BaseController
         }
 
         return $lines;
+    }
+
+    private function glFilters(): array
+    {
+        $dateFrom = trim((string) ($this->request->getGet('date_from') ?: date('Y-m-01')));
+        $dateTo = trim((string) ($this->request->getGet('date_to') ?: date('Y-m-d')));
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
+            $dateFrom = date('Y-m-01');
+        }
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) {
+            $dateTo = date('Y-m-d');
+        }
+
+        return [
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
+            'source_module' => trim((string) $this->request->getGet('source_module')),
+        ];
+    }
+
+    private function glBaseBuilder(TenantContext $tenant, array $filters)
+    {
+        $db = Database::connect();
+        $builder = $db->table('gl_entries ge')
+            ->join('gl_entry_lines gel', 'gel.gl_entry_id = ge.id', 'inner');
+
+        if ($tenant->activeCompanyId() !== null) {
+            $builder->where('ge.company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $builder->where('ge.site_id', $tenant->activeSiteId());
+        }
+        if ($filters['date_from'] !== '') {
+            $builder->where('ge.journal_date >=', $filters['date_from']);
+        }
+        if ($filters['date_to'] !== '') {
+            $builder->where('ge.journal_date <=', $filters['date_to']);
+        }
+        if ($filters['source_module'] !== '') {
+            $builder->where('ge.source_module', $filters['source_module']);
+        }
+        $builder->where('ge.status !=', 'cancelled');
+        if ($db->fieldExists('deleted_at', 'gl_entries')) {
+            $builder->where('ge.deleted_at', null);
+        }
+
+        return $builder;
+    }
+
+    private function glValidationSummary(TenantContext $tenant, array $filters): array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('gl_entries') || ! $db->tableExists('gl_entry_lines')) {
+            return [
+                'entry_count' => 0,
+                'line_count' => 0,
+                'total_debit' => 0.0,
+                'total_credit' => 0.0,
+                'difference' => 0.0,
+                'unbalanced_count' => 0,
+            ];
+        }
+
+        $row = $this->glBaseBuilder($tenant, $filters)
+            ->select('COUNT(DISTINCT ge.id) entry_count', false)
+            ->select('COUNT(gel.id) line_count', false)
+            ->select('COALESCE(SUM(gel.debit), 0) total_debit', false)
+            ->select('COALESCE(SUM(gel.credit), 0) total_credit', false)
+            ->get()
+            ->getRowArray() ?? [];
+
+        $unbalancedRows = $db->table('gl_entries ge')
+            ->select('ge.id')
+            ->join('gl_entry_lines gel', 'gel.gl_entry_id = ge.id', 'inner');
+        if ($tenant->activeCompanyId() !== null) {
+            $unbalancedRows->where('ge.company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $unbalancedRows->where('ge.site_id', $tenant->activeSiteId());
+        }
+        if ($filters['date_from'] !== '') {
+            $unbalancedRows->where('ge.journal_date >=', $filters['date_from']);
+        }
+        if ($filters['date_to'] !== '') {
+            $unbalancedRows->where('ge.journal_date <=', $filters['date_to']);
+        }
+        if ($filters['source_module'] !== '') {
+            $unbalancedRows->where('ge.source_module', $filters['source_module']);
+        }
+        $unbalancedRows->where('ge.status !=', 'cancelled');
+        if ($db->fieldExists('deleted_at', 'gl_entries')) {
+            $unbalancedRows->where('ge.deleted_at', null);
+        }
+        $unbalancedRows->groupBy('ge.id')
+            ->having('ROUND(COALESCE(SUM(gel.debit),0) - COALESCE(SUM(gel.credit),0), 2) !=', 0);
+
+        $unbalancedCount = count($unbalancedRows->get()->getResultArray());
+        $totalDebit = (float) ($row['total_debit'] ?? 0);
+        $totalCredit = (float) ($row['total_credit'] ?? 0);
+
+        return [
+            'entry_count' => (int) ($row['entry_count'] ?? 0),
+            'line_count' => (int) ($row['line_count'] ?? 0),
+            'total_debit' => $totalDebit,
+            'total_credit' => $totalCredit,
+            'difference' => round($totalDebit - $totalCredit, 2),
+            'unbalanced_count' => $unbalancedCount,
+        ];
+    }
+
+    private function trialBalanceRows(TenantContext $tenant, array $filters): array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('gl_entries') || ! $db->tableExists('gl_entry_lines')) {
+            return [];
+        }
+
+        return $this->glBaseBuilder($tenant, $filters)
+            ->select('gel.account_no')
+            ->select('MAX(gel.account_name) account_name', false)
+            ->select('COALESCE(SUM(gel.debit), 0) debit', false)
+            ->select('COALESCE(SUM(gel.credit), 0) credit', false)
+            ->select('COALESCE(SUM(gel.debit), 0) - COALESCE(SUM(gel.credit), 0) balance', false)
+            ->groupBy('gel.account_no')
+            ->orderBy('gel.account_no', 'ASC')
+            ->get(300)
+            ->getResultArray();
+    }
+
+    private function sourceModules(TenantContext $tenant): array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('gl_entries')) {
+            return [];
+        }
+
+        $builder = $db->table('gl_entries')->select('source_module')->where('source_module IS NOT NULL', null, false)->groupBy('source_module')->orderBy('source_module', 'ASC');
+        if ($tenant->activeCompanyId() !== null) {
+            $builder->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $builder->where('site_id', $tenant->activeSiteId());
+        }
+        if ($db->fieldExists('deleted_at', 'gl_entries')) {
+            $builder->where('deleted_at', null);
+        }
+
+        return array_map(static fn (array $row): string => (string) $row['source_module'], $builder->get(100)->getResultArray());
     }
 
     private function nullableInt(mixed $value): ?int
