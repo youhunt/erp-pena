@@ -11,8 +11,10 @@ use App\Models\SalesDeliveryModel;
 use App\Models\SalesInvoiceLineModel;
 use App\Models\SalesInvoiceModel;
 use App\Services\Sales\SalesInvoiceService;
+use App\Services\Support\DocumentNumberService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
+use DateTimeImmutable;
 use RuntimeException;
 
 class SalesInvoiceController extends BaseController
@@ -65,6 +67,7 @@ class SalesInvoiceController extends BaseController
             'title' => 'Create Sales Invoice',
             'delivery' => $delivery,
             'lines' => (new SalesDeliveryLineModel())->where('sales_delivery_id', $deliveryId)->orderBy('line_no', 'ASC')->findAll(),
+            'suggestedInvoiceNo' => $this->previewDocumentNumber('SI'),
         ]);
     }
 
@@ -76,6 +79,7 @@ class SalesInvoiceController extends BaseController
             'title' => 'Manual A/R Invoice',
             'customers' => $this->customers($tenant),
             'items' => $this->items($tenant),
+            'suggestedInvoiceNo' => $this->previewDocumentNumber('SI'),
         ]);
     }
 
@@ -88,7 +92,7 @@ class SalesInvoiceController extends BaseController
         }
 
         if (! $this->validate([
-            'invoice_no' => 'required|max_length[60]',
+            'invoice_no' => 'permit_empty|max_length[60]',
             'invoice_date' => 'required|valid_date[Y-m-d]',
             'due_date' => 'permit_empty|valid_date[Y-m-d]',
             'customer_id' => 'required|is_natural_no_zero',
@@ -102,14 +106,20 @@ class SalesInvoiceController extends BaseController
         }
 
         try {
+            $invoiceDate = (string) $this->request->getPost('invoice_date');
+            $invoiceNo = trim((string) $this->request->getPost('invoice_no'));
+            if ($invoiceNo === '') {
+                $invoiceNo = $this->issueDocumentNumber('SI', $invoiceDate, $companyId, $tenant->activeSiteId());
+            }
+
             $invoiceId = (new SalesInvoiceService())->postManual([
                 'company_id' => $companyId,
                 'site_id' => $tenant->activeSiteId(),
                 'company' => session('active_company_code'),
                 'site' => session('active_site_code'),
-                'invoice_no' => trim((string) $this->request->getPost('invoice_no')),
-                'invoice_date' => (string) $this->request->getPost('invoice_date'),
-                'due_date' => (string) ($this->request->getPost('due_date') ?: $this->request->getPost('invoice_date')),
+                'invoice_no' => $invoiceNo,
+                'invoice_date' => $invoiceDate,
+                'due_date' => (string) ($this->request->getPost('due_date') ?: $invoiceDate),
                 'customer_id' => $customer['id'],
                 'customer_code' => $customer['code'] ?? $customer['customer'] ?? null,
                 'customer_name' => $customer['name'] ?? $customer['customern'] ?? null,
@@ -131,7 +141,7 @@ class SalesInvoiceController extends BaseController
             throw PageNotFoundException::forPageNotFound();
         }
         if (! $this->validate([
-            'invoice_no' => 'required|max_length[60]',
+            'invoice_no' => 'permit_empty|max_length[60]',
             'invoice_date' => 'required|valid_date[Y-m-d]',
             'due_date' => 'permit_empty|valid_date[Y-m-d]',
         ])) {
@@ -139,14 +149,20 @@ class SalesInvoiceController extends BaseController
         }
 
         try {
+            $invoiceDate = (string) $this->request->getPost('invoice_date');
+            $invoiceNo = trim((string) $this->request->getPost('invoice_no'));
+            if ($invoiceNo === '') {
+                $invoiceNo = $this->issueDocumentNumber('SI', $invoiceDate, (int) $delivery['company_id'], $delivery['site_id'] ?? null);
+            }
+
             $invoiceId = (new SalesInvoiceService())->postFromDelivery([
                 'company_id' => $delivery['company_id'],
                 'site_id' => $delivery['site_id'] ?? null,
                 'company' => $delivery['company'] ?? session('active_company_code'),
                 'site' => $delivery['site'] ?? session('active_site_code'),
-                'invoice_no' => trim((string) $this->request->getPost('invoice_no')),
-                'invoice_date' => (string) $this->request->getPost('invoice_date'),
-                'due_date' => (string) ($this->request->getPost('due_date') ?: $this->request->getPost('invoice_date')),
+                'invoice_no' => $invoiceNo,
+                'invoice_date' => $invoiceDate,
+                'due_date' => (string) ($this->request->getPost('due_date') ?: $invoiceDate),
                 'sales_delivery_id' => $delivery['id'],
                 'currency_code' => trim((string) ($this->request->getPost('currency_code') ?: 'IDR')),
                 'notes' => trim((string) $this->request->getPost('notes')),
@@ -274,5 +290,31 @@ class SalesInvoiceController extends BaseController
         }
 
         return $lines;
+    }
+
+    private function previewDocumentNumber(string $transactionCode): string
+    {
+        try {
+            return (new DocumentNumberService())->preview($transactionCode, new DateTimeImmutable(), [
+                'prefix' => $transactionCode,
+                'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+                'reset_period' => 'monthly',
+                'padding' => 5,
+            ]);
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    private function issueDocumentNumber(string $transactionCode, string $date, int $companyId, mixed $siteId): string
+    {
+        return (new DocumentNumberService())->next($transactionCode, new DateTimeImmutable($date), [
+            'company_id' => $companyId,
+            'site_id' => ! empty($siteId) ? (int) $siteId : 0,
+            'prefix' => $transactionCode,
+            'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+            'reset_period' => 'monthly',
+            'padding' => 5,
+        ]);
     }
 }
