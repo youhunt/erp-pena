@@ -2,12 +2,12 @@
 
 namespace App\Services\Sales;
 
+use App\Models\InventoryStockMovementModel;
 use App\Models\SalesDeliveryLineModel;
 use App\Models\SalesDeliveryModel;
 use App\Models\SalesInvoiceModel;
 use App\Models\SalesOrderLineModel;
 use App\Models\SalesOrderModel;
-use App\Models\InventoryStockMovementModel;
 use App\Services\AuditLogService;
 use App\Services\Finance\GeneralLedgerService;
 use App\Services\Finance\PeriodCloseService;
@@ -27,6 +27,7 @@ class SalesDeliveryService
         if ($lines === []) {
             throw new RuntimeException('At least one delivery line is required.');
         }
+        $this->assertStorageLocation($header);
         $this->assertPeriodOpen('sales', $header, 'delivery_date');
         $this->assertPeriodOpen('inventory', $header, 'delivery_date');
 
@@ -52,6 +53,7 @@ class SalesDeliveryService
             $movementModel = new InventoryStockMovementModel();
             $totalCogs = 0.0;
             $postedLineCount = 0;
+            $glWarning = null;
 
             $deliveryModel->insert($header + [
                 'status' => 'posted',
@@ -66,42 +68,40 @@ class SalesDeliveryService
             }
 
             foreach ($lines as $line) {
-                $soLine = $soLineModel->find((int) $line['sales_order_line_id']);
+                $soLine = $soLineModel->find((int) ($line['sales_order_line_id'] ?? 0));
                 if ($soLine === null) {
                     throw new RuntimeException('SO line not found.');
                 }
+                if ((int) ($soLine['sales_order_id'] ?? 0) !== (int) $so['id']) {
+                    throw new RuntimeException('Delivery line does not belong to selected SO.');
+                }
 
-                $qtyDeliver = (float) ($line['qty_delivered'] ?? 0);
-                $outstanding = (float) ($soLine['qty_outstanding'] ?? $soLine['qty'] ?? 0);
+                $qtyDeliver = $this->toNumber($line['qty_delivered'] ?? 0);
+                $outstanding = $this->currentOutstanding($soLine);
                 if ($qtyDeliver <= 0) {
                     continue;
                 }
                 if ($qtyDeliver > $outstanding) {
-                    throw new RuntimeException('Delivery qty cannot exceed outstanding qty for item ' . ($soLine['item_code'] ?? '-'));
+                    throw new RuntimeException('Delivery qty cannot exceed outstanding qty for item ' . ($soLine['item_code'] ?? '-') . '. Outstanding: ' . $outstanding);
                 }
 
-                $newDelivered = (float) ($soLine['qty_delivered'] ?? 0) + $qtyDeliver;
-                $newOutstanding = max(0, $outstanding - $qtyDeliver);
-                $newReserved = max(0, (float) ($soLine['qty_reserved'] ?? 0) - $qtyDeliver);
+                $itemCode = trim((string) ($soLine['item_code'] ?? ''));
+                if ($itemCode === '') {
+                    throw new RuntimeException('SO line item code is required before delivery can be posted.');
+                }
 
-                $soLineModel->update($soLine['id'], [
-                    'qty_delivered' => $newDelivered,
-                    'qty_outstanding' => $newOutstanding,
-                    'qty_reserved' => $newReserved,
-                    'line_status' => $newOutstanding <= 0 ? 'delivered' : 'partial_delivered',
-                ]);
-
-                if ((float) ($soLine['qty_reserved'] ?? 0) > 0) {
+                $reservedBefore = max(0.0, $this->toNumber($soLine['qty_reserved'] ?? 0));
+                if ($reservedBefore > 0) {
                     $stock->releaseReservation([
                         'company_id' => $header['company_id'],
                         'site_id' => $header['site_id'] ?? null,
                         'warehouse_id' => null,
                         'location_id' => null,
                         'item_id' => $soLine['item_id'] ?? null,
-                        'item_code' => $soLine['item_code'] ?? '',
+                        'item_code' => $itemCode,
                         'batch_no' => trim((string) ($line['batch_no'] ?? '')),
                         'uom_code' => $soLine['uom_code'] ?? 'PCS',
-                        'qty' => $qtyDeliver,
+                        'qty' => min($qtyDeliver, $reservedBefore),
                     ], $userId);
                 }
 
@@ -111,7 +111,7 @@ class SalesDeliveryService
                     'warehouse_id' => $header['warehouse_id'] ?? null,
                     'location_id' => $header['location_id'] ?? null,
                     'item_id' => $soLine['item_id'] ?? null,
-                    'item_code' => $soLine['item_code'] ?? '',
+                    'item_code' => $itemCode,
                     'batch_no' => trim((string) ($line['batch_no'] ?? '')),
                     'item_name' => $soLine['item_name'] ?? null,
                     'uom_code' => $soLine['uom_code'] ?? 'PCS',
@@ -133,12 +133,13 @@ class SalesDeliveryService
                     'sales_order_id' => $so['id'],
                     'sales_order_line_id' => $soLine['id'],
                     'stock_movement_id' => $movementId,
-                    'line_no' => $soLine['line_no'],
+                    'line_no' => $soLine['line_no'] ?? $soLine['so_line'] ?? 0,
                     'item_id' => $soLine['item_id'] ?? null,
-                    'item_code' => $soLine['item_code'] ?? null,
+                    'item_code' => $itemCode,
                     'batch_no' => trim((string) ($line['batch_no'] ?? '')),
                     'item_name' => $soLine['item_name'] ?? null,
                     'qty_delivered' => $qtyDeliver,
+                    'reversed_qty' => 0,
                     'uom_code' => $soLine['uom_code'] ?? 'PCS',
                     'unit_price' => $soLine['unit_price'] ?? 0,
                     'warehouse_id' => $header['warehouse_id'] ?? null,
@@ -148,12 +149,26 @@ class SalesDeliveryService
             }
 
             if ($postedLineCount < 1) {
-                throw new RuntimeException('No delivery line can be posted.');
+                throw new RuntimeException('No delivery line can be posted. Please fill Deliver Now qty greater than zero.');
             }
 
-            $glEntryId = $this->postCogsGl($header, $deliveryId, round($totalCogs, 2), $userId);
+            $this->recalculateSoDeliveryQuantities((int) $so['id'], $userId);
+
+            try {
+                $glEntryId = $this->postCogsGl($header, $deliveryId, round($totalCogs, 2), $userId);
+            } catch (RuntimeException $e) {
+                $glEntryId = null;
+                $glWarning = 'GL skipped: ' . $e->getMessage();
+            }
+            $deliveryUpdate = [];
             if ($glEntryId !== null) {
-                $deliveryModel->update($deliveryId, ['gl_entry_id' => $glEntryId]);
+                $deliveryUpdate['gl_entry_id'] = $glEntryId;
+            }
+            if ($glWarning !== null) {
+                $deliveryUpdate['notes'] = trim(($header['notes'] ?? '') . ' ' . $glWarning);
+            }
+            if ($deliveryUpdate !== []) {
+                $deliveryModel->update($deliveryId, $deliveryUpdate);
             }
 
             $this->refreshSoStatus((int) $so['id'], $userId);
@@ -170,8 +185,8 @@ class SalesDeliveryService
                 'table_name' => 'sales_deliveries',
                 'record_id' => $deliveryId,
                 'record_code' => $header['delivery_no'],
-                'description' => 'Sales delivery posted, stock decreased, and COGS GL posted.',
-                'new_values' => ['header' => $header, 'lines' => $lines, 'cogs_amount' => $totalCogs, 'gl_entry_id' => $glEntryId],
+                'description' => $glWarning !== null ? 'Sales delivery posted and stock decreased. ' . $glWarning : 'Sales delivery posted, stock decreased, and COGS GL posted.',
+                'new_values' => ['header' => $header, 'lines' => $lines, 'cogs_amount' => $totalCogs, 'gl_entry_id' => $glEntryId, 'gl_warning' => $glWarning],
             ]);
 
             return $deliveryId;
@@ -189,7 +204,6 @@ class SalesDeliveryService
         try {
             $deliveryModel = new SalesDeliveryModel();
             $deliveryLineModel = new SalesDeliveryLineModel();
-            $soLineModel = new SalesOrderLineModel();
             $stock = new InventoryStockService();
 
             $delivery = $deliveryModel->find($deliveryId);
@@ -244,24 +258,12 @@ class SalesDeliveryService
                 ], $userId);
 
                 $deliveryLineModel->update((int) $line['id'], [
+                    'reversed_qty' => (float) ($line['qty_delivered'] ?? 0),
                     'reversal_movement_id' => $reversalMovementId,
-                    'updated_at' => $now,
+                    'reversed_at' => $now,
+                    'reversed_by' => $userId,
+                    'reversal_reason' => $reason,
                 ]);
-
-                if (! empty($line['sales_order_line_id'])) {
-                    $soLine = $soLineModel->find((int) $line['sales_order_line_id']);
-                    if ($soLine !== null) {
-                        $qty = (float) ($line['qty_delivered'] ?? 0);
-                        $newDelivered = max(0, (float) ($soLine['qty_delivered'] ?? 0) - $qty);
-                        $ordered = (float) ($soLine['qty_ordered'] ?? $soLine['qty'] ?? 0);
-                        $newOutstanding = max(0, $ordered - $newDelivered);
-                        $soLineModel->update((int) $soLine['id'], [
-                            'qty_delivered' => $newDelivered,
-                            'qty_outstanding' => $newOutstanding,
-                            'line_status' => $newDelivered <= 0 ? 'approved' : ($newOutstanding <= 0 ? 'delivered' : 'partial_delivered'),
-                        ]);
-                    }
-                }
             }
 
             $deliveryModel->update($deliveryId, [
@@ -272,6 +274,7 @@ class SalesDeliveryService
                 'updated_by' => $userId,
             ]);
 
+            $this->recalculateSoDeliveryQuantities((int) ($delivery['sales_order_id'] ?? 0), $userId);
             $this->refreshSoStatus((int) ($delivery['sales_order_id'] ?? 0), $userId);
 
             if ($db->transStatus() === false) {
@@ -343,6 +346,81 @@ class SalesDeliveryService
         );
     }
 
+    private function assertStorageLocation(array $header): void
+    {
+        $warehouseId = (int) ($header['warehouse_id'] ?? 0);
+        $locationId = (int) ($header['location_id'] ?? 0);
+        if ($warehouseId < 1 || $locationId < 1) {
+            throw new RuntimeException('Warehouse and location are required before posting sales delivery.');
+        }
+
+        $db = Database::connect();
+        $warehouse = $db->table('warehouses')->where('id', $warehouseId);
+        $location = $db->table('locations')->where('id', $locationId);
+
+        if (! empty($header['company_id'])) {
+            $warehouse->where('company_id', (int) $header['company_id']);
+            $location->where('company_id', (int) $header['company_id']);
+        }
+        if (! empty($header['site_id'])) {
+            $warehouse->where('site_id', (int) $header['site_id']);
+            $location->where('site_id', (int) $header['site_id']);
+        }
+        if ($db->fieldExists('deleted_at', 'warehouses')) {
+            $warehouse->where('deleted_at', null);
+        }
+        if ($db->fieldExists('deleted_at', 'locations')) {
+            $location->where('deleted_at', null);
+        }
+
+        $warehouseRow = $warehouse->get()->getRowArray();
+        $locationRow = $location->get()->getRowArray();
+        if ($warehouseRow === null) {
+            throw new RuntimeException('Selected warehouse is not valid for this delivery.');
+        }
+        if ($locationRow === null) {
+            throw new RuntimeException('Selected location is not valid for this delivery.');
+        }
+        if ((int) ($locationRow['warehouse_id'] ?? 0) !== $warehouseId) {
+            throw new RuntimeException('Selected location does not belong to selected warehouse.');
+        }
+    }
+
+    private function recalculateSoDeliveryQuantities(int $soId, ?int $userId = null): void
+    {
+        if ($soId < 1) {
+            return;
+        }
+
+        $db = Database::connect();
+        $lineModel = new SalesOrderLineModel();
+        $lines = $lineModel->where('sales_order_id', $soId)->findAll();
+
+        foreach ($lines as $line) {
+            $deliveredRow = $db->table('sales_delivery_lines sdl')
+                ->select('COALESCE(SUM(sdl.qty_delivered), 0) AS qty_delivered', false)
+                ->join('sales_deliveries sd', 'sd.id = sdl.sales_delivery_id', 'inner')
+                ->where('sdl.sales_order_line_id', (int) $line['id'])
+                ->where('sd.status', 'posted')
+                ->where('sd.reversed_at', null)
+                ->get()
+                ->getRowArray();
+
+            $qtyDelivered = round((float) ($deliveredRow['qty_delivered'] ?? 0), 4);
+            $qtyOrdered = round($this->toNumber($line['qty_ordered'] ?? $line['qty'] ?? 0), 4);
+            $qtyOutstanding = max(0.0, round($qtyOrdered - $qtyDelivered, 4));
+            $qtyReserved = max(0.0, min($this->toNumber($line['qty_reserved'] ?? 0), $qtyOutstanding));
+
+            $lineModel->update($line['id'], [
+                'qty_delivered' => $qtyDelivered,
+                'qty_outstanding' => $qtyOutstanding,
+                'qty_reserved' => $qtyReserved,
+                'line_status' => $qtyDelivered <= 0 ? 'open' : ($qtyOutstanding <= 0 ? 'delivered' : 'partial_delivered'),
+                'updated_by' => $userId,
+            ]);
+        }
+    }
+
     private function refreshSoStatus(int $soId, ?int $userId = null): void
     {
         if ($soId < 1) {
@@ -364,5 +442,30 @@ class SalesDeliveryService
             'document_status' => $status,
             'updated_by' => $userId,
         ]);
+    }
+
+    private function currentOutstanding(array $soLine): float
+    {
+        if (array_key_exists('qty_outstanding', $soLine) && $soLine['qty_outstanding'] !== null && $soLine['qty_outstanding'] !== '') {
+            return max(0.0, $this->toNumber($soLine['qty_outstanding']));
+        }
+
+        $ordered = $this->toNumber($soLine['qty_ordered'] ?? $soLine['qty'] ?? 0);
+        $delivered = $this->toNumber($soLine['qty_delivered'] ?? 0);
+        return max(0.0, $ordered - $delivered);
+    }
+
+    private function toNumber(mixed $value): float
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0.0;
+        }
+        if (str_contains($value, ',') && ! str_contains($value, '.')) {
+            $value = str_replace(',', '.', $value);
+        } else {
+            $value = str_replace(',', '', $value);
+        }
+        return (float) $value;
     }
 }
