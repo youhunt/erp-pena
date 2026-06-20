@@ -28,7 +28,6 @@ class PurchaseReceiptService
             throw new RuntimeException('At least one receipt line is required.');
         }
         $this->assertStorageLocation($header);
-
         $this->assertPeriodOpen('purchase', $header, 'receipt_date');
         $this->assertPeriodOpen('inventory', $header, 'receipt_date');
 
@@ -69,7 +68,7 @@ class PurchaseReceiptService
             }
 
             foreach ($lines as $line) {
-                $poLine = $poLineModel->find((int) $line['purchase_order_line_id']);
+                $poLine = $poLineModel->find((int) ($line['purchase_order_line_id'] ?? 0));
                 if ($poLine === null) {
                     throw new RuntimeException('PO line not found.');
                 }
@@ -78,12 +77,17 @@ class PurchaseReceiptService
                 }
 
                 $qtyReceive = $this->toNumber($line['qty_received'] ?? 0);
-                $outstanding = $this->toNumber($poLine['qty_outstanding'] ?? $poLine['qty'] ?? 0);
+                $outstanding = $this->currentOutstanding($poLine);
                 if ($qtyReceive <= 0) {
                     continue;
                 }
                 if ($qtyReceive > $outstanding) {
-                    throw new RuntimeException('Receive qty cannot exceed outstanding qty for item ' . ($poLine['item_code'] ?? '-'));
+                    throw new RuntimeException('Receive qty cannot exceed outstanding qty for item ' . ($poLine['item_code'] ?? '-') . '. Outstanding: ' . $outstanding);
+                }
+
+                $itemCode = trim((string) ($poLine['item_code'] ?? ''));
+                if ($itemCode === '') {
+                    throw new RuntimeException('PO line item code is required before receipt can be posted.');
                 }
 
                 $movementId = $stock->stockIn([
@@ -92,7 +96,7 @@ class PurchaseReceiptService
                     'warehouse_id' => $header['warehouse_id'] ?? null,
                     'location_id' => $header['location_id'] ?? null,
                     'item_id' => $poLine['item_id'] ?? null,
-                    'item_code' => $poLine['item_code'] ?? '',
+                    'item_code' => $itemCode,
                     'batch_no' => trim((string) ($line['batch_no'] ?? '')),
                     'item_name' => $poLine['item_name'] ?? null,
                     'uom_code' => $poLine['uom_code'] ?? 'PCS',
@@ -111,26 +115,19 @@ class PurchaseReceiptService
                     'purchase_order_id' => $po['id'],
                     'purchase_order_line_id' => $poLine['id'],
                     'stock_movement_id' => $movementId,
-                    'line_no' => $poLine['line_no'],
+                    'line_no' => $poLine['line_no'] ?? $poLine['po_line'] ?? 0,
                     'item_id' => $poLine['item_id'] ?? null,
-                    'item_code' => $poLine['item_code'] ?? null,
+                    'item_code' => $itemCode,
                     'batch_no' => trim((string) ($line['batch_no'] ?? '')),
                     'item_name' => $poLine['item_name'] ?? null,
                     'qty_received' => $qtyReceive,
+                    'reversed_qty' => 0,
                     'uom_code' => $poLine['uom_code'] ?? 'PCS',
                     'unit_cost' => $poLine['unit_price'] ?? 0,
                     'warehouse_id' => $header['warehouse_id'] ?? null,
                     'location_id' => $header['location_id'] ?? null,
                 ]);
                 $postedLineCount++;
-
-                $newReceived = $this->toNumber($poLine['qty_received'] ?? 0) + $qtyReceive;
-                $newOutstanding = max(0, $outstanding - $qtyReceive);
-                $poLineModel->update($poLine['id'], [
-                    'qty_received' => $newReceived,
-                    'qty_outstanding' => $newOutstanding,
-                    'line_status' => $newOutstanding <= 0 ? 'received' : 'partial_received',
-                ]);
 
                 $movement = $movementModel->find($movementId);
                 $totalInventoryValue += (float) ($movement['stock_value'] ?? 0);
@@ -139,6 +136,8 @@ class PurchaseReceiptService
             if ($postedLineCount < 1) {
                 throw new RuntimeException('No receipt line can be posted. Please fill Receive Now qty greater than zero.');
             }
+
+            $this->recalculatePoReceiptQuantities((int) $po['id'], $userId);
 
             try {
                 $glEntryId = $this->postReceiptGl($header, $receiptId, round($totalInventoryValue, 2), $userId);
@@ -191,7 +190,6 @@ class PurchaseReceiptService
         try {
             $receiptModel = new PurchaseReceiptModel();
             $receiptLineModel = new PurchaseReceiptLineModel();
-            $poLineModel = new PurchaseOrderLineModel();
             $stock = new InventoryStockService();
 
             $receipt = $receiptModel->find($receiptId);
@@ -250,18 +248,6 @@ class PurchaseReceiptService
                     'reversed_by' => $userId,
                     'reversal_reason' => $reason,
                 ]);
-
-                $poLine = $poLineModel->find((int) ($line['purchase_order_line_id'] ?? 0));
-                if ($poLine !== null) {
-                    $newReceived = max(0, (float) ($poLine['qty_received'] ?? 0) - (float) ($line['qty_received'] ?? 0));
-                    $qtyOrdered = (float) ($poLine['qty_ordered'] ?? $poLine['qty'] ?? 0);
-                    $newOutstanding = max(0, $qtyOrdered - $newReceived);
-                    $poLineModel->update($poLine['id'], [
-                        'qty_received' => $newReceived,
-                        'qty_outstanding' => $newOutstanding,
-                        'line_status' => $newReceived <= 0 ? 'approved' : ($newOutstanding <= 0 ? 'received' : 'partial_received'),
-                    ]);
-                }
             }
 
             $receiptModel->update($receiptId, [
@@ -270,6 +256,8 @@ class PurchaseReceiptService
                 'reversed_by' => $userId,
                 'reversal_reason' => $reason,
             ]);
+
+            $this->recalculatePoReceiptQuantities((int) ($receipt['purchase_order_id'] ?? 0), $userId);
             $this->refreshPoStatus((int) ($receipt['purchase_order_id'] ?? 0), $userId);
 
             if ($db->transStatus() === false) {
@@ -380,6 +368,39 @@ class PurchaseReceiptService
         }
     }
 
+    private function recalculatePoReceiptQuantities(int $poId, ?int $userId = null): void
+    {
+        if ($poId < 1) {
+            return;
+        }
+
+        $db = Database::connect();
+        $lineModel = new PurchaseOrderLineModel();
+        $lines = $lineModel->where('purchase_order_id', $poId)->findAll();
+
+        foreach ($lines as $line) {
+            $receivedRow = $db->table('purchase_receipt_lines prl')
+                ->select('COALESCE(SUM(prl.qty_received), 0) AS qty_received', false)
+                ->join('purchase_receipts pr', 'pr.id = prl.purchase_receipt_id', 'inner')
+                ->where('prl.purchase_order_line_id', (int) $line['id'])
+                ->where('pr.status', 'posted')
+                ->where('pr.reversed_at', null)
+                ->get()
+                ->getRowArray();
+
+            $qtyReceived = round((float) ($receivedRow['qty_received'] ?? 0), 4);
+            $qtyOrdered = round($this->toNumber($line['qty_ordered'] ?? $line['qty'] ?? 0), 4);
+            $qtyOutstanding = max(0.0, round($qtyOrdered - $qtyReceived, 4));
+
+            $lineModel->update($line['id'], [
+                'qty_received' => $qtyReceived,
+                'qty_outstanding' => $qtyOutstanding,
+                'line_status' => $qtyReceived <= 0 ? 'open' : ($qtyOutstanding <= 0 ? 'received' : 'partial_received'),
+                'updated_by' => $userId,
+            ]);
+        }
+    }
+
     private function refreshPoStatus(int $poId, ?int $userId = null): void
     {
         if ($poId < 1) {
@@ -401,6 +422,17 @@ class PurchaseReceiptService
             'document_status' => $status,
             'updated_by' => $userId,
         ]);
+    }
+
+    private function currentOutstanding(array $poLine): float
+    {
+        if (array_key_exists('qty_outstanding', $poLine) && $poLine['qty_outstanding'] !== null && $poLine['qty_outstanding'] !== '') {
+            return max(0.0, $this->toNumber($poLine['qty_outstanding']));
+        }
+
+        $ordered = $this->toNumber($poLine['qty_ordered'] ?? $poLine['qty'] ?? 0);
+        $received = $this->toNumber($poLine['qty_received'] ?? 0);
+        return max(0.0, $ordered - $received);
     }
 
     private function toNumber(mixed $value): float
