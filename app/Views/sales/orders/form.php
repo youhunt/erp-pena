@@ -1,6 +1,17 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php
+$pick = static function (array $row, array $keys, mixed $default = ''): mixed {
+    foreach ($keys as $key) {
+        if (array_key_exists($key, $row) && $row[$key] !== null && trim((string) $row[$key]) !== '') {
+            return $row[$key];
+        }
+    }
+
+    return $default;
+};
+?>
 <form method="post" action="<?= site_url('sales/orders') ?>">
     <?= csrf_field() ?>
 
@@ -29,8 +40,15 @@
                     <select name="customer_id" class="form-select" id="customerSelect">
                         <option value="">Manual / No Customer Master</option>
                         <?php foreach ($customers as $customer): ?>
-                            <option value="<?= (int) $customer['id'] ?>" data-name="<?= esc($customer['name']) ?>" data-terms="<?= esc((string) ($customer['terms_code'] ?? $customer['terms'] ?? ''), 'attr') ?>">
-                                <?= esc($customer['code'] . ' - ' . $customer['name']) ?>
+                            <?php
+                            $customerId = (int) ($customer['id'] ?? 0);
+                            $customerCode = (string) $pick($customer, ['customer_code', 'customer', 'code', 'cust_code']);
+                            $customerNameValue = (string) $pick($customer, ['customer_name', 'customern', 'customernm', 'name', 'company_name', 'description']);
+                            $customerTerms = (string) $pick($customer, ['terms_code', 'terms', 'payment_terms']);
+                            $selectedCustomer = (int) old('customer_id', 0) === $customerId;
+                            ?>
+                            <option value="<?= $customerId ?>" <?= $selectedCustomer ? 'selected' : '' ?> data-code="<?= esc($customerCode, 'attr') ?>" data-name="<?= esc($customerNameValue, 'attr') ?>" data-terms="<?= esc($customerTerms, 'attr') ?>">
+                                <?= esc(trim($customerCode . ' - ' . $customerNameValue, ' -')) ?>
                             </option>
                         <?php endforeach ?>
                     </select>
@@ -87,22 +105,23 @@
                                 <td>
                                     <input type="hidden" name="item_id[]" class="item-id">
                                     <select name="item_code[]" class="form-select item-select">
-                                        <option value="">Manual item</option>
+                                        <option value="">Pilih / cari data</option>
                                         <?php foreach ($items as $item): ?>
                                             <?php
-                                            $code = (string) ($item['item_code'] ?? $item['code'] ?? '');
-                                            $name = (string) ($item['item_name'] ?? $item['name'] ?? '');
-                                            $uom = (string) ($item['sellinguom'] ?? $item['stockuom'] ?? 'PCS');
-                                            $price = (float) ($item['sellingprice'] ?? $item['item_price'] ?? 0);
+                                            $code = (string) $pick($item, ['item_code', 'item', 'code', 'sku', 'product_code']);
+                                            $name = (string) $pick($item, ['item_name', 'itemn', 'itemna', 'name', 'product_name', 'description']);
+                                            $uom = (string) $pick($item, ['sellinguom', 'selling_uom', 'stockuom', 'stock_uom', 'uom_code', 'uom'], 'PCS');
+                                            $price = (float) $pick($item, ['sellingprice', 'selling_price', 'item_price', 'price', 'sales_price'], 0);
                                             ?>
                                             <option
                                                 value="<?= esc($code) ?>"
                                                 data-id="<?= (int) ($item['id'] ?? 0) ?>"
-                                                data-name="<?= esc($name) ?>"
-                                                data-uom="<?= esc($uom) ?>"
-                                                data-price="<?= esc((string) $price) ?>"
+                                                data-code="<?= esc($code, 'attr') ?>"
+                                                data-name="<?= esc($name, 'attr') ?>"
+                                                data-uom="<?= esc($uom, 'attr') ?>"
+                                                data-price="<?= esc((string) $price, 'attr') ?>"
                                             >
-                                                <?= esc($code . ' - ' . $name) ?>
+                                                <?= esc(trim($code . ' - ' . $name, ' -')) ?>
                                             </option>
                                         <?php endforeach ?>
                                     </select>
@@ -152,6 +171,46 @@ document.addEventListener('DOMContentLoaded', function () {
         return number(value).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
 
+    function splitLabel(text) {
+        text = (text || '').trim();
+        const separatorIndex = text.indexOf(' - ');
+        return separatorIndex >= 0 ? text.slice(separatorIndex + 3).trim() : text;
+    }
+
+    function renderedSelect2Text(select) {
+        if (!select) return '';
+        const container = select.nextElementSibling;
+        const rendered = container ? container.querySelector('.select2-selection__rendered') : null;
+        return rendered ? rendered.textContent.trim().replace(/^×\s*/, '') : '';
+    }
+
+    function optionName(option, select = null) {
+        if (option && option.dataset && option.dataset.name && option.dataset.name.trim() !== '') return option.dataset.name.trim();
+        if (option && option.textContent && option.textContent.trim() !== '') return splitLabel(option.textContent);
+        return splitLabel(renderedSelect2Text(select));
+    }
+
+    function optionTerms(option) {
+        return option && option.dataset && option.dataset.terms ? option.dataset.terms.trim() : '';
+    }
+
+    function fillCustomerFromSelected(force = false) {
+        const option = customerSelect.options[customerSelect.selectedIndex];
+        const selectedName = optionName(option, customerSelect);
+        const selectedTerms = optionTerms(option);
+        if ((force || customerName.value.trim() === '') && selectedName !== '') customerName.value = selectedName;
+        if ((force || termsCode.value.trim() === '') && selectedTerms !== '') termsCode.value = selectedTerms;
+    }
+
+    function fillItemRow(row, select) {
+        const option = select.options[select.selectedIndex];
+        row.querySelector('.item-id').value = option && option.dataset ? (option.dataset.id || '') : '';
+        row.querySelector('[name="item_name[]"]').value = optionName(option, select) || '';
+        row.querySelector('[name="uom_code[]"]').value = option && option.dataset ? (option.dataset.uom || 'PCS') : 'PCS';
+        row.querySelector('[name="unit_price[]"]').value = option && option.dataset ? (option.dataset.price || '0') : '0';
+        recalc();
+    }
+
     function recalc() {
         let subtotal = 0, discount = 0, tax = 0;
         tbody.querySelectorAll('tr').forEach(function (row) {
@@ -180,14 +239,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function bindRow(row) {
         row.querySelectorAll('.calc').forEach(input => input.addEventListener('input', recalc));
-        row.querySelector('.item-select').addEventListener('change', function () {
-            const option = this.options[this.selectedIndex];
-            row.querySelector('.item-id').value = option?.dataset.id || '';
-            row.querySelector('[name="item_name[]"]').value = option?.dataset.name || '';
-            row.querySelector('[name="uom_code[]"]').value = option?.dataset.uom || 'PCS';
-            row.querySelector('[name="unit_price[]"]').value = option?.dataset.price || '0';
-            recalc();
-        });
+        const select = row.querySelector('.item-select');
+        select.addEventListener('change', function () { fillItemRow(row, this); });
         row.querySelector('.remove-line').addEventListener('click', function () {
             if (tbody.querySelectorAll('tr').length > 1) {
                 row.remove();
@@ -215,15 +268,20 @@ document.addEventListener('DOMContentLoaded', function () {
         recalc();
     });
 
-    customerSelect.addEventListener('change', function () {
-        const option = customerSelect.options[customerSelect.selectedIndex];
-        if (option && option.dataset.name) {
-            customerName.value = option.dataset.name;
-            termsCode.value = option.dataset.terms || '';
-        }
-    });
-
+    customerSelect.addEventListener('change', function () { fillCustomerFromSelected(true); });
     tbody.querySelectorAll('tr').forEach(bindRow);
+
+    if (window.jQuery) {
+        window.jQuery(document).on('change select2:select', '#customerSelect', function () {
+            setTimeout(function () { fillCustomerFromSelected(true); }, 0);
+        });
+        window.jQuery(document).on('change select2:select', '.item-select', function () {
+            const row = this.closest('tr');
+            if (row) setTimeout(() => fillItemRow(row, this), 0);
+        });
+    }
+
+    fillCustomerFromSelected(false);
     recalc();
 });
 </script>
