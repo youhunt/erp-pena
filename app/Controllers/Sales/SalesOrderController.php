@@ -72,8 +72,8 @@ class SalesOrderController extends BaseController
 
         $customerId = (int) ($this->request->getPost('customer_id') ?: 0);
         $customer = $customerId > 0 ? Database::connect()->table('customers')->where('id', $customerId)->get()->getRowArray() : null;
-        $customerCode = $customer['customer'] ?? $customer['code'] ?? null;
-        $customerName = $customer['customern'] ?? $customer['name'] ?? trim((string) $this->request->getPost('customer_name'));
+        $customerCode = $customer['customer_code'] ?? $customer['customer'] ?? $customer['code'] ?? null;
+        $customerName = $customer['customer_name'] ?? $customer['customern'] ?? $customer['name'] ?? trim((string) $this->request->getPost('customer_name'));
 
         try {
             $soDate = (string) $this->request->getPost('so_date');
@@ -136,8 +136,13 @@ class SalesOrderController extends BaseController
 
     public function cancel(int $id)
     {
-        $reason = trim((string) $this->request->getPost('cancel_reason'));
         try {
+            if ((string) $this->request->getPost('action') === 'reopen') {
+                (new SalesOrderService())->reopen($id, auth()->id());
+                return redirect()->to('/sales/orders/' . $id)->with('message', 'SO reopened as draft.');
+            }
+
+            $reason = trim((string) $this->request->getPost('cancel_reason'));
             (new SalesOrderService())->cancel($id, $reason, auth()->id());
         } catch (RuntimeException $exception) {
             return redirect()->back()->with('error', $exception->getMessage());
