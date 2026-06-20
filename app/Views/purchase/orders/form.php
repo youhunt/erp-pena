@@ -256,22 +256,39 @@ document.addEventListener('DOMContentLoaded', function () {
     function money(value) { return number(value).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
     function header(name) { const el = document.querySelector('[name="' + name + '"]'); return el ? number(el.value) : 0; }
     function lineInput(row, name) { const el = row.querySelector('[name="' + name + '[]"]'); return el ? number(el.value) : 0; }
-    function optionName(option) {
-        if (!option) return '';
-        if (option.dataset && option.dataset.name) return option.dataset.name.trim();
-        const text = (option.textContent || '').trim();
+    function splitLabel(text) {
+        text = (text || '').trim();
         const separatorIndex = text.indexOf(' - ');
-        return separatorIndex >= 0 ? text.slice(separatorIndex + 3).trim() : '';
+        return separatorIndex >= 0 ? text.slice(separatorIndex + 3).trim() : text;
+    }
+    function renderedSelect2Text(select) {
+        if (!select) return '';
+        const container = select.nextElementSibling;
+        const rendered = container ? container.querySelector('.select2-selection__rendered') : null;
+        return rendered ? rendered.textContent.trim().replace(/^×\s*/, '') : '';
+    }
+    function optionName(option, select = null) {
+        if (option && option.dataset && option.dataset.name && option.dataset.name.trim() !== '') return option.dataset.name.trim();
+        if (option && option.textContent && option.textContent.trim() !== '') return splitLabel(option.textContent);
+        return splitLabel(renderedSelect2Text(select));
     }
     function optionTerms(option) {
         return option && option.dataset && option.dataset.terms ? option.dataset.terms.trim() : '';
     }
     function fillSupplierFromSelected(force = false) {
         const option = supplierSelect.options[supplierSelect.selectedIndex];
-        const selectedName = optionName(option);
+        const selectedName = optionName(option, supplierSelect);
         const selectedTerms = optionTerms(option);
         if ((force || supplierName.value.trim() === '') && selectedName !== '') supplierName.value = selectedName;
         if ((force || termsCode.value.trim() === '') && selectedTerms !== '') termsCode.value = selectedTerms;
+    }
+    function fillItemRow(row, select) {
+        const option = select.options[select.selectedIndex];
+        row.querySelector('.item-id').value = option && option.dataset ? (option.dataset.id || '') : '';
+        row.querySelector('[name="item_name[]"]').value = optionName(option, select) || '';
+        row.querySelector('[name="uom_code[]"]').value = option && option.dataset ? (option.dataset.uom || 'PCS') : 'PCS';
+        row.querySelector('[name="unit_price[]"]').value = option && option.dataset ? (option.dataset.price || '0') : '0';
+        recalc();
     }
     function recalc() {
         let subtotal = 0, lineDiscount = 0, lineVat = 0, lineWht = 0;
@@ -308,14 +325,8 @@ document.addEventListener('DOMContentLoaded', function () {
     function renumberLines() { tbody.querySelectorAll('tr').forEach(function (row, index) { row.querySelector('.line-number').value = index + 1; }); }
     function bindRow(row) {
         row.querySelectorAll('.calc').forEach(input => input.addEventListener('input', recalc));
-        row.querySelector('.item-select').addEventListener('change', function () {
-            const option = this.options[this.selectedIndex];
-            row.querySelector('.item-id').value = option?.dataset.id || '';
-            row.querySelector('[name="item_name[]"]').value = optionName(option) || '';
-            row.querySelector('[name="uom_code[]"]').value = option?.dataset.uom || 'PCS';
-            row.querySelector('[name="unit_price[]"]').value = option?.dataset.price || '0';
-            recalc();
-        });
+        const select = row.querySelector('.item-select');
+        select.addEventListener('change', function () { fillItemRow(row, this); });
         row.querySelector('.remove-line').addEventListener('click', function () {
             if (tbody.querySelectorAll('tr').length > 1) { row.remove(); renumberLines(); recalc(); }
         });
@@ -334,6 +345,15 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     supplierSelect.addEventListener('change', function () { fillSupplierFromSelected(true); });
     tbody.querySelectorAll('tr').forEach(bindRow);
+    if (window.jQuery) {
+        window.jQuery(document).on('change select2:select', '#supplierSelect', function () {
+            setTimeout(function () { fillSupplierFromSelected(true); }, 0);
+        });
+        window.jQuery(document).on('change select2:select', '.item-select', function () {
+            const row = this.closest('tr');
+            if (row) setTimeout(() => fillItemRow(row, this), 0);
+        });
+    }
     fillSupplierFromSelected(false);
     recalc();
 });
