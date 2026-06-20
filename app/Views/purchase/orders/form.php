@@ -19,6 +19,47 @@ $lineValue = static function (array $line, int $index, string $field, mixed $def
 
 $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
 ?>
+<style>
+    .po-lines-scroll {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: visible;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid #eff2f7;
+        border-radius: .25rem;
+    }
+    .po-lines-table {
+        min-width: 1780px;
+        width: 1780px;
+        table-layout: fixed;
+        margin-bottom: 0;
+    }
+    .po-lines-table th,
+    .po-lines-table td {
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+    .po-lines-table .form-control,
+    .po-lines-table .form-select,
+    .po-lines-table .select2-container {
+        width: 100% !important;
+        min-width: 0;
+    }
+    .po-col-line { width: 80px; }
+    .po-col-item-code { width: 210px; }
+    .po-col-item-name { width: 190px; }
+    .po-col-description { width: 240px; }
+    .po-col-qty { width: 100px; }
+    .po-col-uom { width: 90px; }
+    .po-col-price { width: 120px; }
+    .po-col-disc-percent { width: 110px; }
+    .po-col-disc-amount { width: 120px; }
+    .po-col-vat { width: 110px; }
+    .po-col-wht { width: 110px; }
+    .po-col-total { width: 130px; }
+    .po-col-action { width: 60px; }
+</style>
 <form method="post" action="<?= esc($action, 'attr') ?>">
     <?= csrf_field() ?>
 
@@ -100,18 +141,36 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
     <div class="card">
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4 class="card-title mb-0">Line Items</h4>
+                <div>
+                    <h4 class="card-title mb-0">Line Items</h4>
+                    <small class="text-muted">Geser tabel ke kanan/kiri untuk melihat semua kolom line.</small>
+                </div>
                 <button type="button" class="btn btn-sm btn-outline-primary" id="addLineBtn"><i class="bx bx-plus me-1"></i> Add Line</button>
             </div>
 
-            <div class="table-responsive po-lines-scroll">
-                <table class="table table-nowrap align-middle" id="poLinesTable">
+            <div class="po-lines-scroll">
+                <table class="table table-bordered table-sm align-middle po-lines-table" id="poLinesTable">
+                    <colgroup>
+                        <col class="po-col-line">
+                        <col class="po-col-item-code">
+                        <col class="po-col-item-name">
+                        <col class="po-col-description">
+                        <col class="po-col-qty">
+                        <col class="po-col-uom">
+                        <col class="po-col-price">
+                        <col class="po-col-disc-percent">
+                        <col class="po-col-disc-amount">
+                        <col class="po-col-vat">
+                        <col class="po-col-wht">
+                        <col class="po-col-total">
+                        <col class="po-col-action">
+                    </colgroup>
                     <thead class="table-light">
                         <tr>
                             <th>Line</th>
-                            <th style="min-width: 180px;">Item Code</th>
-                            <th style="min-width: 160px;">Item Name</th>
-                            <th style="min-width: 160px;">Description</th>
+                            <th>Item Code</th>
+                            <th>Item Name</th>
+                            <th>Description</th>
                             <th>Qty</th>
                             <th>UoM</th>
                             <th>Price</th>
@@ -126,11 +185,11 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
                     <tbody>
                         <?php foreach ($lineRows as $i => $line): ?>
                             <tr>
-                                <td><input type="number" name="po_line[]" class="form-control text-end line-number" min="1" step="1" value="<?= esc($lineValue($line, $i, 'po_line', $line['line_no'] ?? ($i + 1))) ?>" required></td>
+                                <td><input type="number" name="po_line[]" class="form-control form-control-sm text-end line-number" min="1" step="1" value="<?= esc($lineValue($line, $i, 'po_line', $line['line_no'] ?? ($i + 1))) ?>" required></td>
                                 <td>
                                     <input type="hidden" name="item_id[]" class="item-id" value="<?= esc($lineValue($line, $i, 'item_id')) ?>">
-                                    <select name="item_code[]" class="form-select item-select">
-                                        <option value="">Manual item</option>
+                                    <select name="item_code[]" class="form-select form-select-sm item-select">
+                                        <option value="">Pilih / cari data</option>
                                         <?php foreach ($items as $item): ?>
                                             <?php
                                             $code = (string) ($item['item_code'] ?? $item['code'] ?? '');
@@ -143,17 +202,17 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
                                         <?php endforeach ?>
                                     </select>
                                 </td>
-                                <td><input type="text" name="item_name[]" class="form-control item-name" value="<?= esc($lineValue($line, $i, 'item_name')) ?>"></td>
-                                <td><input type="text" name="description[]" class="form-control" value="<?= esc($lineValue($line, $i, 'description')) ?>"></td>
-                                <td><input type="number" step="0.0001" name="qty[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'qty', $line['qty_ordered'] ?? ($i === 0 ? '1' : ''))) ?>"></td>
-                                <td><input type="text" name="uom_code[]" class="form-control" value="<?= esc($lineValue($line, $i, 'uom_code', 'PCS')) ?>"></td>
-                                <td><input type="number" step="0.01" name="unit_price[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'unit_price', '0')) ?>"></td>
-                                <td><input type="number" step="0.0001" name="line_discount_percent[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'discount_percent', '0')) ?>"></td>
-                                <td><input type="number" step="0.01" name="line_discount_amount[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'discount_amount', '0')) ?>"></td>
-                                <td><input type="number" step="0.01" name="line_vat_amount[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'vat_amount', '0')) ?>"></td>
-                                <td><input type="number" step="0.01" name="line_wht_amount[]" class="form-control calc text-end" value="<?= esc($lineValue($line, $i, 'wht_amount', '0')) ?>"></td>
+                                <td><input type="text" name="item_name[]" class="form-control form-control-sm item-name" value="<?= esc($lineValue($line, $i, 'item_name')) ?>"></td>
+                                <td><input type="text" name="description[]" class="form-control form-control-sm" value="<?= esc($lineValue($line, $i, 'description')) ?>"></td>
+                                <td><input type="number" step="0.0001" name="qty[]" class="form-control form-control-sm calc text-end" value="<?= esc($lineValue($line, $i, 'qty', $line['qty_ordered'] ?? ($i === 0 ? '1' : ''))) ?>"></td>
+                                <td><input type="text" name="uom_code[]" class="form-control form-control-sm" value="<?= esc($lineValue($line, $i, 'uom_code', 'PCS')) ?>"></td>
+                                <td><input type="number" step="0.01" name="unit_price[]" class="form-control form-control-sm calc text-end" value="<?= esc($lineValue($line, $i, 'unit_price', '0')) ?>"></td>
+                                <td><input type="number" step="0.0001" name="line_discount_percent[]" class="form-control form-control-sm calc text-end" value="<?= esc($lineValue($line, $i, 'discount_percent', '0')) ?>"></td>
+                                <td><input type="number" step="0.01" name="line_discount_amount[]" class="form-control form-control-sm calc text-end" value="<?= esc($lineValue($line, $i, 'discount_amount', '0')) ?>"></td>
+                                <td><input type="number" step="0.01" name="line_vat_amount[]" class="form-control form-control-sm calc text-end" value="<?= esc($lineValue($line, $i, 'vat_amount', '0')) ?>"></td>
+                                <td><input type="number" step="0.01" name="line_wht_amount[]" class="form-control form-control-sm calc text-end" value="<?= esc($lineValue($line, $i, 'wht_amount', '0')) ?>"></td>
                                 <td class="text-end fw-semibold line-total">0.00</td>
-                                <td><button type="button" class="btn btn-sm btn-outline-danger remove-line"><i class="bx bx-trash"></i></button></td>
+                                <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger remove-line"><i class="bx bx-trash"></i></button></td>
                             </tr>
                         <?php endforeach ?>
                     </tbody>
