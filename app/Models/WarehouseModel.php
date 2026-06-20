@@ -18,24 +18,42 @@ class WarehouseModel extends Model
     protected function normalizeMaster(array $payload): array
     {
         $data = $payload['data'] ?? [];
-
         foreach ($data as $field => $value) {
             if (is_string($value)) {
                 $data[$field] = trim($value);
             }
         }
-
         if (! empty($data['code'])) {
             $data['code'] = strtoupper((string) $data['code']);
-        }
-        if (! empty($data['name'])) {
-            $data['name'] = trim((string) $data['name']);
         }
         if (! array_key_exists('is_active', $data)) {
             $data['is_active'] = 1;
         }
-
         $payload['data'] = $data;
+        return $this->checkDuplicateCode($payload);
+    }
+
+    private function checkDuplicateCode(array $payload): array
+    {
+        $data = $payload['data'] ?? [];
+        $code = trim((string) ($data['code'] ?? ''));
+        if ($code === '' || empty($data['company_id'])) {
+            return $payload;
+        }
+        $builder = db_connect()->table($this->table)->where('company_id', (int) $data['company_id'])->where('code', $code)->where('deleted_at', null);
+        if (array_key_exists('site_id', $data)) {
+            empty($data['site_id']) ? $builder->where('site_id', null) : $builder->where('site_id', (int) $data['site_id']);
+        }
+        $id = $payload['id'] ?? null;
+        if (is_array($id)) {
+            $id = reset($id);
+        }
+        if ((int) $id > 0) {
+            $builder->where('id !=', (int) $id);
+        }
+        if ($builder->countAllResults() > 0) {
+            throw new \RuntimeException('Duplicate warehouse code: ' . $code);
+        }
         return $payload;
     }
 }
