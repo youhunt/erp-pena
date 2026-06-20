@@ -2,6 +2,7 @@
 
 namespace App\Services\Purchase;
 
+use App\Models\GlEntryLineModel;
 use App\Models\InventoryStockMovementModel;
 use App\Models\PurchaseInvoiceModel;
 use App\Models\PurchaseOrderLineModel;
@@ -251,11 +252,14 @@ class PurchaseReceiptService
                 ]);
             }
 
+            $reversalGlEntryId = $this->postGlReversal($receipt, $userId);
+
             $receiptModel->update($receiptId, [
                 'status' => 'reversed',
                 'reversed_at' => $now,
                 'reversed_by' => $userId,
                 'reversal_reason' => $reason,
+                'reversal_gl_entry_id' => $reversalGlEntryId,
             ]);
 
             $this->recalculatePoReceiptQuantities((int) ($receipt['purchase_order_id'] ?? 0), $userId);
@@ -273,9 +277,9 @@ class PurchaseReceiptService
                 'table_name' => 'purchase_receipts',
                 'record_id' => $receiptId,
                 'record_code' => $receipt['receipt_no'] ?? null,
-                'description' => 'Purchase receipt reversed and stock decreased.',
+                'description' => 'Purchase receipt reversed, stock decreased, and reversal GL posted when original GL exists.',
                 'old_values' => ['status' => 'posted'],
-                'new_values' => ['status' => 'reversed', 'reason' => $reason],
+                'new_values' => ['status' => 'reversed', 'reason' => $reason, 'reversal_gl_entry_id' => $reversalGlEntryId],
             ]);
         } catch (Throwable $e) {
             $db->transRollback();
@@ -317,6 +321,44 @@ class PurchaseReceiptService
                 'credit' => $inventoryValue,
             ],
         ], $userId);
+    }
+
+    private function postGlReversal(array $receipt, ?int $userId): ?int
+    {
+        if (empty($receipt['gl_entry_id'])) {
+            return null;
+        }
+
+        $glLines = (new GlEntryLineModel())
+            ->where('gl_entry_id', (int) $receipt['gl_entry_id'])
+            ->orderBy('line_no', 'ASC')
+            ->findAll();
+        if ($glLines === []) {
+            return null;
+        }
+
+        $lines = [];
+        foreach ($glLines as $line) {
+            $lines[] = [
+                'account_no' => $line['account_no'],
+                'description' => 'Reverse receipt ' . ($receipt['receipt_no'] ?? '') . ' - ' . ($line['description'] ?? ''),
+                'debit' => (float) ($line['credit'] ?? 0),
+                'credit' => (float) ($line['debit'] ?? 0),
+            ];
+        }
+
+        return (new GeneralLedgerService())->post([
+            'company_id' => (int) $receipt['company_id'],
+            'site_id' => $receipt['site_id'] ?? null,
+            'journal_no' => 'GL-REV-' . ($receipt['receipt_no'] ?? $receipt['id']),
+            'journal_date' => $receipt['receipt_date'] ?? date('Y-m-d'),
+            'source_module' => 'purchase',
+            'source_type' => 'purchase_receipt_reversal',
+            'source_id' => $receipt['id'],
+            'source_no' => $receipt['receipt_no'] ?? null,
+            'description' => 'Reverse purchase receipt ' . ($receipt['receipt_no'] ?? ''),
+            'currency_code' => $receipt['currency_code'] ?? 'IDR',
+        ], $lines, $userId);
     }
 
     private function assertPeriodOpen(string $module, array $document, string $dateField): void
