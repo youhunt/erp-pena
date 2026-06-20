@@ -3,16 +3,16 @@
 <?= $this->section('content') ?>
 <div class="row">
     <div class="col-md-3">
-        <div class="card mini-stats-wid"><div class="card-body"><p class="text-muted mb-2">Opening Qty</p><h4 class="mb-0"><?= esc(number_format((float) $summary['opening_qty'], 4)) ?></h4></div></div>
+        <div class="card mini-stats-wid"><div class="card-body"><p class="text-muted mb-2">Opening Qty</p><h4 class="mb-0"><?= esc(number_format((float) $summary['opening_qty'], 4)) ?></h4><small class="text-muted">Value <?= esc(number_format((float) $summary['opening_value'], 2)) ?></small></div></div>
     </div>
     <div class="col-md-3">
-        <div class="card mini-stats-wid"><div class="card-body"><p class="text-muted mb-2">Qty In</p><h4 class="mb-0 text-success"><?= esc(number_format((float) $summary['qty_in'], 4)) ?></h4></div></div>
+        <div class="card mini-stats-wid"><div class="card-body"><p class="text-muted mb-2">Qty In</p><h4 class="mb-0 text-success"><?= esc(number_format((float) $summary['qty_in'], 4)) ?></h4><small class="text-muted">Value In <?= esc(number_format((float) $summary['value_in'], 2)) ?></small></div></div>
     </div>
     <div class="col-md-3">
-        <div class="card mini-stats-wid"><div class="card-body"><p class="text-muted mb-2">Qty Out</p><h4 class="mb-0 text-danger"><?= esc(number_format((float) $summary['qty_out'], 4)) ?></h4></div></div>
+        <div class="card mini-stats-wid"><div class="card-body"><p class="text-muted mb-2">Qty Out</p><h4 class="mb-0 text-danger"><?= esc(number_format((float) $summary['qty_out'], 4)) ?></h4><small class="text-muted">Value Out <?= esc(number_format((float) $summary['value_out'], 2)) ?></small></div></div>
     </div>
     <div class="col-md-3">
-        <div class="card mini-stats-wid"><div class="card-body"><p class="text-muted mb-2">Ending Qty</p><h4 class="mb-0"><?= esc(number_format((float) $summary['ending_qty'], 4)) ?></h4></div></div>
+        <div class="card mini-stats-wid"><div class="card-body"><p class="text-muted mb-2">Ending Qty</p><h4 class="mb-0"><?= esc(number_format((float) $summary['ending_qty'], 4)) ?></h4><small class="text-muted">Ending Value <?= esc(number_format((float) $summary['ending_value'], 2)) ?></small></div></div>
     </div>
 </div>
 
@@ -21,10 +21,11 @@
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
             <div>
                 <h4 class="card-title mb-1">Stock Card</h4>
-                <p class="text-muted mb-0">Chronological stock movement per item, warehouse, and location.</p>
+                <p class="text-muted mb-0">Audit trail chronological stock movement per item, batch, warehouse, and location.</p>
             </div>
             <div class="d-flex gap-2">
                 <a href="<?= site_url('inventory/stock-balances') ?>" class="btn btn-outline-primary"><i class="bx bx-layer me-1"></i> Stock Balance</a>
+                <a href="<?= site_url('inventory/stock-adjustment') ?>" class="btn btn-outline-primary"><i class="bx bx-edit-alt me-1"></i> Adjustment</a>
                 <a href="<?= site_url('inventory/transfers') ?>" class="btn btn-outline-primary"><i class="bx bx-transfer me-1"></i> Transfer</a>
             </div>
         </div>
@@ -94,8 +95,10 @@
                         <th>Reference</th>
                         <th class="text-end">Qty In</th>
                         <th class="text-end">Qty Out</th>
-                        <th class="text-end">Balance</th>
-                        <th class="text-end">Value</th>
+                        <th class="text-end">Balance Qty</th>
+                        <th class="text-end">Value In</th>
+                        <th class="text-end">Value Out</th>
+                        <th class="text-end">Balance Value</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -105,6 +108,8 @@
                         <td class="text-end">-</td>
                         <td class="text-end">-</td>
                         <td class="text-end fw-semibold"><?= esc(number_format((float) $opening['qty'], 4)) ?></td>
+                        <td class="text-end">-</td>
+                        <td class="text-end">-</td>
                         <td class="text-end fw-semibold"><?= esc(number_format((float) $opening['stock_value'], 2)) ?></td>
                     </tr>
 
@@ -118,20 +123,22 @@
                             <td><?= esc(($movement['batch_no'] ?? '') !== '' ? $movement['batch_no'] : '-') ?></td>
                             <td><?= esc($movement['warehouse_code'] ?? '-') ?></td>
                             <td><?= esc($movement['location_code'] ?? '-') ?></td>
-                            <td><?= esc($movement['movement_type'] ?? '-') ?></td>
+                            <td><span class="badge bg-light text-dark"><?= esc($movement['movement_type'] ?? '-') ?></span></td>
                             <td>
-                                <div><?= esc($movement['reference_no'] ?? '-') ?></div>
+                                <div class="fw-semibold"><?= esc($movement['reference_no'] ?? '-') ?></div>
                                 <div class="text-muted small"><?= esc($movement['reference_type'] ?? '') ?></div>
                             </td>
                             <td class="text-end text-success"><?= esc(number_format((float) $movement['qty_in'], 4)) ?></td>
                             <td class="text-end text-danger"><?= esc(number_format((float) $movement['qty_out'], 4)) ?></td>
                             <td class="text-end fw-semibold"><?= esc(number_format((float) $movement['running_qty'], 4)) ?></td>
-                            <td class="text-end"><?= esc(number_format((float) $movement['running_value'], 2)) ?></td>
+                            <td class="text-end text-success"><?= esc(number_format((float) ($movement['value_in'] ?? 0), 2)) ?></td>
+                            <td class="text-end text-danger"><?= esc(number_format((float) ($movement['value_out'] ?? 0), 2)) ?></td>
+                            <td class="text-end fw-semibold"><?= esc(number_format((float) $movement['running_value'], 2)) ?></td>
                         </tr>
                     <?php endforeach ?>
 
                     <?php if ($movements === []): ?>
-                        <tr><td colspan="11" class="text-center text-muted py-4">No stock movement found for selected filter.</td></tr>
+                        <tr><td colspan="13" class="text-center text-muted py-4">No stock movement found for selected filter.</td></tr>
                     <?php endif ?>
                 </tbody>
             </table>
