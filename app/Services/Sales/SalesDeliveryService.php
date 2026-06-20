@@ -2,6 +2,7 @@
 
 namespace App\Services\Sales;
 
+use App\Models\GlEntryLineModel;
 use App\Models\InventoryStockMovementModel;
 use App\Models\SalesDeliveryLineModel;
 use App\Models\SalesDeliveryModel;
@@ -267,11 +268,14 @@ class SalesDeliveryService
                 ]);
             }
 
+            $reversalGlEntryId = $this->postGlReversal($delivery, $userId);
+
             $deliveryModel->update($deliveryId, [
                 'status' => 'reversed',
                 'reversed_at' => $now,
                 'reversed_by' => $userId,
                 'reversal_reason' => $reason,
+                'reversal_gl_entry_id' => $reversalGlEntryId,
                 'updated_by' => $userId,
             ]);
 
@@ -295,9 +299,9 @@ class SalesDeliveryService
             'table_name' => 'sales_deliveries',
             'record_id' => $deliveryId,
             'record_code' => $delivery['delivery_no'] ?? null,
-            'description' => 'Sales delivery reversed and stock increased.',
+            'description' => 'Sales delivery reversed, stock returned, and reversal GL posted when original GL exists.',
             'old_values' => ['status' => 'posted'],
-            'new_values' => ['status' => 'reversed', 'reason' => $reason],
+            'new_values' => ['status' => 'reversed', 'reason' => $reason, 'reversal_gl_entry_id' => $reversalGlEntryId],
         ]);
     }
 
@@ -335,6 +339,44 @@ class SalesDeliveryService
                 'credit' => $cogsAmount,
             ],
         ], $userId);
+    }
+
+    private function postGlReversal(array $delivery, ?int $userId): ?int
+    {
+        if (empty($delivery['gl_entry_id'])) {
+            return null;
+        }
+
+        $glLines = (new GlEntryLineModel())
+            ->where('gl_entry_id', (int) $delivery['gl_entry_id'])
+            ->orderBy('line_no', 'ASC')
+            ->findAll();
+        if ($glLines === []) {
+            return null;
+        }
+
+        $lines = [];
+        foreach ($glLines as $line) {
+            $lines[] = [
+                'account_no' => $line['account_no'],
+                'description' => 'Reverse delivery ' . ($delivery['delivery_no'] ?? '') . ' - ' . ($line['description'] ?? ''),
+                'debit' => (float) ($line['credit'] ?? 0),
+                'credit' => (float) ($line['debit'] ?? 0),
+            ];
+        }
+
+        return (new GeneralLedgerService())->post([
+            'company_id' => (int) $delivery['company_id'],
+            'site_id' => $delivery['site_id'] ?? null,
+            'journal_no' => 'GL-REV-' . ($delivery['delivery_no'] ?? $delivery['id']),
+            'journal_date' => $delivery['delivery_date'] ?? date('Y-m-d'),
+            'source_module' => 'sales',
+            'source_type' => 'sales_delivery_reversal',
+            'source_id' => $delivery['id'],
+            'source_no' => $delivery['delivery_no'] ?? null,
+            'description' => 'Reverse sales delivery ' . ($delivery['delivery_no'] ?? ''),
+            'currency_code' => $delivery['currency_code'] ?? 'IDR',
+        ], $lines, $userId);
     }
 
     private function assertPeriodOpen(string $module, array $document, string $dateField): void
