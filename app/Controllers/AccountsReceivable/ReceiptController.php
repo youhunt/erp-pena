@@ -7,8 +7,10 @@ use App\Models\ArReceivableModel;
 use App\Models\ArReceiptModel;
 use App\Models\CashBankAccountModel;
 use App\Services\Finance\SettlementService;
+use App\Services\Support\DocumentNumberService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
+use DateTimeImmutable;
 use RuntimeException;
 
 class ReceiptController extends BaseController
@@ -32,11 +34,15 @@ class ReceiptController extends BaseController
         if ($receivable === null) {
             throw PageNotFoundException::forPageNotFound();
         }
+        if ((float) ($receivable['outstanding_amount'] ?? 0) <= 0) {
+            return view('errors/html/error_404', ['message' => 'A/R invoice has no outstanding amount to receive.']);
+        }
 
         return view('accounts_receivable/receipts/form', [
             'title' => 'Post A/R Receipt',
             'receivable' => $receivable,
             'cashBankAccounts' => $this->cashBankAccounts($tenant),
+            'suggestedReceiptNo' => $this->previewDocumentNumber('ARR'),
         ]);
     }
 
@@ -49,9 +55,9 @@ class ReceiptController extends BaseController
         }
 
         if (! $this->validate([
-            'receipt_no' => 'required|max_length[60]',
+            'receipt_no' => 'permit_empty|max_length[60]',
             'receipt_date' => 'required|valid_date[Y-m-d]',
-            'receipt_amount' => 'required|numeric|greater_than[0]',
+            'receipt_amount' => 'required',
             'receipt_method' => 'required|max_length[40]',
             'cash_bank_code' => 'required|max_length[80]',
         ])) {
@@ -59,13 +65,19 @@ class ReceiptController extends BaseController
         }
 
         try {
+            $receiptDate = (string) $this->request->getPost('receipt_date');
+            $receiptNo = trim((string) $this->request->getPost('receipt_no'));
+            if ($receiptNo === '') {
+                $receiptNo = $this->issueDocumentNumber('ARR', $receiptDate, (int) $receivable['company_id'], $receivable['site_id'] ?? null);
+            }
+
             $receiptId = (new SettlementService())->postArReceipt([
                 'company_id' => $receivable['company_id'],
                 'site_id' => $receivable['site_id'] ?? null,
                 'ar_receivable_id' => $receivable['id'],
-                'receipt_no' => trim((string) $this->request->getPost('receipt_no')),
-                'receipt_date' => (string) $this->request->getPost('receipt_date'),
-                'receipt_amount' => (float) $this->request->getPost('receipt_amount'),
+                'receipt_no' => $receiptNo,
+                'receipt_date' => $receiptDate,
+                'receipt_amount' => $this->toNumber($this->request->getPost('receipt_amount')),
                 'receipt_method' => trim((string) $this->request->getPost('receipt_method')),
                 'cash_bank_code' => trim((string) $this->request->getPost('cash_bank_code')),
                 'reference_no' => trim((string) $this->request->getPost('reference_no')),
@@ -75,7 +87,7 @@ class ReceiptController extends BaseController
             return redirect()->back()->withInput()->with('error', $e->getMessage());
         }
 
-        return redirect()->to('/ar/receipts/' . $receiptId)->with('message', 'A/R receipt posted.');
+        return redirect()->to('/ar/receipts/' . $receiptId)->with('message', 'A/R receipt posted and invoice balance updated.');
     }
 
     public function show(int $id): string
@@ -115,7 +127,7 @@ class ReceiptController extends BaseController
             return redirect()->back()->with('error', $e->getMessage());
         }
 
-        return redirect()->to('/ar/receipts/' . $id)->with('message', 'A/R receipt cancelled.');
+        return redirect()->to('/ar/receipts/' . $id)->with('message', 'A/R receipt cancelled and invoice balance reopened.');
     }
 
     private function receivableFromInvoice(TenantContext $tenant, int $invoiceId): ?array
@@ -152,5 +164,45 @@ class ReceiptController extends BaseController
             ->orderBy('account_type', 'ASC')
             ->orderBy('cash_bank_code', 'ASC')
             ->findAll();
+    }
+
+    private function previewDocumentNumber(string $transactionCode): string
+    {
+        try {
+            return (new DocumentNumberService())->preview($transactionCode, new DateTimeImmutable(), [
+                'prefix' => $transactionCode,
+                'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+                'reset_period' => 'monthly',
+                'padding' => 5,
+            ]);
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    private function issueDocumentNumber(string $transactionCode, string $date, int $companyId, mixed $siteId): string
+    {
+        return (new DocumentNumberService())->next($transactionCode, new DateTimeImmutable($date), [
+            'company_id' => $companyId,
+            'site_id' => ! empty($siteId) ? (int) $siteId : 0,
+            'prefix' => $transactionCode,
+            'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
+            'reset_period' => 'monthly',
+            'padding' => 5,
+        ]);
+    }
+
+    private function toNumber(mixed $value): float
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0.0;
+        }
+        if (str_contains($value, ',') && ! str_contains($value, '.')) {
+            $value = str_replace(',', '.', $value);
+        } else {
+            $value = str_replace(',', '', $value);
+        }
+        return (float) $value;
     }
 }
