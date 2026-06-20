@@ -13,10 +13,8 @@ class ItemModel extends Model
     protected $useTimestamps = true;
     protected $beforeInsert = ['normalizeMaster'];
     protected $beforeUpdate = ['normalizeMaster'];
-
     protected $allowedFields = [
-        'company_id', 'site_id', 'company', 'site',
-        'code', 'name',
+        'company_id', 'site_id', 'company', 'site', 'code', 'name',
         'item_code', 'item_name', 'item_coded', 'item_named',
         'shelf_life', 'stockuom', 'purchaseuom', 'sellinguom', 'stockwhs',
         'item_price', 'purchasep', 'sellingprice', 'vat',
@@ -32,7 +30,6 @@ class ItemModel extends Model
     protected function normalizeMaster(array $payload): array
     {
         $data = $payload['data'] ?? [];
-
         foreach ($data as $field => $value) {
             if (is_string($value)) {
                 $data[$field] = trim($value);
@@ -41,13 +38,11 @@ class ItemModel extends Model
 
         $code = $this->firstNonEmpty($data, ['item_code', 'code', 'item_coded']);
         $name = $this->firstNonEmpty($data, ['item_name', 'name', 'item_named']);
-
         if ($code !== '') {
             $code = strtoupper($code);
             $data['item_code'] = $data['item_code'] ?? $code;
             $data['code'] = $data['code'] ?? $code;
         }
-
         if ($name !== '') {
             $data['item_name'] = $data['item_name'] ?? $name;
             $data['name'] = $data['name'] ?? $name;
@@ -64,13 +59,11 @@ class ItemModel extends Model
         if (empty($data['sellinguom']) && ! empty($data['stockuom'])) {
             $data['sellinguom'] = $data['stockuom'];
         }
-
         foreach (['item_price', 'purchasep', 'sellingprice'] as $amountField) {
             if (array_key_exists($amountField, $data)) {
                 $data[$amountField] = $this->toNumber($data[$amountField]);
             }
         }
-
         if (! array_key_exists('item_price', $data) && array_key_exists('sellingprice', $data)) {
             $data['item_price'] = $data['sellingprice'];
         }
@@ -80,7 +73,6 @@ class ItemModel extends Model
         if (! array_key_exists('purchasep', $data) && array_key_exists('item_price', $data)) {
             $data['purchasep'] = $data['item_price'];
         }
-
         if (array_key_exists('active', $data) && ! array_key_exists('is_active', $data)) {
             $data['is_active'] = (int) (bool) $data['active'];
         }
@@ -90,7 +82,7 @@ class ItemModel extends Model
         }
 
         $payload['data'] = $data;
-        return $payload;
+        return $this->guardDuplicateCode($payload);
     }
 
     private function firstNonEmpty(array $data, array $fields): string
@@ -100,7 +92,6 @@ class ItemModel extends Model
                 return trim((string) $data[$field]);
             }
         }
-
         return '';
     }
 
@@ -110,12 +101,31 @@ class ItemModel extends Model
         if ($value === '') {
             return 0.0;
         }
-        if (str_contains($value, ',') && ! str_contains($value, '.')) {
-            $value = str_replace(',', '.', $value);
-        } else {
-            $value = str_replace(',', '', $value);
-        }
-
+        $value = str_contains($value, ',') && ! str_contains($value, '.') ? str_replace(',', '.', $value) : str_replace(',', '', $value);
         return (float) $value;
+    }
+
+    private function guardDuplicateCode(array $payload): array
+    {
+        $data = $payload['data'] ?? [];
+        $code = trim((string) ($data['code'] ?? ''));
+        if ($code === '' || empty($data['company_id'])) {
+            return $payload;
+        }
+        $builder = db_connect()->table($this->table)->where('company_id', (int) $data['company_id'])->where('code', $code)->where('deleted_at', null);
+        if (array_key_exists('site_id', $data)) {
+            empty($data['site_id']) ? $builder->where('site_id', null) : $builder->where('site_id', (int) $data['site_id']);
+        }
+        $id = $payload['id'] ?? null;
+        if (is_array($id)) {
+            $id = reset($id);
+        }
+        if ((int) $id > 0) {
+            $builder->where('id !=', (int) $id);
+        }
+        if ($builder->countAllResults() > 0) {
+            throw new \RuntimeException('Item code already exists for active company/site: ' . $code);
+        }
+        return $payload;
     }
 }
