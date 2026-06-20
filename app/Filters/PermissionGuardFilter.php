@@ -44,6 +44,10 @@ class PermissionGuardFilter implements FilterInterface
             return 'audit.logs.view';
         }
 
+        if (str_starts_with($path, 'system/')) {
+            return $this->systemPermission($path, $method);
+        }
+
         if ($path === 'admin/roles') {
             return 'users.view';
         }
@@ -69,13 +73,7 @@ class PermissionGuardFilter implements FilterInterface
         }
 
         if (str_starts_with($path, 'inventory/')) {
-            return str_contains($path, 'stock-adjustment')
-                || str_contains($path, 'in-out')
-                || str_contains($path, 'transfers')
-                || str_contains($path, 'stock-opname')
-                || $method !== 'GET'
-                ? 'inventory.movement.post'
-                : 'inventory.stock.view';
+            return $this->inventoryPermission($path, $method);
         }
 
         if (str_starts_with($path, 'production/')) {
@@ -131,6 +129,23 @@ class PermissionGuardFilter implements FilterInterface
         return null;
     }
 
+    private function systemPermission(string $path, string $method): string
+    {
+        if ($path === 'system/development-status') {
+            return 'dashboard.view';
+        }
+
+        if (str_starts_with($path, 'system/data-import') || str_starts_with($path, 'system/excel-transfer')) {
+            if ($method !== 'GET' || str_contains($path, '/import') || str_contains($path, '/commit')) {
+                return 'setup.master.manage';
+            }
+
+            return 'setup.master.view';
+        }
+
+        return 'users.manage';
+    }
+
     private function setupPermission(string $path, string $method): string
     {
         if ($method !== 'GET') {
@@ -148,8 +163,18 @@ class PermissionGuardFilter implements FilterInterface
 
     private function salesPermission(string $path, string $method): string
     {
-        if (str_contains($path, '/approve')) {
+        if (preg_match('~^sales/deliveries/\d+/invoice$~', $path)) {
+            return $method === 'GET' ? 'finance.ar.view' : 'finance.ar.manage';
+        }
+
+        if (preg_match('~^sales/orders/\d+/approve$~', $path)) {
             return 'sales.order.approve';
+        }
+
+        if (preg_match('~^sales/orders/\d+/(submit|reserve|cancel|allocate|deliver)$~', $path)
+            || preg_match('~^sales/allocations/\d+/(cancel|reverse)$~', $path)
+            || preg_match('~^sales/deliveries/\d+/reverse$~', $path)) {
+            return 'sales.order.create';
         }
 
         if ($path === 'sales/orders/import'
@@ -160,7 +185,7 @@ class PermissionGuardFilter implements FilterInterface
             || $path === 'sales/deliveries/import-template'
             || $path === 'sales/orders/new'
             || str_contains($path, '/edit')
-            || preg_match('~^sales/orders/\d+$~', $path) && $method !== 'GET'
+            || (preg_match('~^sales/orders/\d+$~', $path) && $method !== 'GET')
             || ($path === 'sales/orders' && $method !== 'GET')) {
             return 'sales.order.create';
         }
@@ -170,8 +195,17 @@ class PermissionGuardFilter implements FilterInterface
 
     private function purchasePermission(string $path, string $method): string
     {
-        if (str_contains($path, '/approve')) {
+        if (preg_match('~^purchase/receipts/\d+/invoice$~', $path)) {
+            return $method === 'GET' ? 'finance.ap.view' : 'finance.ap.manage';
+        }
+
+        if (preg_match('~^purchase/orders/\d+/approve$~', $path)) {
             return 'purchase.po.approve';
+        }
+
+        if (preg_match('~^purchase/orders/\d+/(submit|close|cancel|receive)$~', $path)
+            || preg_match('~^purchase/receipts/\d+/reverse$~', $path)) {
+            return 'purchase.po.create';
         }
 
         if ($path === 'purchase/orders/import'
@@ -188,6 +222,22 @@ class PermissionGuardFilter implements FilterInterface
         }
 
         return 'purchase.po.view';
+    }
+
+    private function inventoryPermission(string $path, string $method): string
+    {
+        if ($method !== 'GET') {
+            return 'inventory.movement.post';
+        }
+
+        if (str_contains($path, 'stock-adjustment')
+            || str_contains($path, 'in-out')
+            || str_contains($path, 'transfers/new')
+            || str_contains($path, 'stock-opname')) {
+            return 'inventory.movement.post';
+        }
+
+        return 'inventory.stock.view';
     }
 
     private function aiDocumentPermission(string $path, string $method): string
