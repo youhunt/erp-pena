@@ -41,6 +41,7 @@ The current continuation adds:
 - Route permission hardening for transaction URLs and system routes
 - Core master data normalization for customer, supplier, item, warehouse, and location aliases
 - Core master data code guard for customer, supplier, item, warehouse, and location
+- ERP core transaction status guard documentation and UAT checklist
 - Development journey/status documentation and formal core UAT checklist
 
 Skote assets are stored in `resources.zip` and extracted into `public/assets/skote` for the current layout.
@@ -150,6 +151,7 @@ Always back up the database before running SQL scripts.
 - New service/controller code should use `App\Services\Support\TenantScope` for active `company_id` and `site_id` handling.
 - New transactional modules should use `App\Services\Support\DocumentNumberService` for PO, SO, invoice, receipt, payment, and journal numbers.
 - Sidebar visibility is not treated as security; direct URL access must also pass permission checks.
+- Transaction button visibility is only UX; status guard must remain enforced in service layer.
 
 ## Development Rule
 
@@ -174,6 +176,7 @@ Order import fixes from runtime feedback:
 - PO line discount/tax columns are supported: `line_discount_percent`, `line_discount_amount`, `line_vat_amount`, `line_wht_amount`.
 - Legacy import headers `discount_percent` and `discount_amount` are treated as PO line discount fields.
 - `freight_amount`, `other_amount`, `special_charge_amount`, `vat_amount`, and `wht_amount` are summed per PO+Site and no longer forced to be identical across rows.
+- Transaction status guard is documented in `docs/21-transaction-status-guard.md`; UAT scenarios are listed in `docs/16-core-uat-status-checklist.md`.
 
 ## Documentation
 
@@ -195,3 +198,4 @@ Order import fixes from runtime feedback:
 - [Route Permission Hardening](docs/18-permission-hardening.md)
 - [Core Master Data Hardening](docs/19-master-data-hardening.md)
 - [Core Master Data Code Guard](docs/20-master-data-code-guard.md)
+- [Transaction Status Guard](docs/21-transaction-status-guard.md)
