@@ -186,6 +186,19 @@ class SalesOrderService
         $this->transition($soId, ['draft', 'submitted'], 'cancelled', ['cancelled_at' => date('Y-m-d H:i:s'), 'cancelled_by' => $userId, 'cancel_reason' => $reason], $userId, 'so.cancel', 'Sales order cancelled.');
     }
 
+    public function reopen(int $soId, ?int $userId = null): void
+    {
+        $this->transition($soId, ['cancelled'], 'draft', [
+            'cancelled_at' => null,
+            'cancelled_by' => null,
+            'cancel_reason' => null,
+            'submitted_at' => null,
+            'submitted_by' => null,
+            'approved_at' => null,
+            'approved_by' => null,
+        ], $userId, 'so.reopen', 'Cancelled sales order reopened as draft.');
+    }
+
     private function transition(int $soId, array $allowedFrom, string $toStatus, array $extra, ?int $userId, string $action, string $description): void
     {
         $model = new SalesOrderModel();
