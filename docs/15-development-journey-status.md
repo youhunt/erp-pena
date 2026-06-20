@@ -40,6 +40,7 @@ Persentase berikut adalah estimasi readiness berbasis implementasi + patch + UAT
 | Multi company / multi site | Active tenant berjalan, permission masih perlu UAT | 75% |
 | Master data setup | CRUD baseline ada, field mapping perlu diselaraskan lagi | 70% |
 | Document numbering otomatis | Service tersedia, wajib SQL table di hosting | 85% |
+| Core transaction status guard | Service-layer guard sudah diperkuat, perlu UAT manual | 75% |
 | SO manual + import | Sudah dipatch dari UAT | 75% |
 | PO manual + import | Sudah dipatch dari UAT | 75% |
 | Purchase Receipt | Posting, stock in, recalc PO qty sudah diperkuat | 70% |
@@ -99,8 +100,9 @@ Persentase berikut adalah estimasi readiness berbasis implementasi + patch + UAT
 |---|---|---|
 | Create PO manual | Partial | Auto supplier/item fill sudah dipatch |
 | Import PO | Partial | PO+Site grouping, freight relaxed, line tax/discount |
-| Approve PO | Partial | Perlu UAT role/status |
-| PO Receipt | Partial | Posting, stock in, PO qty recalc sudah dipatch |
+| Approve PO | Partial | Transisi hanya submitted ke approved; perlu UAT role |
+| Edit PO | Partial | Hanya draft tanpa received quantity; perlu UAT URL langsung |
+| PO Receipt | Partial | Hanya PO eligible; posting ulang ditolak dan stock in/recalc tersedia |
 | Reverse PO Receipt | Partial | Field tracking reversal disiapkan |
 | AP Invoice from Receipt | Partial | Auto PI numbering tersedia |
 | AP Payment | Partial | Auto APP numbering tersedia |
@@ -111,9 +113,9 @@ Persentase berikut adalah estimasi readiness berbasis implementasi + patch + UAT
 |---|---|---|
 | Create SO manual | Partial | Customer/item auto fill dan table scroll dipatch |
 | Import SO | Partial | Site lookup dan form UX dipatch |
-| Approve SO | Partial | Perlu UAT role/status |
+| Approve SO | Partial | Transisi hanya submitted ke approved; perlu UAT role |
 | Reopen cancelled SO | Done | Cancel tidak lagi membingungkan, SO bisa reopen draft |
-| Delivery Order | Partial | Posting, stock out, SO qty recalc sudah dipatch |
+| Delivery Order | Partial | Posting ulang ditolak; stock out dan SO qty recalc sudah dipatch |
 | Reverse Delivery | Partial | Field tracking reversal disiapkan |
 | AR Invoice from Delivery | Partial | Auto SI numbering tersedia |
 | AR Receipt | Partial | Auto ARR numbering tersedia |
@@ -150,6 +152,7 @@ Persentase berikut adalah estimasi readiness berbasis implementasi + patch + UAT
 | 13 | Payment/receipt number tidak boleh selalu manual | Auto ARR/APP numbering | Done |
 | 14 | GL harus bisa divalidasi | GL validation cards + trial balance summary | Done |
 | 15 | Stock Card harus bisa audit value | Value in/out/running value ditambahkan | Done |
+| 16 | Action transaksi bisa ditembak ulang lewat URL/status lama | Guard dipusatkan di service, controller dan tombol diselaraskan | Patched, perlu UAT |
 
 ---
 
@@ -225,6 +228,7 @@ Catatan penting:
 | Stock balance empty | DO cannot stock out | Use purchase receipt or stock adjustment |
 | Route permission not fully granular | Non-admin access may be inconsistent | Expand permission mapping and UAT role |
 | UAT not systematic | Regression bugs missed | Follow checklist in this document and `docs/09-testing-checklist.md` |
+| Status guard belum diuji lintas semua role | Action valid bisa tertahan atau action invalid bisa lolos | Jalankan skenario di `docs/16-core-uat-status-checklist.md` dan matriks `docs/21-transaction-status-guard.md` |
 
 ---
 
@@ -232,7 +236,7 @@ Catatan penting:
 
 | Priority | Module | Reason | Target Progress Impact |
 |---:|---|---|---:|
-| 1 | Formal UAT status dashboard / checklist | Testing tidak acak dan bisa track pass/fail | +5% |
+| 1 | UAT transaction status guard | Memastikan direct URL dan replay action ditolak oleh service | +5% |
 | 2 | Cash/Bank report and reconciliation hardening | Payment/receipt audit finance | +6% |
 | 3 | GL report export | Finance validation lebih mudah | +5% |
 | 4 | Stock card export | Inventory audit lebih mudah | +4% |

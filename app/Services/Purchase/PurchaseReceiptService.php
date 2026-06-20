@@ -27,6 +27,7 @@ class PurchaseReceiptService
         if ($lines === []) {
             throw new RuntimeException('At least one receipt line is required.');
         }
+        $this->assertDocumentNumberAvailable($header);
         $this->assertStorageLocation($header);
         $this->assertPeriodOpen('purchase', $header, 'receipt_date');
         $this->assertPeriodOpen('inventory', $header, 'receipt_date');
@@ -326,6 +327,18 @@ class PurchaseReceiptService
             (string) ($document[$dateField] ?? date('Y-m-d')),
             ! empty($document['site_id']) ? (int) $document['site_id'] : null
         );
+    }
+
+    private function assertDocumentNumberAvailable(array $header): void
+    {
+        $existing = (new PurchaseReceiptModel())
+            ->where('company_id', (int) $header['company_id'])
+            ->where('receipt_no', (string) $header['receipt_no'])
+            ->first();
+
+        if ($existing !== null) {
+            throw new RuntimeException('Purchase receipt number already exists and cannot be posted again: ' . $header['receipt_no'] . '.');
+        }
     }
 
     private function assertStorageLocation(array $header): void

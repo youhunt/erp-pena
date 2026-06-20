@@ -28,6 +28,15 @@ class SettlementService
         if ($payable === null || (int) $payable['company_id'] !== (int) $data['company_id']) {
             throw new RuntimeException('A/P payable not found.');
         }
+        $payableStatus = (string) ($payable['status'] ?? '');
+        if (! in_array($payableStatus, ['open', 'partial'], true)) {
+            throw new RuntimeException('Only open or partial A/P payable can be paid. Current status: ' . ($payableStatus !== '' ? $payableStatus : 'unknown') . '.');
+        }
+        $purchaseInvoice = (new PurchaseInvoiceModel())->find((int) ($payable['purchase_invoice_id'] ?? 0));
+        $invoiceStatus = (string) ($purchaseInvoice['status'] ?? '');
+        if ($purchaseInvoice === null || ! in_array($invoiceStatus, ['open', 'partial'], true)) {
+            throw new RuntimeException('Related purchase invoice is not open for payment. Current status: ' . ($invoiceStatus !== '' ? $invoiceStatus : 'not found') . '.');
+        }
         $this->assertSameSite($payable, $data, 'A/P payable');
         $this->assertUniqueDocumentNo('ap_payments', 'payment_no', (string) $data['payment_no'], (int) $data['company_id'], $data['site_id'] ?? null);
 
@@ -126,6 +135,15 @@ class SettlementService
         $receivable = $receivableModel->find((int) $data['ar_receivable_id']);
         if ($receivable === null || (int) $receivable['company_id'] !== (int) $data['company_id']) {
             throw new RuntimeException('A/R receivable not found.');
+        }
+        $receivableStatus = (string) ($receivable['status'] ?? '');
+        if (! in_array($receivableStatus, ['open', 'partial'], true)) {
+            throw new RuntimeException('Only open or partial A/R receivable can receive payment. Current status: ' . ($receivableStatus !== '' ? $receivableStatus : 'unknown') . '.');
+        }
+        $salesInvoice = (new SalesInvoiceModel())->find((int) ($receivable['sales_invoice_id'] ?? 0));
+        $invoiceStatus = (string) ($salesInvoice['status'] ?? '');
+        if ($salesInvoice === null || ! in_array($invoiceStatus, ['open', 'partial'], true)) {
+            throw new RuntimeException('Related sales invoice is not open for receipt. Current status: ' . ($invoiceStatus !== '' ? $invoiceStatus : 'not found') . '.');
         }
         $this->assertSameSite($receivable, $data, 'A/R receivable');
         $this->assertUniqueDocumentNo('ar_receipts', 'receipt_no', (string) $data['receipt_no'], (int) $data['company_id'], $data['site_id'] ?? null);
@@ -228,8 +246,12 @@ class SettlementService
             if ($payment === null) {
                 throw new RuntimeException('A/P payment not found.');
             }
-            if ((string) ($payment['status'] ?? 'posted') === 'cancelled') {
+            $paymentStatus = (string) ($payment['status'] ?? '');
+            if ($paymentStatus === 'cancelled') {
                 throw new RuntimeException('A/P payment has already been cancelled.');
+            }
+            if ($paymentStatus !== 'posted') {
+                throw new RuntimeException('Only posted A/P payment can be cancelled. Current status: ' . ($paymentStatus !== '' ? $paymentStatus : 'unknown') . '.');
             }
 
             $cashBankEntry = ! empty($payment['cash_bank_entry_id'])
@@ -309,8 +331,12 @@ class SettlementService
             if ($receipt === null) {
                 throw new RuntimeException('A/R receipt not found.');
             }
-            if ((string) ($receipt['status'] ?? 'posted') === 'cancelled') {
+            $receiptStatus = (string) ($receipt['status'] ?? '');
+            if ($receiptStatus === 'cancelled') {
                 throw new RuntimeException('A/R receipt has already been cancelled.');
+            }
+            if ($receiptStatus !== 'posted') {
+                throw new RuntimeException('Only posted A/R receipt can be cancelled. Current status: ' . ($receiptStatus !== '' ? $receiptStatus : 'unknown') . '.');
             }
 
             $cashBankEntry = ! empty($receipt['cash_bank_entry_id'])

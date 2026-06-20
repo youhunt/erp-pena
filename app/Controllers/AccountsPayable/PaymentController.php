@@ -34,6 +34,10 @@ class PaymentController extends BaseController
         if ($payable === null) {
             throw PageNotFoundException::forPageNotFound();
         }
+        $status = (string) ($payable['status'] ?? '');
+        if (! in_array($status, ['open', 'partial'], true)) {
+            return view('errors/html/error_404', ['message' => 'Only open or partial A/P invoice can be paid. Current status: ' . ($status !== '' ? $status : 'unknown') . '.']);
+        }
         if ((float) ($payable['outstanding_amount'] ?? 0) <= 0) {
             return view('errors/html/error_404', ['message' => 'A/P invoice has no outstanding amount to pay.']);
         }
@@ -52,6 +56,10 @@ class PaymentController extends BaseController
         $payable = $this->payableFromInvoice($tenant, $invoiceId);
         if ($payable === null) {
             throw PageNotFoundException::forPageNotFound();
+        }
+        $status = (string) ($payable['status'] ?? '');
+        if (! in_array($status, ['open', 'partial'], true)) {
+            return redirect()->back()->with('error', 'Only open or partial A/P invoice can be paid. Current status: ' . ($status !== '' ? $status : 'unknown') . '.');
         }
 
         if (! $this->validate([

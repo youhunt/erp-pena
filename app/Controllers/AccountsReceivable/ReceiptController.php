@@ -34,6 +34,10 @@ class ReceiptController extends BaseController
         if ($receivable === null) {
             throw PageNotFoundException::forPageNotFound();
         }
+        $status = (string) ($receivable['status'] ?? '');
+        if (! in_array($status, ['open', 'partial'], true)) {
+            return view('errors/html/error_404', ['message' => 'Only open or partial A/R invoice can receive payment. Current status: ' . ($status !== '' ? $status : 'unknown') . '.']);
+        }
         if ((float) ($receivable['outstanding_amount'] ?? 0) <= 0) {
             return view('errors/html/error_404', ['message' => 'A/R invoice has no outstanding amount to receive.']);
         }
@@ -52,6 +56,10 @@ class ReceiptController extends BaseController
         $receivable = $this->receivableFromInvoice($tenant, $invoiceId);
         if ($receivable === null) {
             throw PageNotFoundException::forPageNotFound();
+        }
+        $status = (string) ($receivable['status'] ?? '');
+        if (! in_array($status, ['open', 'partial'], true)) {
+            return redirect()->back()->with('error', 'Only open or partial A/R invoice can receive payment. Current status: ' . ($status !== '' ? $status : 'unknown') . '.');
         }
 
         if (! $this->validate([

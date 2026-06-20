@@ -102,8 +102,8 @@ class PurchaseOrderController extends BaseController
 
         $status = (string) ($order['document_status'] ?? $order['status'] ?? 'draft');
         $lines = (new PurchaseOrderLineModel())->where('purchase_order_id', $id)->orderBy('line_no', 'ASC')->findAll();
-        if (! in_array($status, ['draft', 'submitted', 'approved'], true) || $this->hasReceivedLine($lines)) {
-            return view('errors/html/error_404', ['message' => 'PO cannot be edited because it is already received/closed/cancelled or has received quantity.']);
+        if ($status !== 'draft' || $this->hasReceivedLine($lines)) {
+            return view('errors/html/error_404', ['message' => 'Only draft purchase order without received quantity can be edited. Current status: ' . $status . '.']);
         }
 
         return view('purchase/orders/form', [

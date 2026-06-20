@@ -10,7 +10,7 @@ foreach ($lines as $line) {
         break;
     }
 }
-$canEditPo = in_array($status, ['draft', 'submitted', 'approved'], true) && ! $hasReceivedLine;
+$canEditPo = $status === 'draft' && ! $hasReceivedLine;
 $subtotal = (float) ($order['subtotal_amount'] ?? 0);
 $discountPercent = (float) ($order['discount_percent'] ?? 0);
 $discountPercentAmount = round($subtotal * $discountPercent / 100, 2);

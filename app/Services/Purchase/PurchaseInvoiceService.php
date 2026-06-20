@@ -138,8 +138,9 @@ class PurchaseInvoiceService
         if ($receipt === null) {
             throw new RuntimeException('Purchase receipt not found.');
         }
-        if ((string) ($receipt['status'] ?? '') === 'invoiced') {
-            throw new RuntimeException('Purchase receipt already invoiced.');
+        $receiptStatus = (string) ($receipt['status'] ?? '');
+        if ($receiptStatus !== 'posted') {
+            throw new RuntimeException('Only posted purchase receipt can be invoiced. Current status: ' . ($receiptStatus !== '' ? $receiptStatus : 'unknown') . '.');
         }
 
         $invoiceModel = new PurchaseInvoiceModel();
@@ -316,8 +317,12 @@ class PurchaseInvoiceService
             if ((string) ($invoice['status'] ?? '') !== 'open') {
                 throw new RuntimeException('Only open purchase invoice can be cancelled.');
             }
-            if ((float) ($invoice['paid_amount'] ?? 0) > 0 || (new ApPaymentModel())->where('purchase_invoice_id', $invoiceId)->first() !== null) {
-                throw new RuntimeException('Purchase invoice already has payment. Reverse or cancel payment first.');
+            $postedPayment = (new ApPaymentModel())
+                ->where('purchase_invoice_id', $invoiceId)
+                ->where('status', 'posted')
+                ->first();
+            if ((float) ($invoice['paid_amount'] ?? 0) > 0 || $postedPayment !== null) {
+                throw new RuntimeException('Purchase invoice has a posted payment. Cancel the payment first.');
             }
 
             (new PeriodCloseService())->assertOpen('ap', (int) $invoice['company_id'], (string) ($invoice['invoice_date'] ?? date('Y-m-d')), ! empty($invoice['site_id']) ? (int) $invoice['site_id'] : null);

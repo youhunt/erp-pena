@@ -59,8 +59,9 @@ class SalesInvoiceController extends BaseController
         if ($delivery === null) {
             throw PageNotFoundException::forPageNotFound();
         }
-        if ((string) ($delivery['status'] ?? '') === 'invoiced') {
-            return view('errors/html/error_404', ['message' => 'Delivery order already invoiced.']);
+        $status = (string) ($delivery['status'] ?? '');
+        if ($status !== 'posted') {
+            return view('errors/html/error_404', ['message' => 'Only posted delivery order can be invoiced. Current status: ' . ($status !== '' ? $status : 'unknown') . '.']);
         }
 
         return view('accounts_receivable/sales_invoices/form', [
@@ -139,6 +140,10 @@ class SalesInvoiceController extends BaseController
         $delivery = $this->scopedDelivery($tenant, $deliveryId);
         if ($delivery === null) {
             throw PageNotFoundException::forPageNotFound();
+        }
+        $deliveryStatus = (string) ($delivery['status'] ?? '');
+        if ($deliveryStatus !== 'posted') {
+            return redirect()->back()->with('error', 'Only posted delivery order can be invoiced. Current status: ' . ($deliveryStatus !== '' ? $deliveryStatus : 'unknown') . '.');
         }
         if (! $this->validate([
             'invoice_no' => 'permit_empty|max_length[60]',

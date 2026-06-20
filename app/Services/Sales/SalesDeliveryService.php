@@ -27,6 +27,7 @@ class SalesDeliveryService
         if ($lines === []) {
             throw new RuntimeException('At least one delivery line is required.');
         }
+        $this->assertDocumentNumberAvailable($header);
         $this->assertStorageLocation($header);
         $this->assertPeriodOpen('sales', $header, 'delivery_date');
         $this->assertPeriodOpen('inventory', $header, 'delivery_date');
@@ -344,6 +345,18 @@ class SalesDeliveryService
             (string) ($document[$dateField] ?? date('Y-m-d')),
             ! empty($document['site_id']) ? (int) $document['site_id'] : null
         );
+    }
+
+    private function assertDocumentNumberAvailable(array $header): void
+    {
+        $existing = (new SalesDeliveryModel())
+            ->where('company_id', (int) $header['company_id'])
+            ->where('delivery_no', (string) $header['delivery_no'])
+            ->first();
+
+        if ($existing !== null) {
+            throw new RuntimeException('Delivery order number already exists and cannot be posted again: ' . $header['delivery_no'] . '.');
+        }
     }
 
     private function assertStorageLocation(array $header): void

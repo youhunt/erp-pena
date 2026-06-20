@@ -24,7 +24,9 @@ class PurchaseOrderService
         try {
             $poModel = new PurchaseOrderModel();
             $lineModel = new PurchaseOrderLineModel();
-            $status = $header['status'] ?? 'draft';
+            $status = 'draft';
+            $header['status'] = $status;
+            $header['document_status'] = $status;
             $header['document_no'] = $header['document_no'] ?? $header['po_no'];
             $header['document_date'] = $header['document_date'] ?? $header['po_date'];
 
@@ -70,8 +72,8 @@ class PurchaseOrderService
         $this->assertPeriodOpen($header + $po);
 
         $status = (string) ($po['document_status'] ?? $po['status'] ?? 'draft');
-        if (! in_array($status, ['draft', 'submitted', 'approved'], true)) {
-            throw new RuntimeException('PO status ' . $status . ' cannot be edited.');
+        if ($status !== 'draft') {
+            throw new RuntimeException('Only draft purchase order can be edited. Current status: ' . $status . '.');
         }
 
         $existingLines = $lineModel->where('purchase_order_id', $poId)->findAll();

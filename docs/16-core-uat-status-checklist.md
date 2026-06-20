@@ -149,7 +149,36 @@ Status values:
 
 ---
 
-## 9. UAT Sign-off Notes
+## 9. Transaction Status Guard
+
+Jalankan skenario ini juga dengan URL/action POST langsung. Tombol yang tersembunyi bukan pengganti validasi service.
+
+| No | Test Case | Expected Result | Result | Notes |
+|---:|---|---|---|---|
+| 1 | Create SO/PO dengan payload status non-draft | Dokumen tetap dibuat sebagai draft | NOT TESTED |  |
+| 2 | Edit PO draft | Perubahan berhasil disimpan | NOT TESTED |  |
+| 3 | Edit PO submitted melalui URL langsung | Ditolak dengan pesan hanya draft yang dapat diedit | NOT TESTED |  |
+| 4 | Edit PO approved melalui URL langsung | Ditolak oleh controller dan service | NOT TESTED |  |
+| 5 | Submit SO/PO dua kali | Submit kedua ditolak dengan status saat ini | NOT TESTED |  |
+| 6 | Approve SO/PO yang bukan submitted | Ditolak dengan transisi status yang jelas | NOT TESTED |  |
+| 7 | Proses SO/PO cancelled | Ditolak; SO hanya dapat diproses lagi melalui Reopen as Draft | NOT TESTED |  |
+| 8 | Reopen SO yang bukan cancelled | Ditolak oleh service | NOT TESTED |  |
+| 9 | Post ulang nomor Delivery Order yang sama | Ditolak sebelum posting stock | NOT TESTED |  |
+| 10 | Post ulang nomor Purchase Receipt yang sama | Ditolak sebelum posting stock | NOT TESTED |  |
+| 11 | Buat invoice dari Delivery Order reversed/invoiced | Ditolak; hanya status posted yang boleh | NOT TESTED |  |
+| 12 | Buat invoice dari Purchase Receipt reversed/invoiced | Ditolak; hanya status posted yang boleh | NOT TESTED |  |
+| 13 | Reverse Delivery Order yang sudah invoiced | Ditolak; invoice aktif harus dibatalkan lebih dahulu | NOT TESTED |  |
+| 14 | Reverse Purchase Receipt yang sudah invoiced | Ditolak; invoice aktif harus dibatalkan lebih dahulu | NOT TESTED |  |
+| 15 | Post payment/receipt ke invoice paid/cancelled | Ditolak oleh controller dan SettlementService | NOT TESTED |  |
+| 16 | Cancel invoice dengan payment/receipt posted | Ditolak dan diminta cancel settlement lebih dahulu | NOT TESTED |  |
+| 17 | Cancel payment/receipt posted | Settlement cancelled dan saldo invoice dihitung ulang | NOT TESTED |  |
+| 18 | Cancel payment/receipt untuk kedua kali | Ditolak sebagai already cancelled | NOT TESTED |  |
+| 19 | Cancel invoice setelah semua settlement dibatalkan | Berhasil jika invoice kembali open dan periode masih open | NOT TESTED |  |
+| 20 | Action status pada periode closed | Ditolak oleh period close guard | NOT TESTED |  |
+
+---
+
+## 10. UAT Sign-off Notes
 
 Gunakan bagian ini untuk mencatat hasil test per tanggal.
 
@@ -159,7 +188,7 @@ Gunakan bagian ini untuk mencatat hasil test per tanggal.
 
 ---
 
-## 10. Next Bug Fix Log
+## 11. Next Bug Fix Log
 
 | Date | Bug / Feedback | Severity | Status | Fix Commit / Notes |
 |---|---|---|---|---|
@@ -168,3 +197,4 @@ Gunakan bagian ini untuk mencatat hasil test per tanggal.
 | 2026-06-20 | PO import freight same amount error | High | Fixed | Freight summed per PO+Site |
 | 2026-06-20 | PO receipt qty tidak update | High | Patched | Needs UAT |
 | 2026-06-20 | DO stock out/SO qty update | High | Patched | Needs UAT |
+| 2026-06-20 | Direct URL/replay action dapat melewati kondisi tombol | High | Patched | Service-layer transaction status guard; needs UAT |

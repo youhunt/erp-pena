@@ -139,8 +139,9 @@ class SalesInvoiceService
         if ($delivery === null) {
             throw new RuntimeException('Delivery order not found.');
         }
-        if ((string) ($delivery['status'] ?? '') === 'invoiced') {
-            throw new RuntimeException('Delivery order already invoiced.');
+        $deliveryStatus = (string) ($delivery['status'] ?? '');
+        if ($deliveryStatus !== 'posted') {
+            throw new RuntimeException('Only posted delivery order can be invoiced. Current status: ' . ($deliveryStatus !== '' ? $deliveryStatus : 'unknown') . '.');
         }
 
         $invoiceModel = new SalesInvoiceModel();
@@ -318,8 +319,12 @@ class SalesInvoiceService
             if ((string) ($invoice['status'] ?? '') !== 'open') {
                 throw new RuntimeException('Only open sales invoice can be cancelled.');
             }
-            if ((float) ($invoice['paid_amount'] ?? 0) > 0 || (new ArReceiptModel())->where('sales_invoice_id', $invoiceId)->first() !== null) {
-                throw new RuntimeException('Sales invoice already has receipt. Reverse or cancel receipt first.');
+            $postedReceipt = (new ArReceiptModel())
+                ->where('sales_invoice_id', $invoiceId)
+                ->where('status', 'posted')
+                ->first();
+            if ((float) ($invoice['paid_amount'] ?? 0) > 0 || $postedReceipt !== null) {
+                throw new RuntimeException('Sales invoice has a posted receipt. Cancel the receipt first.');
             }
 
             (new PeriodCloseService())->assertOpen('ar', (int) $invoice['company_id'], (string) ($invoice['invoice_date'] ?? date('Y-m-d')), ! empty($invoice['site_id']) ? (int) $invoice['site_id'] : null);

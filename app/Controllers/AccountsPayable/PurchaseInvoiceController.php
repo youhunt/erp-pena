@@ -59,8 +59,9 @@ class PurchaseInvoiceController extends BaseController
         if ($receipt === null) {
             throw PageNotFoundException::forPageNotFound();
         }
-        if ((string) ($receipt['status'] ?? '') === 'invoiced') {
-            return view('errors/html/error_404', ['message' => 'Purchase receipt already invoiced.']);
+        $status = (string) ($receipt['status'] ?? '');
+        if ($status !== 'posted') {
+            return view('errors/html/error_404', ['message' => 'Only posted purchase receipt can be invoiced. Current status: ' . ($status !== '' ? $status : 'unknown') . '.']);
         }
 
         return view('accounts_payable/purchase_invoices/form', [
@@ -139,6 +140,10 @@ class PurchaseInvoiceController extends BaseController
         $receipt = $this->scopedReceipt($tenant, $receiptId);
         if ($receipt === null) {
             throw PageNotFoundException::forPageNotFound();
+        }
+        $receiptStatus = (string) ($receipt['status'] ?? '');
+        if ($receiptStatus !== 'posted') {
+            return redirect()->back()->with('error', 'Only posted purchase receipt can be invoiced. Current status: ' . ($receiptStatus !== '' ? $receiptStatus : 'unknown') . '.');
         }
         if (! $this->validate([
             'invoice_no' => 'permit_empty|max_length[60]',
