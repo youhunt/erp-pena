@@ -151,6 +151,7 @@ class PurchaseReceiptController extends BaseController
         return view('purchase/receipts/show', [
             'title' => 'Purchase Receipt Detail',
             'receipt' => $receipt,
+            'existingInvoice' => $this->existingPurchaseInvoice((int) $receipt['id']),
             'lines' => (new PurchaseReceiptLineModel())->where('purchase_receipt_id', $id)->orderBy('line_no', 'ASC')->findAll(),
             'warehouseLabel' => $this->masterLabel('warehouses', $receipt['warehouse_id'] ?? null),
             'locationLabel' => $this->masterLabel('locations', $receipt['location_id'] ?? null),
@@ -191,6 +192,23 @@ class PurchaseReceiptController extends BaseController
             $model->where('site_id', $tenant->activeSiteId());
         }
         return $model->find($poId);
+    }
+
+    private function existingPurchaseInvoice(int $purchaseReceiptId): ?array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('purchase_invoices')) {
+            return null;
+        }
+
+        $builder = $db->table('purchase_invoices')
+            ->where('purchase_receipt_id', $purchaseReceiptId)
+            ->where('status !=', 'cancelled');
+        if ($db->fieldExists('deleted_at', 'purchase_invoices')) {
+            $builder->where('deleted_at', null);
+        }
+
+        return $builder->orderBy('id', 'DESC')->get(1)->getRowArray() ?: null;
     }
 
     private function postedLines(): array
