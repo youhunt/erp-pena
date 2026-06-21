@@ -46,6 +46,8 @@ The current continuation adds:
 - PO activation and UAT fixes for PO VAT/WHT code screen
 - Sales Order edit/update and requested commercial fields
 - Production imports for BOM, Work Center, Routing, and Work Order
+- Production edit for BOM, Work Center, Routing, and draft Work Order
+- ERP Core UAT Flow Board at `/system/development-status`
 - Development journey/status documentation and formal core UAT checklist
 
 Skote assets are stored in `resources.zip` and extracted into `public/assets/skote` for the current layout.
@@ -178,7 +180,7 @@ Before adding a new module or route:
 6. Use `DocumentNumberService` for transaction document numbers.
 7. Add audit log for important changes.
 8. Test with Super Admin and non-admin role.
-9. Update `docs/15-development-journey-status.md` and `docs/16-core-uat-status-checklist.md` when development status changes.
+9. Update `docs/15-development-journey-status.md`, `docs/16-core-uat-status-checklist.md`, and `docs/28-erp-core-continuation.md` when development status changes.
 
 ## Testing Notes
 
@@ -193,6 +195,8 @@ Order import fixes from runtime feedback:
 - PO UAT feedback is documented in `docs/24-uat-feedback-po-fixes.md`.
 - Sales Order edit UAT feedback is documented in `docs/25-uat-feedback-sales-order-edit.md`.
 - Production import UAT feedback is documented in `docs/26-production-imports.md`.
+- Production edit UAT is documented in `docs/27-production-edit-crud.md`.
+- ERP Core continuation plan is documented in `docs/28-erp-core-continuation.md`.
 
 ## Documentation
 
@@ -220,3 +224,5 @@ Order import fixes from runtime feedback:
 - [PO UAT Feedback Fixes](docs/24-uat-feedback-po-fixes.md)
 - [Sales Order UAT Feedback Edit Patch](docs/25-uat-feedback-sales-order-edit.md)
 - [Production Imports](docs/26-production-imports.md)
+- [Production Edit CRUD](docs/27-production-edit-crud.md)
+- [ERP Core Continuation](docs/28-erp-core-continuation.md)
