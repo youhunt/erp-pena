@@ -18,7 +18,7 @@ class PurchaseOrderModel extends Model
         'supplier_id', 'supplier', 'supplier_code', 'supplier_name',
         'terms_code', 'currency_code', 'status', 'document_status',
         'subtotal_amount', 'discount_percent', 'discount_amount', 'freight_amount',
-        'other_amount', 'special_charge_amount', 'vat_amount', 'wht_amount',
+        'other_amount', 'special_charge_amount', 'vat_code', 'wht_code', 'vat_amount', 'wht_amount',
         'tax_amount', 'total_amount',
         'source_document_upload_id', 'notes', 'remarks',
         'submitted_at', 'submitted_by', 'approved_at', 'approved_by',
