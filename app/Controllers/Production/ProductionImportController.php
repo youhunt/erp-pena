@@ -22,6 +22,7 @@ use RuntimeException;
 class ProductionImportController extends BaseController
 {
     private const MAX_UPLOAD_BYTES = 10485760;
+    private const SESSION_PREFIX = 'production_import_preview_';
 
     public function form(string $resource): string
     {
@@ -45,9 +46,22 @@ class ProductionImportController extends BaseController
         );
     }
 
+    /**
+     * Standard import flow:
+     * upload -> preview/validate -> commit.
+     *
+     * The same POST endpoint is used for preview and commit so existing route remains simple:
+     * POST /production/imports/{resource}
+     */
     public function import(string $resource)
     {
         $config = $this->config($resource);
+        $commitToken = trim((string) $this->request->getPost('commit_token'));
+
+        if ($commitToken !== '') {
+            return $this->commit($resource, $commitToken);
+        }
+
         $file = $this->request->getFile('excel_file');
         $uploadError = $this->validateUpload($file);
         if ($uploadError !== null) {
@@ -56,19 +70,66 @@ class ProductionImportController extends BaseController
 
         try {
             $rows = $this->uploadedRows($file->getTempName(), $config['headers']);
-            $result = match ($resource) {
-                'boms' => $this->importBoms($rows),
-                'work-centers' => $this->importWorkCenters($rows),
-                'routings' => $this->importRoutings($rows),
-                'work-orders' => $this->importWorkOrders($rows),
-                default => throw PageNotFoundException::forPageNotFound(),
-            };
+            $preview = $this->previewRows($resource, $rows);
+            $token = null;
+            if (! $preview['has_errors']) {
+                $token = bin2hex(random_bytes(16));
+                session()->set(self::SESSION_PREFIX . $token, [
+                    'resource' => $resource,
+                    'rows' => $rows,
+                    'created_at' => time(),
+                ]);
+            }
         } catch (RuntimeException $exception) {
             return redirect()->back()->withInput()->with('error', $exception->getMessage());
         }
 
+        return view('production/imports/preview', [
+            'title' => 'Preview Import ' . $config['title'],
+            'resource' => $resource,
+            'config' => $config,
+            'preview' => $preview,
+            'token' => $token,
+        ]);
+    }
+
+    private function commit(string $resource, string $token)
+    {
+        $config = $this->config($resource);
+        $sessionKey = self::SESSION_PREFIX . $token;
+        $payload = session($sessionKey);
+
+        if (! is_array($payload) || ($payload['resource'] ?? '') !== $resource || empty($payload['rows']) || ! is_array($payload['rows'])) {
+            return redirect()->to(site_url('production/imports/' . $resource))->with('error', 'Preview session sudah habis atau tidak valid. Upload ulang file import.');
+        }
+
+        try {
+            $preview = $this->previewRows($resource, $payload['rows']);
+            if ($preview['has_errors']) {
+                return view('production/imports/preview', [
+                    'title' => 'Preview Import ' . $config['title'],
+                    'resource' => $resource,
+                    'config' => $config,
+                    'preview' => $preview,
+                    'token' => null,
+                ]);
+            }
+
+            $result = match ($resource) {
+                'boms' => $this->importBoms($payload['rows']),
+                'work-centers' => $this->importWorkCenters($payload['rows']),
+                'routings' => $this->importRoutings($payload['rows']),
+                'work-orders' => $this->importWorkOrders($payload['rows']),
+                default => throw PageNotFoundException::forPageNotFound(),
+            };
+        } catch (RuntimeException $exception) {
+            return redirect()->to(site_url('production/imports/' . $resource))->with('error', $exception->getMessage());
+        }
+
+        session()->remove($sessionKey);
+
         return redirect()->to(site_url($config['return_to']))->with('message', sprintf(
-            '%s import completed. %d created, %d updated, %d lines processed.',
+            '%s import committed. %d created, %d updated, %d lines processed.',
             $config['title'],
             $result['created'],
             $result['updated'],
@@ -84,24 +145,31 @@ class ProductionImportController extends BaseController
                 'return_to' => 'production/boms',
                 'headers' => ['site_code', 'department_code', 'warehouse_code', 'parent_item_code', 'bom_type', 'qty_batch', 'uom_code', 'ratio_percent', 'description', 'active_date', 'inactive_date', 'line_no', 'child_item_code', 'component_type', 'qty_used', 'line_uom_code', 'factor', 'line_description'],
                 'sample' => ['HO', 'PROD', 'MAIN', 'FG-001', 'standard', '1', 'PCS', '100', 'Example BOM', '', '', '10', 'RM-001', 'material', '2', 'PCS', '1', 'Material line'],
+                'required' => ['site_code', 'department_code', 'parent_item_code', 'line_no', 'child_item_code'],
+                'group_key' => ['site_code', 'department_code', 'warehouse_code', 'parent_item_code'],
             ],
             'work-centers' => [
                 'title' => 'Work Center',
                 'return_to' => 'production/work-centers',
                 'headers' => ['site_code', 'department_code', 'warehouse_code', 'work_center_code', 'description', 'machine_code', 'notes', 'speed', 'capacity_percent', 'max_length', 'length_uom', 'max_width', 'width_uom', 'max_height', 'height_uom', 'max_volume', 'volume_uom', 'qty_labor', 'working_hour', 'cost_type', 'cost_amount', 'cost_uom', 'active_date', 'inactive_date'],
                 'sample' => ['HO', 'PROD', 'MAIN', 'WC-001', 'Cutting Machine', 'MC-001', '', '100', '100', '0', '', '0', '', '0', '', '0', '', '1', '8', 'LABOR', '0', 'Hour', '', ''],
+                'required' => ['site_code', 'department_code', 'warehouse_code', 'work_center_code'],
             ],
             'routings' => [
                 'title' => 'Routing',
                 'return_to' => 'production/routings',
                 'headers' => ['site_code', 'department_code', 'warehouse_code', 'item_code', 'description', 'line_no', 'routing_name', 'work_center_code', 'operation_type', 'hour_qty', 'hour_uom', 'std_speed', 'speed_uom', 'notes'],
                 'sample' => ['HO', 'PROD', 'MAIN', 'FG-001', 'Routing FG-001', '10', 'Cutting', 'WC-001', 'process', '1', 'Hour', '100', 'Unit/Hour', ''],
+                'required' => ['site_code', 'department_code', 'item_code', 'line_no', 'work_center_code'],
+                'group_key' => ['site_code', 'item_code'],
             ],
             'work-orders' => [
                 'title' => 'Work Order',
                 'return_to' => 'production/work-orders',
                 'headers' => ['site_code', 'department_code', 'warehouse_code', 'work_center_code', 'wo_no', 'wo_date', 'parent_item_code', 'parent_item_name', 'wo_qty', 'uom_code', 'description', 'line_no', 'component_item_code', 'component_item_name', 'qty_used', 'line_uom_code', 'route_work_center_code', 'routing_name', 'hour_qty', 'route_uom'],
                 'sample' => ['HO', 'PROD', 'MAIN', 'WC-001', 'WO-001', date('Y-m-d'), 'FG-001', 'Finished Good', '10', 'PCS', 'Example WO', '10', 'RM-001', 'Raw Material', '20', 'PCS', 'WC-001', 'Cutting', '1', 'Hour'],
+                'required' => ['site_code', 'department_code', 'wo_no', 'wo_date', 'parent_item_code', 'wo_qty', 'line_no'],
+                'group_key' => ['wo_no'],
             ],
         ];
     }
@@ -116,6 +184,91 @@ class ProductionImportController extends BaseController
         return $configs[$resource];
     }
 
+    private function previewRows(string $resource, array $rows): array
+    {
+        $config = $this->config($resource);
+        $tenant = new TenantContext(session());
+        $companyId = $this->activeCompanyId($tenant);
+        $previewRows = [];
+        $duplicateTracker = [];
+        $hasErrors = false;
+        $validCount = 0;
+
+        foreach ($rows as $rowNumber => $row) {
+            $errors = [];
+            $warnings = [];
+
+            foreach ($config['required'] as $field) {
+                if (! isset($row[$field]) || trim((string) $row[$field]) === '') {
+                    $errors[] = $field . ' wajib diisi';
+                }
+            }
+
+            $siteCode = trim((string) ($row['site_code'] ?? ''));
+            if ($siteCode !== '' && $this->findSite($siteCode, $companyId) === null) {
+                $errors[] = 'site_code ' . $siteCode . ' tidak ditemukan untuk active company';
+            }
+
+            if (in_array($resource, ['boms', 'routings', 'work-orders'], true)) {
+                $lineNo = (int) ($row['line_no'] ?? 0);
+                if ($lineNo < 1) {
+                    $errors[] = 'line_no harus angka lebih besar dari 0';
+                }
+
+                $groupKey = $this->groupKey($config['group_key'] ?? [], $row);
+                $duplicateKey = $groupKey . '|line:' . $lineNo;
+                if ($lineNo > 0) {
+                    if (isset($duplicateTracker[$duplicateKey])) {
+                        $errors[] = 'duplicate line_no ' . $lineNo . ' dalam group yang sama';
+                    }
+                    $duplicateTracker[$duplicateKey] = true;
+                }
+            }
+
+            if ($resource === 'work-orders' && ! empty($row['wo_no'])) {
+                $existing = (new ProductionWorkOrderModel())
+                    ->where('company_id', $companyId)
+                    ->where('wo_no', (string) $row['wo_no'])
+                    ->first();
+                if ($existing !== null && ($existing['status'] ?? 'draft') !== 'draft') {
+                    $errors[] = 'WO existing status ' . ($existing['status'] ?? '-') . ', hanya draft yang boleh di-update';
+                }
+            }
+
+            if (! empty($row['parent_item_code']) && $this->itemByCode((string) $row['parent_item_code']) === null) {
+                $warnings[] = 'parent_item_code belum ditemukan di master item, nama fallback akan dipakai';
+            }
+            if (! empty($row['child_item_code']) && $this->itemByCode((string) $row['child_item_code']) === null) {
+                $warnings[] = 'child_item_code belum ditemukan di master item, nama fallback akan dipakai';
+            }
+            if (! empty($row['component_item_code']) && $this->itemByCode((string) $row['component_item_code']) === null) {
+                $warnings[] = 'component_item_code belum ditemukan di master item, nama fallback akan dipakai';
+            }
+
+            if ($errors === []) {
+                $validCount++;
+            } else {
+                $hasErrors = true;
+            }
+
+            $previewRows[] = [
+                'row_number' => $rowNumber,
+                'status' => $errors === [] ? 'valid' : 'error',
+                'errors' => $errors,
+                'warnings' => $warnings,
+                'data' => $row,
+            ];
+        }
+
+        return [
+            'total' => count($previewRows),
+            'valid' => $validCount,
+            'error' => count($previewRows) - $validCount,
+            'has_errors' => $hasErrors,
+            'rows' => $previewRows,
+        ];
+    }
+
     private function importBoms(array $rows): array
     {
         $tenant = new TenantContext(session());
@@ -125,9 +278,8 @@ class ProductionImportController extends BaseController
             foreach (['site_code', 'department_code', 'parent_item_code', 'line_no', 'child_item_code'] as $field) {
                 $this->requireValue($row, $field, $rowNumber);
             }
-            $key = implode('|', [$row['site_code'], $row['department_code'], $row['warehouse_code'] ?? '', $row['parent_item_code']]);
-            $groups[$key]['header'] = $row;
-            $groups[$key]['lines'][] = $row + ['_row' => $rowNumber];
+            $groups[$this->groupKey(['site_code', 'department_code', 'warehouse_code', 'parent_item_code'], $row)]['header'] = $row;
+            $groups[$this->groupKey(['site_code', 'department_code', 'warehouse_code', 'parent_item_code'], $row)]['lines'][] = $row + ['_row' => $rowNumber];
         }
 
         $db = Database::connect();
@@ -146,7 +298,6 @@ class ProductionImportController extends BaseController
                     'warehouse_code' => (string) ($header['warehouse_code'] ?? ''),
                     'parent_item_code' => (string) $header['parent_item_code'],
                 ];
-                $existing = $model->where($where)->first();
                 $payload = $where + [
                     'site_id' => $siteId,
                     'parent_item_id' => $parentItem['id'] ?? null,
@@ -161,7 +312,7 @@ class ProductionImportController extends BaseController
                     'is_active' => 1,
                     'updated_by' => auth()->id(),
                 ];
-
+                $existing = $model->where($where)->first();
                 if ($existing !== null) {
                     $bomId = (int) $existing['id'];
                     $model->update($bomId, $payload);
@@ -289,9 +440,8 @@ class ProductionImportController extends BaseController
             foreach (['site_code', 'department_code', 'item_code', 'line_no', 'work_center_code'] as $field) {
                 $this->requireValue($row, $field, $rowNumber);
             }
-            $key = implode('|', [$row['site_code'], $row['item_code']]);
-            $groups[$key]['header'] = $row;
-            $groups[$key]['lines'][] = $row + ['_row' => $rowNumber];
+            $groups[$this->groupKey(['site_code', 'item_code'], $row)]['header'] = $row;
+            $groups[$this->groupKey(['site_code', 'item_code'], $row)]['lines'][] = $row + ['_row' => $rowNumber];
         }
 
         $db = Database::connect();
@@ -304,7 +454,6 @@ class ProductionImportController extends BaseController
                 $item = $this->itemByCode((string) $header['item_code']);
                 $model = new ProductionRoutingModel();
                 $where = ['company_id' => $companyId, 'site_code' => (string) $header['site_code'], 'item_code' => (string) $header['item_code']];
-                $existing = $model->where($where)->first();
                 $payload = $where + [
                     'site_id' => $siteId,
                     'department_code' => (string) $header['department_code'],
@@ -314,6 +463,7 @@ class ProductionImportController extends BaseController
                     'is_active' => 1,
                     'updated_by' => auth()->id(),
                 ];
+                $existing = $model->where($where)->first();
                 if ($existing !== null) {
                     $routingId = (int) $existing['id'];
                     $model->update($routingId, $payload);
@@ -370,8 +520,8 @@ class ProductionImportController extends BaseController
             foreach (['site_code', 'department_code', 'wo_no', 'wo_date', 'parent_item_code', 'wo_qty', 'line_no'] as $field) {
                 $this->requireValue($row, $field, $rowNumber);
             }
-            $groups[$row['wo_no']]['header'] = $row;
-            $groups[$row['wo_no']]['lines'][] = $row + ['_row' => $rowNumber];
+            $groups[(string) $row['wo_no']]['header'] = $row;
+            $groups[(string) $row['wo_no']]['lines'][] = $row + ['_row' => $rowNumber];
         }
 
         $db = Database::connect();
@@ -549,6 +699,11 @@ class ProductionImportController extends BaseController
         }
     }
 
+    private function groupKey(array $fields, array $row): string
+    {
+        return implode('|', array_map(static fn (string $field): string => trim((string) ($row[$field] ?? '')), $fields));
+    }
+
     private function activeCompanyId(TenantContext $tenant): int
     {
         $companyId = $tenant->activeCompanyId();
@@ -558,13 +713,18 @@ class ProductionImportController extends BaseController
         return (int) $companyId;
     }
 
-    private function siteId(string $siteCode, int $companyId, int $rowNumber): int
+    private function findSite(string $siteCode, int $companyId): ?array
     {
-        $site = Database::connect()->table('sites')
+        return Database::connect()->table('sites')
             ->where('company_id', $companyId)
             ->where('code', $siteCode)
             ->get()
             ->getRowArray();
+    }
+
+    private function siteId(string $siteCode, int $companyId, int $rowNumber): int
+    {
+        $site = $this->findSite($siteCode, $companyId);
         if ($site === null) {
             throw new RuntimeException('Row ' . $rowNumber . ': site_code ' . $siteCode . ' not found for active company.');
         }
