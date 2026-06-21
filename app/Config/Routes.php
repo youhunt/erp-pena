@@ -133,6 +133,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('orders/(:num)/approve', 'Purchase\PurchaseOrderController::approve/$1');
         $routes->post('orders/(:num)/close', 'Purchase\PurchaseOrderController::close/$1');
         $routes->post('orders/(:num)/cancel', 'Purchase\PurchaseOrderController::cancel/$1');
+        $routes->post('orders/(:num)/activate', 'Purchase\PurchaseOrderController::activate/$1');
         $routes->get('orders/(:num)/receive', 'Purchase\PurchaseReceiptController::createFromPo/$1');
         $routes->post('orders/(:num)/receive', 'Purchase\PurchaseReceiptController::storeFromPo/$1');
         $routes->get('receipts', 'Purchase\PurchaseReceiptController::index');
@@ -257,21 +258,5 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         }
         $routes->post('provinces/sync', 'Setup\WilayahSyncController::provinces');
         $routes->post('cities/sync', 'Setup\WilayahSyncController::cities');
-    });
-
-    $routes->get('ai-ocr/diagnostics', 'Ai\OcrDiagnosticsController::index');
-    $routes->get('ai-ocr/samples/purchase-order', 'Ai\SampleDocumentController::purchaseOrder');
-    $routes->get('ai-ocr/samples/sales-order', 'Ai\SampleDocumentController::salesOrder');
-
-    $routes->group('ai-documents', static function (RouteCollection $routes): void {
-        $routes->get('/', 'Ai\DocumentController::index');
-        $routes->get('upload', 'Ai\DocumentController::upload');
-        $routes->post('upload', 'Ai\DocumentController::store');
-        $routes->get('(:num)', 'Ai\DocumentController::show/$1');
-        $routes->post('(:num)/process', 'Ai\DocumentController::process/$1');
-        $routes->get('(:num)/review', 'Ai\DocumentController::review/$1');
-        $routes->post('(:num)/review', 'Ai\DocumentController::saveReview/$1');
-        $routes->post('(:num)/convert-po', 'Ai\DocumentController::convertToPo/$1');
-        $routes->post('(:num)/convert-so', 'Ai\DocumentController::convertToSo/$1');
     });
 });
