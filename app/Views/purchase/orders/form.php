@@ -77,7 +77,7 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
                 <div>
                     <h4 class="card-title mb-1"><?= esc($title ?? ($isEdit ? 'Edit Purchase Order' : 'Create Purchase Order')) ?></h4>
-                    <p class="text-muted mb-0">Header berisi biaya global. Line detail bisa override discount, VAT, dan WHT per item.</p>
+                    <p class="text-muted mb-0">Header berisi biaya global. VAT/WHT diisi sebagai kode pajak, nominal pajak dihitung dari detail/import bila tersedia.</p>
                 </div>
                 <a href="<?= $isEdit ? site_url('purchase/orders/' . (int) $order['id']) : site_url('purchase/orders') ?>" class="btn btn-light">Back</a>
             </div>
@@ -140,8 +140,8 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
                 <div class="col-md-3 mb-3"><label class="form-label">Freight</label><input type="number" step="0.01" name="freight_amount" class="form-control calc-header text-end" value="<?= esc($value('freight_amount', '0')) ?>"></div>
                 <div class="col-md-3 mb-3"><label class="form-label">Other Amount</label><input type="number" step="0.01" name="other_amount" class="form-control calc-header text-end" value="<?= esc($value('other_amount', '0')) ?>"></div>
                 <div class="col-md-3 mb-3"><label class="form-label">Special Charge</label><input type="number" step="0.01" name="special_charge_amount" class="form-control calc-header text-end" value="<?= esc($value('special_charge_amount', '0')) ?>"></div>
-                <div class="col-md-3 mb-3"><label class="form-label">Header VAT</label><input type="number" step="0.01" name="vat_amount" class="form-control calc-header text-end" value="<?= esc($value('vat_amount', '0')) ?>"></div>
-                <div class="col-md-3 mb-3"><label class="form-label">Header WHT</label><input type="number" step="0.01" name="wht_amount" class="form-control calc-header text-end" value="<?= esc($value('wht_amount', '0')) ?>"></div>
+                <div class="col-md-3 mb-3"><label class="form-label">VAT Code</label><input type="text" name="vat_code" class="form-control" value="<?= esc($value('vat_code')) ?>" placeholder="PPN / VAT"></div>
+                <div class="col-md-3 mb-3"><label class="form-label">WHT Code</label><input type="text" name="wht_code" class="form-control" value="<?= esc($value('wht_code')) ?>" placeholder="PPh / WHT"></div>
                 <div class="col-md-3 mb-3"><label class="form-label">Notes</label><input type="text" name="notes" class="form-control" value="<?= esc($value('notes')) ?>"></div>
                 <div class="col-md-12 mb-3"><label class="form-label">Remarks</label><textarea name="remarks" class="form-control" rows="2"><?= esc($value('remarks')) ?></textarea></div>
             </div>
@@ -161,43 +161,19 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
             <div class="po-lines-scroll">
                 <table class="table table-bordered table-sm align-middle po-lines-table" id="poLinesTable">
                     <colgroup>
-                        <col class="po-col-line">
-                        <col class="po-col-item-code">
-                        <col class="po-col-item-name">
-                        <col class="po-col-description">
-                        <col class="po-col-qty">
-                        <col class="po-col-uom">
-                        <col class="po-col-price">
-                        <col class="po-col-disc-percent">
-                        <col class="po-col-disc-amount">
-                        <col class="po-col-vat">
-                        <col class="po-col-wht">
-                        <col class="po-col-total">
-                        <col class="po-col-action">
+                        <col class="po-col-line"><col class="po-col-item-code"><col class="po-col-item-name"><col class="po-col-description"><col class="po-col-qty"><col class="po-col-uom"><col class="po-col-price"><col class="po-col-disc-percent"><col class="po-col-disc-amount"><col class="po-col-vat"><col class="po-col-wht"><col class="po-col-total"><col class="po-col-action">
                     </colgroup>
                     <thead class="table-light">
-                        <tr>
-                            <th>Line</th>
-                            <th>Item Code</th>
-                            <th>Item Name</th>
-                            <th>Description</th>
-                            <th>Qty</th>
-                            <th>UoM</th>
-                            <th>Price</th>
-                            <th>Disc %</th>
-                            <th>Disc Amt</th>
-                            <th>VAT</th>
-                            <th>WHT</th>
-                            <th class="text-end">Line Total</th>
-                            <th></th>
-                        </tr>
+                        <tr><th>Line</th><th>Item Code</th><th>Item Name</th><th>Description</th><th>Qty</th><th>UoM</th><th>Price</th><th>Disc %</th><th>Disc Amt</th><th>VAT</th><th>WHT</th><th class="text-end">Line Total</th><th></th></tr>
                     </thead>
                     <tbody>
                         <?php foreach ($lineRows as $i => $line): ?>
+                            <?php $currentCode = (string) $lineValue($line, $i, 'item_code'); $currentName = (string) $lineValue($line, $i, 'item_name'); $selectedFound = false; ?>
                             <tr>
                                 <td><input type="number" name="po_line[]" class="form-control form-control-sm text-end line-number" min="1" step="1" value="<?= esc($lineValue($line, $i, 'po_line', $line['line_no'] ?? ($i + 1))) ?>" required></td>
                                 <td>
                                     <input type="hidden" name="item_id[]" class="item-id" value="<?= esc($lineValue($line, $i, 'item_id')) ?>">
+                                    <input type="hidden" name="item_code_original[]" class="item-code-original" value="<?= esc($currentCode) ?>">
                                     <select name="item_code[]" class="form-select form-select-sm item-select">
                                         <option value="">Pilih / cari data</option>
                                         <?php foreach ($items as $item): ?>
@@ -206,13 +182,17 @@ $lineRows = $lines !== [] ? $lines : array_fill(0, 3, []);
                                             $name = (string) $pick($item, ['item_name', 'itemn', 'itemna', 'name', 'product_name', 'description']);
                                             $uom = (string) $pick($item, ['purchaseuom', 'purchase_uom', 'stockuom', 'stock_uom', 'uom_code', 'uom'], 'PCS');
                                             $price = (float) $pick($item, ['purchasep', 'purchase_price', 'item_price', 'price', 'cost_price'], 0);
-                                            $selectedItem = (string) $lineValue($line, $i, 'item_code') === $code;
+                                            $selectedItem = $currentCode !== '' && $currentCode === $code;
+                                            if ($selectedItem) { $selectedFound = true; }
                                             ?>
                                             <option value="<?= esc($code) ?>" <?= $selectedItem ? 'selected' : '' ?> data-id="<?= (int) ($item['id'] ?? 0) ?>" data-code="<?= esc($code, 'attr') ?>" data-name="<?= esc($name, 'attr') ?>" data-uom="<?= esc($uom, 'attr') ?>" data-price="<?= esc((string) $price, 'attr') ?>"><?= esc(trim($code . ' - ' . $name, ' -')) ?></option>
                                         <?php endforeach ?>
+                                        <?php if ($currentCode !== '' && ! $selectedFound): ?>
+                                            <option value="<?= esc($currentCode) ?>" selected data-id="<?= esc($lineValue($line, $i, 'item_id')) ?>" data-code="<?= esc($currentCode, 'attr') ?>" data-name="<?= esc($currentName, 'attr') ?>" data-uom="<?= esc($lineValue($line, $i, 'uom_code', 'PCS'), 'attr') ?>" data-price="<?= esc($lineValue($line, $i, 'unit_price', '0'), 'attr') ?>"><?= esc(trim($currentCode . ' - ' . $currentName, ' -')) ?> (existing)</option>
+                                        <?php endif ?>
                                     </select>
                                 </td>
-                                <td><input type="text" name="item_name[]" class="form-control form-control-sm item-name" value="<?= esc($lineValue($line, $i, 'item_name')) ?>"></td>
+                                <td><input type="text" name="item_name[]" class="form-control form-control-sm item-name" value="<?= esc($currentName) ?>"></td>
                                 <td><input type="text" name="description[]" class="form-control form-control-sm" value="<?= esc($lineValue($line, $i, 'description')) ?>"></td>
                                 <td><input type="number" step="0.0001" name="qty[]" class="form-control form-control-sm calc text-end" value="<?= esc($lineValue($line, $i, 'qty', $line['qty_ordered'] ?? ($i === 0 ? '1' : ''))) ?>"></td>
                                 <td><input type="text" name="uom_code[]" class="form-control form-control-sm" value="<?= esc($lineValue($line, $i, 'uom_code', 'PCS')) ?>"></td>
@@ -256,25 +236,10 @@ document.addEventListener('DOMContentLoaded', function () {
     function money(value) { return number(value).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
     function header(name) { const el = document.querySelector('[name="' + name + '"]'); return el ? number(el.value) : 0; }
     function lineInput(row, name) { const el = row.querySelector('[name="' + name + '[]"]'); return el ? number(el.value) : 0; }
-    function splitLabel(text) {
-        text = (text || '').trim();
-        const separatorIndex = text.indexOf(' - ');
-        return separatorIndex >= 0 ? text.slice(separatorIndex + 3).trim() : text;
-    }
-    function renderedSelect2Text(select) {
-        if (!select) return '';
-        const container = select.nextElementSibling;
-        const rendered = container ? container.querySelector('.select2-selection__rendered') : null;
-        return rendered ? rendered.textContent.trim().replace(/^×\s*/, '') : '';
-    }
-    function optionName(option, select = null) {
-        if (option && option.dataset && option.dataset.name && option.dataset.name.trim() !== '') return option.dataset.name.trim();
-        if (option && option.textContent && option.textContent.trim() !== '') return splitLabel(option.textContent);
-        return splitLabel(renderedSelect2Text(select));
-    }
-    function optionTerms(option) {
-        return option && option.dataset && option.dataset.terms ? option.dataset.terms.trim() : '';
-    }
+    function splitLabel(text) { text = (text || '').trim(); const separatorIndex = text.indexOf(' - '); return separatorIndex >= 0 ? text.slice(separatorIndex + 3).trim() : text; }
+    function renderedSelect2Text(select) { if (!select) return ''; const container = select.nextElementSibling; const rendered = container ? container.querySelector('.select2-selection__rendered') : null; return rendered ? rendered.textContent.trim().replace(/^×\s*/, '') : ''; }
+    function optionName(option, select = null) { if (option && option.dataset && option.dataset.name && option.dataset.name.trim() !== '') return option.dataset.name.trim(); if (option && option.textContent && option.textContent.trim() !== '') return splitLabel(option.textContent); return splitLabel(renderedSelect2Text(select)); }
+    function optionTerms(option) { return option && option.dataset && option.dataset.terms ? option.dataset.terms.trim() : ''; }
     function fillSupplierFromSelected(force = false) {
         const option = supplierSelect.options[supplierSelect.selectedIndex];
         const selectedName = optionName(option, supplierSelect);
@@ -284,36 +249,28 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     function fillItemRow(row, select) {
         const option = select.options[select.selectedIndex];
-        row.querySelector('.item-id').value = option && option.dataset ? (option.dataset.id || '') : '';
+        if (!option || !option.value) return;
+        row.querySelector('.item-id').value = option.dataset ? (option.dataset.id || '') : '';
+        row.querySelector('.item-code-original').value = option.value || '';
         row.querySelector('[name="item_name[]"]').value = optionName(option, select) || '';
-        row.querySelector('[name="uom_code[]"]').value = option && option.dataset ? (option.dataset.uom || 'PCS') : 'PCS';
-        row.querySelector('[name="unit_price[]"]').value = option && option.dataset ? (option.dataset.price || '0') : '0';
+        row.querySelector('[name="uom_code[]"]').value = option.dataset ? (option.dataset.uom || 'PCS') : 'PCS';
+        row.querySelector('[name="unit_price[]"]').value = option.dataset ? (option.dataset.price || '0') : '0';
         recalc();
     }
     function recalc() {
         let subtotal = 0, lineDiscount = 0, lineVat = 0, lineWht = 0;
         tbody.querySelectorAll('tr').forEach(function (row) {
-            const qty = lineInput(row, 'qty');
-            const price = lineInput(row, 'unit_price');
-            const gross = qty * price;
-            const discPct = lineInput(row, 'line_discount_percent');
-            const discAmt = lineInput(row, 'line_discount_amount');
-            const discount = (gross * discPct / 100) + discAmt;
-            const vat = lineInput(row, 'line_vat_amount');
-            const wht = lineInput(row, 'line_wht_amount');
-            const lineTotal = gross - discount + vat - wht;
-            subtotal += gross;
-            lineDiscount += discount;
-            lineVat += vat;
-            lineWht += wht;
-            row.querySelector('.line-total').textContent = money(lineTotal);
+            const qty = lineInput(row, 'qty'); const price = lineInput(row, 'unit_price'); const gross = qty * price;
+            const discPct = lineInput(row, 'line_discount_percent'); const discAmt = lineInput(row, 'line_discount_amount'); const discount = (gross * discPct / 100) + discAmt;
+            const vat = lineInput(row, 'line_vat_amount'); const wht = lineInput(row, 'line_wht_amount'); const lineTotal = gross - discount + vat - wht;
+            subtotal += gross; lineDiscount += discount; lineVat += vat; lineWht += wht; row.querySelector('.line-total').textContent = money(lineTotal);
         });
         const percentDiscount = subtotal * header('discount_percent') / 100;
         const manualDiscount = header('discount_amount');
         const totalDiscount = percentDiscount + manualDiscount + lineDiscount;
         const charges = header('freight_amount') + header('special_charge_amount') + header('other_amount');
-        const vat = header('vat_amount') + lineVat;
-        const wht = header('wht_amount') + lineWht;
+        const vat = lineVat;
+        const wht = lineWht;
         const total = subtotal - totalDiscount + charges + vat - wht;
         document.getElementById('subtotalText').textContent = money(subtotal);
         document.getElementById('discountText').textContent = money(totalDiscount);
@@ -323,39 +280,18 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('totalText').textContent = money(total);
     }
     function renumberLines() { tbody.querySelectorAll('tr').forEach(function (row, index) { row.querySelector('.line-number').value = index + 1; }); }
-    function bindRow(row) {
-        row.querySelectorAll('.calc').forEach(input => input.addEventListener('input', recalc));
-        const select = row.querySelector('.item-select');
-        select.addEventListener('change', function () { fillItemRow(row, this); });
-        row.querySelector('.remove-line').addEventListener('click', function () {
-            if (tbody.querySelectorAll('tr').length > 1) { row.remove(); renumberLines(); recalc(); }
-        });
-    }
+    function bindRow(row) { row.querySelectorAll('.calc').forEach(input => input.addEventListener('input', recalc)); const select = row.querySelector('.item-select'); select.addEventListener('change', function () { fillItemRow(row, this); }); row.querySelector('.remove-line').addEventListener('click', function () { if (tbody.querySelectorAll('tr').length > 1) { row.remove(); renumberLines(); recalc(); } }); }
     document.querySelectorAll('.calc-header').forEach(input => input.addEventListener('input', recalc));
     document.getElementById('addLineBtn').addEventListener('click', function () {
         const clone = tbody.querySelector('tr').cloneNode(true);
-        clone.querySelectorAll('input').forEach(function (input) {
-            if (input.type === 'hidden') { input.value = ''; return; }
-            if (input.name === 'uom_code[]') input.value = 'PCS';
-            else if (input.classList.contains('calc')) input.value = '0';
-            else input.value = '';
-        });
+        clone.querySelectorAll('input').forEach(function (input) { if (input.type === 'hidden') { input.value = ''; return; } if (input.name === 'uom_code[]') input.value = 'PCS'; else if (input.classList.contains('calc')) input.value = '0'; else input.value = ''; });
         clone.querySelectorAll('select').forEach(function (select) { select.selectedIndex = 0; });
         tbody.appendChild(clone); renumberLines(); bindRow(clone); recalc();
     });
     supplierSelect.addEventListener('change', function () { fillSupplierFromSelected(true); });
     tbody.querySelectorAll('tr').forEach(bindRow);
-    if (window.jQuery) {
-        window.jQuery(document).on('change select2:select', '#supplierSelect', function () {
-            setTimeout(function () { fillSupplierFromSelected(true); }, 0);
-        });
-        window.jQuery(document).on('change select2:select', '.item-select', function () {
-            const row = this.closest('tr');
-            if (row) setTimeout(() => fillItemRow(row, this), 0);
-        });
-    }
-    fillSupplierFromSelected(false);
-    recalc();
+    if (window.jQuery) { window.jQuery(document).on('change select2:select', '#supplierSelect', function () { setTimeout(function () { fillSupplierFromSelected(true); }, 0); }); window.jQuery(document).on('change select2:select', '.item-select', function () { const row = this.closest('tr'); if (row) setTimeout(() => fillItemRow(row, this), 0); }); }
+    fillSupplierFromSelected(false); recalc();
 });
 </script>
 <?= $this->endSection() ?>
