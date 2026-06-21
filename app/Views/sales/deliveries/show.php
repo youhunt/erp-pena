@@ -3,6 +3,7 @@
 <?= $this->section('content') ?>
 <?php
 $status = (string) ($delivery['status'] ?? 'posted');
+$existingInvoice = $existingInvoice ?? null;
 $statusClass = match ($status) {
     'posted' => 'bg-success',
     'invoiced' => 'bg-info',
@@ -28,6 +29,7 @@ $statusClass = match ($status) {
                         <tr><th>SO No</th><td><a href="<?= site_url('sales/orders/' . $delivery['sales_order_id']) ?>"><?= esc($delivery['so_no']) ?></a></td></tr>
                         <tr><th>Customer</th><td><?= esc(($delivery['customer_code'] ?? '-') . ' ' . ($delivery['customer_name'] ?? '')) ?></td></tr>
                         <tr><th>COGS GL Entry</th><td><?= ! empty($delivery['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $delivery['gl_entry_id']) . '">#' . esc($delivery['gl_entry_id']) . '</a>' : '-' ?></td></tr>
+                        <tr><th>AR Invoice</th><td><?= ! empty($existingInvoice) ? '<a href="' . site_url('ar/sales-invoices/' . (int) $existingInvoice['id']) . '">' . esc($existingInvoice['invoice_no'] ?? ('#' . $existingInvoice['id'])) . '</a>' : '-' ?></td></tr>
                         <tr><th>Reversal GL</th><td><?= ! empty($delivery['reversal_gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $delivery['reversal_gl_entry_id']) . '">#' . esc($delivery['reversal_gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Posted</th><td><?= esc($delivery['posted_at'] ?? '-') ?></td></tr>
                         <?php if ($status === 'reversed'): ?>
@@ -39,7 +41,9 @@ $statusClass = match ($status) {
                 <div class="d-flex flex-wrap gap-2 mt-3">
                     <a href="<?= site_url('sales/orders/' . $delivery['sales_order_id']) ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to SO</a>
                     <a href="<?= site_url('print/sales-deliveries/' . (int) $delivery['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
-                    <?php if ($status === 'posted'): ?>
+                    <?php if (! empty($existingInvoice)): ?>
+                        <a href="<?= site_url('ar/sales-invoices/' . (int) $existingInvoice['id']) ?>" class="btn btn-info"><i class="bx bx-receipt me-1"></i> View AR Invoice</a>
+                    <?php elseif ($status === 'posted'): ?>
                         <a href="<?= site_url('sales/deliveries/' . $delivery['id'] . '/invoice') ?>" class="btn btn-primary"><i class="bx bx-receipt me-1"></i> Create Invoice</a>
                         <form method="post" action="<?= site_url('sales/deliveries/' . (int) $delivery['id'] . '/reverse') ?>" class="d-flex gap-2">
                             <?= csrf_field() ?>
