@@ -17,6 +17,8 @@ PENA ERP sekarang sudah tidak berada pada tahap blueprint kosong. Core applicati
 - Inventory movement, stock balance, stock card, running qty/value.
 - GL entry posting, balance validation, trial balance summary.
 - Production core: BOM, Work Center, Routing, Work Order, import, edit, dan action guard.
+- Stock Card Excel export untuk audit inventory.
+- GL Entries Excel export untuk audit finance.
 
 Status yang benar saat ini adalah **Internal UAT / Core Stabilization**.
 
@@ -31,11 +33,13 @@ Status yang benar saat ini adalah **Internal UAT / Core Stabilization**.
 | 3 | Receive PO | Receipt posted dan stock bertambah |
 | 4 | Cek PO line | Received/outstanding qty akurat |
 | 5 | Cek Stock Card | Movement purchase receipt tampil |
-| 6 | Create AP Invoice | Payable open |
-| 7 | Post AP Payment sebagian | Payable partial |
-| 8 | Post AP Payment sisa | Payable paid |
-| 9 | Cek Cash/Bank | Balance berkurang |
-| 10 | Cek GL | Debit/credit balance |
+| 6 | Export Stock Card | File Excel terunduh dengan opening, movement, running qty/value |
+| 7 | Create AP Invoice | Payable open |
+| 8 | Post AP Payment sebagian | Payable partial |
+| 9 | Post AP Payment sisa | Payable paid |
+| 10 | Cek Cash/Bank | Balance berkurang |
+| 11 | Cek GL | Debit/credit balance |
+| 12 | Export GL Entries | File Excel terunduh dengan journal header dan line detail |
 
 ### 2.2 Sales E2E
 
@@ -46,11 +50,13 @@ Status yang benar saat ini adalah **Internal UAT / Core Stabilization**.
 | 3 | Delivery SO | Delivery posted dan stock berkurang |
 | 4 | Cek SO line | Delivered/outstanding qty akurat |
 | 5 | Cek Stock Card | Movement sales delivery tampil |
-| 6 | Create AR Invoice | Receivable open |
-| 7 | Post AR Receipt sebagian | Receivable partial |
-| 8 | Post AR Receipt sisa | Receivable paid |
-| 9 | Cek Cash/Bank | Balance bertambah |
-| 10 | Cek GL | Debit/credit balance |
+| 6 | Export Stock Card | File Excel terunduh dengan opening, movement, running qty/value |
+| 7 | Create AR Invoice | Receivable open |
+| 8 | Post AR Receipt sebagian | Receivable partial |
+| 9 | Post AR Receipt sisa | Receivable paid |
+| 10 | Cek Cash/Bank | Balance bertambah |
+| 11 | Cek GL | Debit/credit balance |
+| 12 | Export GL Entries | File Excel terunduh dengan journal header dan line detail |
 
 ### 2.3 Production Core
 
@@ -65,6 +71,7 @@ Status yang benar saat ini adalah **Internal UAT / Core Stabilization**.
 | 7 | Receive Finished Good | Finished good stock in |
 | 8 | Issue + Receive combined | Atomic; kalau gagal rollback |
 | 9 | Cek Stock Card | Semua movement production tampil |
+| 10 | Export Stock Card | File Excel bisa dipakai audit production movement |
 
 ## 3. Guardrail yang Tidak Boleh Dilepas
 
@@ -75,20 +82,32 @@ Status yang benar saat ini adalah **Internal UAT / Core Stabilization**.
 5. Semua transaksi finance wajib bisa diaudit di GL Entries.
 6. Semua flow tenant-owned wajib memakai company/site active context.
 7. Semua nomor dokumen otomatis wajib tetap bisa dioverride manual jika user mengisi nomor sendiri.
+8. Export audit harus mengikuti filter yang sama dengan halaman audit.
 
-## 4. Next Core Backlog
+## 4. ERP Core Audit Export
+
+| Export | Route | Isi File |
+|---|---|---|
+| Stock Card Export | `/inventory/stock-card/export` | Opening balance, movement detail, qty in/out, running qty, value in/out, running value |
+| GL Entries Export | `/gl/entries/export` | Journal header, source module/type, source number, line account, debit, credit, entry difference |
+
+Catatan:
+
+- Export memakai filter yang sama dengan layar.
+- Export tetap mengikuti active company/site.
+- Export membutuhkan dependency PhpSpreadsheet dari Composer.
+
+## 5. Next Core Backlog
 
 | Priority | Item | Target |
 |---:|---|---|
 | 1 | Purchasing E2E UAT | Pastikan PO sampai payment balance |
 | 2 | Sales E2E UAT | Pastikan SO sampai receipt balance |
 | 3 | Cash/Bank report hardening | Audit cash/bank lebih mudah |
-| 4 | Stock Card export | Inventory audit bisa dibawa ke Excel |
-| 5 | GL export | Finance validation bisa dibawa ke Excel |
-| 6 | Non-admin permission UAT | Hak akses lebih aman untuk user operasional |
-| 7 | Master data cleanup | Dropdown dan mapping transaksi lebih stabil |
+| 4 | Non-admin permission UAT | Hak akses lebih aman untuk user operasional |
+| 5 | Master data cleanup | Dropdown dan mapping transaksi lebih stabil |
 
-## 5. Catatan Deploy Hosting
+## 6. Catatan Deploy Hosting
 
 Setelah pull source terbaru, pastikan SQL hosting minimum sudah dijalankan:
 
@@ -104,7 +123,7 @@ database/hosting/2026-06-21_update_sales_order_uat_feedback.sql
 
 Jika database belum menjalankan SQL di atas, UAT browser bisa gagal walaupun source code sudah benar.
 
-## 6. Target Setelah Ini
+## 7. Target Setelah Ini
 
 Target berikutnya adalah memilih satu flow dan menyelesaikannya sampai `PASS`:
 
