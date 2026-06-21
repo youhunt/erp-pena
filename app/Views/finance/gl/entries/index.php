@@ -12,6 +12,7 @@ $validation = $validation ?? [
 ];
 $trialBalanceRows = $trialBalanceRows ?? [];
 $filters = $filters ?? ['date_from' => date('Y-m-01'), 'date_to' => date('Y-m-d'), 'source_module' => ''];
+$exportUrl = site_url('gl/entries/export') . '?' . http_build_query($filters);
 ?>
 <div class="row">
     <div class="col-md-3">
@@ -35,9 +36,14 @@ $filters = $filters ?? ['date_from' => date('Y-m-01'), 'date_to' => date('Y-m-d'
                 <h4 class="card-title mb-1">GL Entries</h4>
                 <p class="text-muted mb-0">Posted journals with validation summary and trial balance for selected period.</p>
             </div>
-            <a href="<?= site_url('gl/entries/new') ?>" class="btn btn-primary">
-                <i class="bx bx-plus me-1"></i> New GL Entry
-            </a>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="<?= esc($exportUrl) ?>" class="btn btn-success">
+                    <i class="bx bx-download me-1"></i> Export Excel
+                </a>
+                <a href="<?= site_url('gl/entries/new') ?>" class="btn btn-primary">
+                    <i class="bx bx-plus me-1"></i> New GL Entry
+                </a>
+            </div>
         </div>
 
         <form method="get" class="row g-2 mb-4">
