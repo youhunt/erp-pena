@@ -82,6 +82,8 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('orders/import', 'System\OrderImportController::importSales');
         $routes->post('orders/import/commit', 'System\OrderImportController::commitSales');
         $routes->post('orders', 'Sales\SalesOrderController::store');
+        $routes->get('orders/(:num)/edit', 'Sales\SalesOrderController::edit/$1');
+        $routes->post('orders/(:num)', 'Sales\SalesOrderController::update/$1');
         $routes->get('orders/(:num)', 'Sales\SalesOrderController::show/$1');
         $routes->post('orders/(:num)/submit', 'Sales\SalesOrderController::submit/$1');
         $routes->post('orders/(:num)/approve', 'Sales\SalesOrderController::approve/$1');
