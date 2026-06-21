@@ -12,6 +12,21 @@ $statusClass = match ($status) {
 };
 $outstandingAmount = (float) ($receivable['outstanding_amount'] ?? $invoice['outstanding_amount'] ?? 0);
 $paidAmount = (float) ($receivable['paid_amount'] ?? $invoice['paid_amount'] ?? 0);
+$receipts = $receipts ?? [];
+if ($receipts === []) {
+    try {
+        $db = \Config\Database::connect();
+        if ($db->tableExists('ar_receipts')) {
+            $receiptBuilder = $db->table('ar_receipts')->where('sales_invoice_id', (int) $invoice['id']);
+            if ($db->fieldExists('deleted_at', 'ar_receipts')) {
+                $receiptBuilder->where('deleted_at', null);
+            }
+            $receipts = $receiptBuilder->orderBy('receipt_date', 'DESC')->orderBy('id', 'DESC')->get()->getResultArray();
+        }
+    } catch (\Throwable) {
+        $receipts = [];
+    }
+}
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -35,7 +50,9 @@ $paidAmount = (float) ($receivable['paid_amount'] ?? $invoice['paid_amount'] ?? 
                         <tr><th>GL Entry</th><td><?= ! empty($invoice['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $invoice['gl_entry_id']) . '">#' . esc($invoice['gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Reversal GL</th><td><?= ! empty($invoice['reversal_gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $invoice['reversal_gl_entry_id']) . '">#' . esc($invoice['reversal_gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Customer</th><td><?= esc(($invoice['customer_code'] ?? '-') . ' ' . ($invoice['customer_name'] ?? '')) ?></td></tr>
-                        <tr><th>Outstanding</th><td class="fw-semibold"><?= esc(number_format($outstandingAmount, 2)) ?></td></tr>
+                        <tr><th>Total</th><td class="fw-semibold"><?= esc(number_format((float) ($invoice['total_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr><th>Received</th><td class="fw-semibold text-success"><?= esc(number_format($paidAmount, 2)) ?></td></tr>
+                        <tr><th>Outstanding</th><td class="fw-semibold <?= $outstandingAmount > 0 ? 'text-danger' : 'text-success' ?>"><?= esc(number_format($outstandingAmount, 2)) ?></td></tr>
                         <?php if ($status === 'cancelled'): ?>
                             <tr><th>Cancelled</th><td><?= esc($invoice['cancelled_at'] ?? '-') ?></td></tr>
                             <tr><th>Reason</th><td><?= esc($invoice['cancel_reason'] ?? '-') ?></td></tr>
@@ -88,6 +105,37 @@ $paidAmount = (float) ($receivable['paid_amount'] ?? $invoice['paid_amount'] ?? 
                 </div>
             </div>
         </div>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="card-title mb-0">Receipt History</h4>
+                    <span class="badge bg-light text-dark"><?= esc((string) count($receipts)) ?> receipt(s)</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-nowrap align-middle mb-0">
+                        <thead class="table-light"><tr><th>Date</th><th>Receipt No</th><th>Method</th><th>Cash/Bank</th><th class="text-end">Amount</th><th>Status</th><th>GL</th></tr></thead>
+                        <tbody>
+                            <?php foreach ($receipts as $receipt): ?>
+                                <tr>
+                                    <td><?= esc($receipt['receipt_date'] ?? '-') ?></td>
+                                    <td><a href="<?= site_url('ar/receipts/' . (int) $receipt['id']) ?>" class="fw-semibold"><?= esc($receipt['receipt_no'] ?? ('#' . $receipt['id'])) ?></a></td>
+                                    <td><?= esc($receipt['receipt_method'] ?? '-') ?></td>
+                                    <td><?= esc($receipt['cash_bank_code'] ?? '-') ?></td>
+                                    <td class="text-end fw-semibold"><?= esc(number_format((float) ($receipt['receipt_amount'] ?? 0), 2)) ?></td>
+                                    <td><span class="badge bg-<?= ($receipt['status'] ?? '') === 'cancelled' ? 'danger' : 'success' ?>"><?= esc($receipt['status'] ?? '-') ?></span></td>
+                                    <td><?= ! empty($receipt['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $receipt['gl_entry_id']) . '">#' . esc($receipt['gl_entry_id']) . '</a>' : '-' ?></td>
+                                </tr>
+                            <?php endforeach ?>
+                            <?php if ($receipts === []): ?>
+                                <tr><td colspan="7" class="text-center text-muted py-4">No receipt posted yet.</td></tr>
+                            <?php endif ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <?php if (! empty($invoice['notes'])): ?>
             <div class="card"><div class="card-body"><h4 class="card-title mb-3">Notes</h4><p class="text-muted mb-0"><?= esc($invoice['notes']) ?></p></div></div>
         <?php endif ?>
