@@ -38,6 +38,8 @@ $totalDiscountAmount = round($discountPercentAmount + $manualDiscountAmount, 2);
                         <tr><th>Supplier</th><td><?= esc(($order['supplier_code'] ?? $order['supplier'] ?? '-') . ' ' . ($order['supplier_name'] ?? '')) ?></td></tr>
                         <tr><th>Terms</th><td><?= esc($order['terms_code'] ?? '-') ?></td></tr>
                         <tr><th>Currency</th><td><?= esc($order['currency_code']) ?></td></tr>
+                        <tr><th>VAT Code</th><td><?= esc($order['vat_code'] ?? '-') ?></td></tr>
+                        <tr><th>WHT Code</th><td><?= esc($order['wht_code'] ?? '-') ?></td></tr>
                         <tr><th>Company</th><td><?= esc($order['company'] ?? $order['company_id']) ?></td></tr>
                         <tr><th>Site</th><td><?= esc($order['site'] ?? $order['site_id'] ?? '-') ?></td></tr>
                         <tr><th>Submitted</th><td><?= esc($order['submitted_at'] ?? '-') ?></td></tr>
@@ -50,6 +52,12 @@ $totalDiscountAmount = round($discountPercentAmount + $manualDiscountAmount, 2);
                     <a href="<?= site_url('print/purchase-orders/' . (int) $order['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
                     <?php if ($canEditPo): ?>
                         <a href="<?= site_url('purchase/orders/' . $order['id'] . '/edit') ?>" class="btn btn-outline-primary"><i class="bx bx-edit me-1"></i> Edit</a>
+                    <?php endif ?>
+                    <?php if ($status === 'cancelled'): ?>
+                        <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/activate') ?>">
+                            <?= csrf_field() ?>
+                            <button class="btn btn-success" onclick="return confirm('Activate this cancelled PO back to draft?')"><i class="bx bx-reset me-1"></i> Activate</button>
+                        </form>
                     <?php endif ?>
                     <?php if ($status === 'draft'): ?>
                         <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/submit') ?>"><?= csrf_field() ?><button class="btn btn-info" onclick="return confirm('Submit this PO?')">Submit</button></form>
@@ -90,8 +98,6 @@ $totalDiscountAmount = round($discountPercentAmount + $manualDiscountAmount, 2);
                         <tr><th>Freight</th><td class="text-end"><?= esc(number_format((float) ($order['freight_amount'] ?? 0), 2)) ?></td></tr>
                         <tr><th>Other Amount</th><td class="text-end"><?= esc(number_format((float) ($order['other_amount'] ?? 0), 2)) ?></td></tr>
                         <tr><th>Special Charge</th><td class="text-end"><?= esc(number_format((float) ($order['special_charge_amount'] ?? 0), 2)) ?></td></tr>
-                        <tr><th>VAT</th><td class="text-end"><?= esc(number_format((float) ($order['vat_amount'] ?? $order['tax_amount'] ?? 0), 2)) ?></td></tr>
-                        <tr><th>WHT</th><td class="text-end"><?= esc(number_format((float) ($order['wht_amount'] ?? 0), 2)) ?></td></tr>
                         <tr class="table-light"><th>Total PO</th><td class="text-end fw-semibold"><?= esc(number_format((float) $order['total_amount'], 2)) ?></td></tr>
                     </tbody>
                 </table>
