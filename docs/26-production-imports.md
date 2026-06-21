@@ -15,14 +15,28 @@ Semua template memiliki `site_code`. BOM, Routing, dan Work Order wajib memiliki
 
 ---
 
+## Standard Flow
+
+Flow import sekarang mengikuti standar PO/SO/Data Import:
+
+```text
+Download Template -> Upload File -> Preview & Validate -> Commit Import
+```
+
+Data belum masuk database saat upload. Data baru disimpan setelah preview valid dan user klik **Commit Import**.
+
+---
+
 ## Routes
 
-| Import | Upload Form | Template |
-|---|---|---|
-| BOM | `/production/imports/boms` | `/production/imports/boms/template` |
-| Work Center | `/production/imports/work-centers` | `/production/imports/work-centers/template` |
-| Routing | `/production/imports/routings` | `/production/imports/routings/template` |
-| Work Order | `/production/imports/work-orders` | `/production/imports/work-orders/template` |
+| Import | Upload Form | Template | Preview/Commit |
+|---|---|---|---|
+| BOM | `/production/imports/boms` | `/production/imports/boms/template` | `POST /production/imports/boms` |
+| Work Center | `/production/imports/work-centers` | `/production/imports/work-centers/template` | `POST /production/imports/work-centers` |
+| Routing | `/production/imports/routings` | `/production/imports/routings/template` | `POST /production/imports/routings` |
+| Work Order | `/production/imports/work-orders` | `/production/imports/work-orders/template` | `POST /production/imports/work-orders` |
+
+Catatan: endpoint POST yang sama dipakai untuk preview dan commit. Saat preview valid, sistem menyimpan data sementara di session dengan `commit_token`. Tombol Commit mengirim token tersebut.
 
 ---
 
@@ -30,8 +44,9 @@ Semua template memiliki `site_code`. BOM, Routing, dan Work Order wajib memiliki
 
 | File | Purpose |
 |---|---|
-| `app/Controllers/Production/ProductionImportController.php` | Import handler and template generator |
-| `app/Views/production/imports/form.php` | Upload form |
+| `app/Controllers/Production/ProductionImportController.php` | Template, preview validation, commit import |
+| `app/Views/production/imports/form.php` | Upload form dengan tombol Preview & Validate |
+| `app/Views/production/imports/preview.php` | Preview hasil validasi dan tombol Commit Import |
 | `app/Config/Routes.php` | Production import routes |
 | `app/Views/production/boms/index.php` | Import button |
 | `app/Views/production/work_centers/index.php` | Import button |
@@ -51,7 +66,7 @@ site_code, department_code, warehouse_code, parent_item_code, bom_type, qty_batc
 ### Work Center
 
 ```text
-site_code, department_code, warehouse_code, work_center_code, description, machine_code, notes, speed, capacity_percent, max_length, length_uom, max_width, width_uom, max_height, height_uom, max_volume, volume_uom, qty_labor, working_hour, cost_type, cost_amount, cost_uom, active_date, inactive_date
+site_code, department_code, warehouse_code, work_center_code, description, machine_code, notes, speed, capacity_percent, cost_type, cost_amount, cost_uom, active_date, inactive_date
 ```
 
 ### Routing
@@ -86,6 +101,8 @@ site_code, department_code, warehouse_code, work_center_code, wo_no, wo_date, pa
 - `line_no` is required for BOM, Routing, and Work Order.
 - Duplicate `line_no` inside same BOM/Routing/Work Order is rejected.
 - Work Order update is rejected if existing WO status is not `draft`.
+- Missing item master is shown as warning; import can still continue with fallback item name/code.
+- Commit button disabled when preview still has error.
 
 ---
 
@@ -101,18 +118,20 @@ No new table or column is added by this patch. No SQL is required for this impor
 |---:|---|---|---|
 | 1 | Open BOM list | Import button appears | NOT TESTED |
 | 2 | Download BOM template | XLSX downloaded | NOT TESTED |
-| 3 | Import valid BOM file | BOM header and lines created/updated | NOT TESTED |
-| 4 | Import BOM without line_no | Rejected | NOT TESTED |
-| 5 | Open Work Center list | Import button appears | NOT TESTED |
-| 6 | Download Work Center template | XLSX downloaded | NOT TESTED |
-| 7 | Import valid Work Center file | Work Center created/updated | NOT TESTED |
-| 8 | Open Routing list | Import button appears | NOT TESTED |
-| 9 | Import Routing without line_no | Rejected | NOT TESTED |
-| 10 | Import valid Routing file | Routing header and lines created/updated | NOT TESTED |
-| 11 | Open Work Order list | Import button appears | NOT TESTED |
-| 12 | Import Work Order without line_no | Rejected | NOT TESTED |
-| 13 | Import valid Work Order file | WO draft and component/routing lines created/updated | NOT TESTED |
-| 14 | Import update existing non-draft WO | Rejected | NOT TESTED |
+| 3 | Upload valid BOM file | Preview page appears with all rows valid | NOT TESTED |
+| 4 | Commit valid BOM preview | BOM header and lines created/updated | NOT TESTED |
+| 5 | Upload BOM without line_no | Preview shows error and Commit disabled | NOT TESTED |
+| 6 | Open Work Center list | Import button appears | NOT TESTED |
+| 7 | Download Work Center template | XLSX downloaded | NOT TESTED |
+| 8 | Upload valid Work Center file | Preview page appears with all rows valid | NOT TESTED |
+| 9 | Commit valid Work Center preview | Work Center created/updated | NOT TESTED |
+| 10 | Open Routing list | Import button appears | NOT TESTED |
+| 11 | Upload Routing without line_no | Preview shows error and Commit disabled | NOT TESTED |
+| 12 | Commit valid Routing preview | Routing header and lines created/updated | NOT TESTED |
+| 13 | Open Work Order list | Import button appears | NOT TESTED |
+| 14 | Upload Work Order without line_no | Preview shows error and Commit disabled | NOT TESTED |
+| 15 | Commit valid Work Order preview | WO draft and component/routing lines created/updated | NOT TESTED |
+| 16 | Upload update for existing non-draft WO | Preview shows error and Commit disabled | NOT TESTED |
 
 ---
 
@@ -120,11 +139,13 @@ No new table or column is added by this patch. No SQL is required for this impor
 
 | Area | Status |
 |---|---|
-| BOM import | Added |
-| Work Center import | Added |
-| Routing import | Added |
-| Work Order import | Added |
+| BOM import | Added with preview/commit |
+| Work Center import | Added with preview/commit |
+| Routing import | Added with preview/commit |
+| Work Order import | Added with preview/commit |
 | Template download | Added |
 | Upload form | Added |
+| Preview validation | Added |
+| Commit import | Added |
 | SQL | Not required |
 | UAT | Pending |
