@@ -12,6 +12,21 @@ $statusClass = match ($status) {
 };
 $outstandingAmount = (float) ($payable['outstanding_amount'] ?? $invoice['outstanding_amount'] ?? 0);
 $paidAmount = (float) ($payable['paid_amount'] ?? $invoice['paid_amount'] ?? 0);
+$payments = $payments ?? [];
+if ($payments === []) {
+    try {
+        $db = \Config\Database::connect();
+        if ($db->tableExists('ap_payments')) {
+            $paymentBuilder = $db->table('ap_payments')->where('purchase_invoice_id', (int) $invoice['id']);
+            if ($db->fieldExists('deleted_at', 'ap_payments')) {
+                $paymentBuilder->where('deleted_at', null);
+            }
+            $payments = $paymentBuilder->orderBy('payment_date', 'DESC')->orderBy('id', 'DESC')->get()->getResultArray();
+        }
+    } catch (\Throwable) {
+        $payments = [];
+    }
+}
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -35,7 +50,9 @@ $paidAmount = (float) ($payable['paid_amount'] ?? $invoice['paid_amount'] ?? 0);
                         <tr><th>GL Entry</th><td><?= ! empty($invoice['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $invoice['gl_entry_id']) . '">#' . esc($invoice['gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Reversal GL</th><td><?= ! empty($invoice['reversal_gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $invoice['reversal_gl_entry_id']) . '">#' . esc($invoice['reversal_gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Supplier</th><td><?= esc(($invoice['supplier_code'] ?? '-') . ' ' . ($invoice['supplier_name'] ?? '')) ?></td></tr>
-                        <tr><th>Outstanding</th><td class="fw-semibold"><?= esc(number_format($outstandingAmount, 2)) ?></td></tr>
+                        <tr><th>Total</th><td class="fw-semibold"><?= esc(number_format((float) ($invoice['total_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr><th>Paid</th><td class="fw-semibold text-success"><?= esc(number_format($paidAmount, 2)) ?></td></tr>
+                        <tr><th>Outstanding</th><td class="fw-semibold <?= $outstandingAmount > 0 ? 'text-danger' : 'text-success' ?>"><?= esc(number_format($outstandingAmount, 2)) ?></td></tr>
                         <?php if ($status === 'cancelled'): ?>
                             <tr><th>Cancelled</th><td><?= esc($invoice['cancelled_at'] ?? '-') ?></td></tr>
                             <tr><th>Reason</th><td><?= esc($invoice['cancel_reason'] ?? '-') ?></td></tr>
@@ -88,6 +105,37 @@ $paidAmount = (float) ($payable['paid_amount'] ?? $invoice['paid_amount'] ?? 0);
                 </div>
             </div>
         </div>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="card-title mb-0">Payment History</h4>
+                    <span class="badge bg-light text-dark"><?= esc((string) count($payments)) ?> payment(s)</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-nowrap align-middle mb-0">
+                        <thead class="table-light"><tr><th>Date</th><th>Payment No</th><th>Method</th><th>Cash/Bank</th><th class="text-end">Amount</th><th>Status</th><th>GL</th></tr></thead>
+                        <tbody>
+                            <?php foreach ($payments as $payment): ?>
+                                <tr>
+                                    <td><?= esc($payment['payment_date'] ?? '-') ?></td>
+                                    <td><a href="<?= site_url('ap/payments/' . (int) $payment['id']) ?>" class="fw-semibold"><?= esc($payment['payment_no'] ?? ('#' . $payment['id'])) ?></a></td>
+                                    <td><?= esc($payment['payment_method'] ?? '-') ?></td>
+                                    <td><?= esc($payment['cash_bank_code'] ?? '-') ?></td>
+                                    <td class="text-end fw-semibold"><?= esc(number_format((float) ($payment['payment_amount'] ?? 0), 2)) ?></td>
+                                    <td><span class="badge bg-<?= ($payment['status'] ?? '') === 'cancelled' ? 'danger' : 'success' ?>"><?= esc($payment['status'] ?? '-') ?></span></td>
+                                    <td><?= ! empty($payment['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $payment['gl_entry_id']) . '">#' . esc($payment['gl_entry_id']) . '</a>' : '-' ?></td>
+                                </tr>
+                            <?php endforeach ?>
+                            <?php if ($payments === []): ?>
+                                <tr><td colspan="7" class="text-center text-muted py-4">No payment posted yet.</td></tr>
+                            <?php endif ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <?php if (! empty($invoice['notes'])): ?>
             <div class="card"><div class="card-body"><h4 class="card-title mb-3">Notes</h4><p class="text-muted mb-0"><?= esc($invoice['notes']) ?></p></div></div>
         <?php endif ?>
