@@ -1,6 +1,36 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<style>
+    .erp-uat-card {
+        background: linear-gradient(135deg, #4658e8 0%, #233a9f 100%);
+        box-shadow: 0 12px 28px rgba(35, 58, 159, .22);
+    }
+    .erp-uat-card .erp-uat-subtitle {
+        color: rgba(255, 255, 255, .82) !important;
+    }
+    .erp-quick-audit-card,
+    .dashboard-metric-card,
+    .dashboard-queue-card {
+        border: 0;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+    }
+    .dashboard-section-title,
+    .dashboard-metric-value,
+    .erp-quick-audit-title {
+        color: #172033 !important;
+        font-weight: 700;
+    }
+    .dashboard-metric-label {
+        color: #5f6c80 !important;
+        letter-spacing: .01em;
+    }
+    .erp-quick-audit-card .btn {
+        border-width: 1.5px;
+        font-weight: 600;
+    }
+</style>
+
 <?php if (empty($hasTenantAccess)): ?>
     <div class="row justify-content-center">
         <div class="col-xl-8">
@@ -27,25 +57,26 @@
 <?php else: ?>
     <div class="row g-3 mb-3">
         <div class="col-xl-8">
-            <div class="card border-0 h-100 shadow-sm" style="background: linear-gradient(135deg, #556ee6 0%, #3949ab 100%);">
-                <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div class="card border-0 h-100 erp-uat-card">
+                <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3 p-4">
                     <div>
                         <span class="badge bg-light text-primary mb-2">ERP Core UAT</span>
-                        <h4 class="mb-2 text-white">Development Status & UAT Flow Board</h4>
-                        <p class="mb-0 text-white-50">
+                        <h4 class="mb-2 text-white fw-bold">Development Status & UAT Flow Board</h4>
+                        <p class="mb-0 erp-uat-subtitle">
                             Pantau progress modul, core guardrail, dan jalur test PO/SO/Inventory/GL dari satu halaman.
                         </p>
                     </div>
-                    <a href="<?= site_url('system/development-status') ?>" class="btn btn-light text-primary fw-semibold">
+                    <a href="<?= site_url('system/development-status') ?>" class="btn btn-light text-primary fw-semibold shadow-sm">
                         <i class="bx bx-line-chart me-1"></i> Open Development Status
                     </a>
                 </div>
             </div>
         </div>
         <div class="col-xl-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h5 class="font-size-15 mb-2">Quick Audit</h5>
+            <div class="card h-100 erp-quick-audit-card">
+                <div class="card-body p-4">
+                    <h5 class="font-size-15 mb-1 erp-quick-audit-title">Quick Audit</h5>
+                    <p class="text-muted small mb-3">Akses cepat ke audit inventory dan jurnal.</p>
                     <div class="d-grid gap-2">
                         <a href="<?= site_url('inventory/stock-card') ?>" class="btn btn-outline-primary btn-sm text-start">
                             <i class="bx bx-package me-1"></i> Stock Card Audit
@@ -77,10 +108,10 @@
                 <div class="col-xl-4 col-md-6 col-sm-6">
                     <a href="<?= site_url($route) ?>" class="text-reset dashboard-metric-card-link">
                         <div class="card mini-stats-wid dashboard-metric-card h-100">
-                            <div class="card-body">
+                            <div class="card-body p-4">
                                 <div class="d-flex align-items-center gap-3">
                                     <div class="flex-grow-1 dashboard-metric-content">
-                                        <p class="text-muted fw-medium mb-2 dashboard-metric-label"><?= esc($label) ?></p>
+                                        <p class="fw-medium mb-2 dashboard-metric-label"><?= esc($label) ?></p>
                                         <h4 class="mb-2 dashboard-metric-value"><?= $isMoney ? 'Rp ' : '' ?><?= esc($displayValue) ?></h4>
                                         <span class="btn btn-sm btn-outline-primary dashboard-metric-link">
                                             <i class="bx bx-right-arrow-alt me-1"></i> Open Module
@@ -117,7 +148,7 @@
                                 <div class="card-body">
                                     <div class="d-flex align-items-center justify-content-between gap-3">
                                         <div>
-                                            <h5 class="font-size-15 mb-1"><?= esc($queue['label'] ?? '-') ?></h5>
+                                            <h5 class="font-size-15 mb-1 fw-semibold text-dark"><?= esc($queue['label'] ?? '-') ?></h5>
                                             <p class="text-muted mb-0 dashboard-queue-description"><?= esc($queue['description'] ?? '-') ?></p>
                                         </div>
                                         <span class="badge bg-<?= esc($queue['badge'] ?? 'primary') ?> font-size-14 dashboard-queue-badge">
@@ -146,7 +177,7 @@
                 <div class="card h-100">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center mb-4">
-                            <h4 class="card-title mb-0">Recent ERP Activity</h4>
+                            <h4 class="card-title mb-0 fw-bold text-dark">Recent ERP Activity</h4>
                             <a href="<?= site_url('audit-logs') ?>" class="btn btn-sm btn-outline-primary">View All</a>
                         </div>
 
@@ -188,14 +219,14 @@
             <div class="col-xl-4">
                 <div class="card h-100">
                     <div class="card-body">
-                        <h4 class="card-title mb-4">Pending Work</h4>
+                        <h4 class="card-title mb-4 fw-bold text-dark">Pending Work</h4>
                         <div class="table-responsive">
                             <table class="table table-nowrap align-middle mb-0">
                                 <tbody>
                                     <?php foreach ($pendingWork as $work): ?>
                                         <tr>
                                             <td>
-                                                <a href="<?= site_url($work['route'] ?? 'dashboard') ?>" class="text-reset">
+                                                <a href="<?= site_url($work['route'] ?? 'dashboard') ?>" class="text-reset fw-semibold">
                                                     <?= esc($work['label'] ?? '-') ?>
                                                 </a>
                                             </td>
