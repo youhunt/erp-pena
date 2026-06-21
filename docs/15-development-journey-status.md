@@ -226,7 +226,7 @@ Catatan penting:
 | Hosting SQL not executed | Auto numbering or reversal fields fail | Run all required SQL hosting files |
 | Master data incomplete | Transaction dropdown empty or price/UoM missing | Seed/import master data first |
 | Cash/bank account missing | AR Receipt/AP Payment cannot post | Setup cash/bank master and posting profile |
-| GL posting profile incomplete | GL skipped or warning appears | Configure posting profile per company |
+| GL posting profile incomplete | Valued Receipt/Delivery posting is rejected and rolled back | Configure posting profile per company before posting |
 | Stock balance empty | DO cannot stock out | Use purchase receipt or stock adjustment |
 | Route permission not fully granular | Non-admin access may be inconsistent | Expand permission mapping and UAT role |
 | UAT not systematic | Regression bugs missed | Follow checklist in this document and `docs/09-testing-checklist.md` |
@@ -304,3 +304,15 @@ PENA ERP can be considered production candidate only when:
 - A/R Receipt dan Cash/Bank telah memakai strict tenant guard dari settlement hardening sebelumnya.
 - Tidak ada perubahan database pada patch ini.
 - Detail tersedia di `docs/30-sales-e2e-tenant-payload-guard.md`.
+
+---
+
+## 14. Update 2026-06-22 - Atomic Inventory and GL Posting
+
+- Purchase Receipt bernilai sekarang wajib berhasil membuat jurnal Inventory/GRNI.
+- Sales Delivery dengan COGS sekarang wajib berhasil membuat jurnal COGS/Inventory.
+- Kegagalan konfigurasi atau posting GL me-rollback header, detail, stock movement, stock balance, dan update qty order.
+- Dokumen dengan nilai persediaan/COGS nol tetap boleh diposting tanpa jurnal GL.
+- Reversal dokumen lama tanpa `gl_entry_id` tetap didukung; dokumen yang menunjuk GL entry tanpa detail ditolak agar tidak menghasilkan reversal parsial.
+- Tidak ada perubahan database pada patch ini.
+- Detail tersedia di `docs/31-atomic-inventory-gl-posting.md`.

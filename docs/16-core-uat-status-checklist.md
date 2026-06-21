@@ -253,3 +253,24 @@ Gunakan bagian ini untuk mencatat hasil test per tanggal.
 | Date | Bug / Feedback | Severity | Status | Fix Commit / Notes |
 |---|---|---|---|---|
 | 2026-06-22 | Rantai SO-Delivery-AR-Receipt masih menerima payload tenant/status yang tidak konsisten di service boundary | High | Patched | Strict tenant and authoritative payload guard; needs UAT |
+
+---
+
+## 15. Atomic Inventory and GL Posting
+
+| No | Test Case | Expected Result | Result | Notes |
+|---:|---|---|---|---|
+| 1 | Post Purchase Receipt bernilai dengan posting profile lengkap | Receipt, stock, qty PO, dan GL berhasil dalam satu transaksi | NOT TESTED |  |
+| 2 | Post Purchase Receipt bernilai saat account posting profile tidak valid | Seluruh proses ditolak; receipt, stock, qty PO, dan GL tidak berubah | NOT TESTED |  |
+| 3 | Post Sales Delivery dengan COGS dan posting profile lengkap | Delivery, stock, qty SO, dan GL berhasil dalam satu transaksi | NOT TESTED |  |
+| 4 | Post Sales Delivery dengan COGS saat account posting profile tidak valid | Seluruh proses ditolak; delivery, stock, qty SO, dan GL tidak berubah | NOT TESTED |  |
+| 5 | Post Receipt/Delivery dengan nilai persediaan atau COGS nol | Posting berhasil tanpa `gl_entry_id` dan audit menjelaskan jurnal tidak diperlukan | NOT TESTED |  |
+| 6 | Reverse dokumen lama yang tidak memiliki `gl_entry_id` | Reversal stock tetap berjalan untuk kompatibilitas data lama | NOT TESTED |  |
+| 7 | Reverse dokumen yang memiliki `gl_entry_id`, tetapi detail jurnal hilang | Ditolak tanpa perubahan stock, status, atau qty order | NOT TESTED |  |
+| 8 | Reverse dokumen dengan jurnal asal lengkap | Stock, qty order, status, dan reversal GL berhasil atomik | NOT TESTED |  |
+
+### Bug Fix Log Atomic Posting
+
+| Date | Bug / Feedback | Severity | Status | Fix Commit / Notes |
+|---|---|---|---|---|
+| 2026-06-22 | Receipt/Delivery tetap commit stock ketika posting GL gagal | Critical | Patched | GL failure now propagates to the outer database transaction; needs UAT |

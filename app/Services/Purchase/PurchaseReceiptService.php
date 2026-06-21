@@ -14,6 +14,7 @@ use App\Services\Finance\GeneralLedgerService;
 use App\Services\Finance\PeriodCloseService;
 use App\Services\Finance\PostingProfileService;
 use App\Services\Inventory\InventoryStockService;
+use App\Services\Support\PostingIntegrityGuard;
 use App\Services\Support\TransactionDocumentGuard;
 use Config\Database;
 use RuntimeException;
@@ -67,7 +68,6 @@ class PurchaseReceiptService
             $movementModel = new InventoryStockMovementModel();
             $totalInventoryValue = 0.0;
             $postedLineCount = 0;
-            $glWarning = null;
 
             $receiptModel->insert(array_replace($header, [
                 'status' => 'posted',
@@ -153,19 +153,13 @@ class PurchaseReceiptService
 
             $this->recalculatePoReceiptQuantities((int) $po['id'], $userId);
 
-            try {
-                $glEntryId = $this->postReceiptGl($header, $receiptId, round($totalInventoryValue, 2), $userId);
-            } catch (RuntimeException $e) {
-                $glEntryId = null;
-                $glWarning = 'GL skipped: ' . $e->getMessage();
-            }
+            $inventoryValue = round($totalInventoryValue, 2);
+            $glEntryId = $this->postReceiptGl($header, $receiptId, $inventoryValue, $userId);
+            (new PostingIntegrityGuard())->assertGlEntryForAmount($inventoryValue, $glEntryId, 'Purchase receipt');
 
             $receiptUpdate = [];
             if ($glEntryId !== null) {
                 $receiptUpdate['gl_entry_id'] = $glEntryId;
-            }
-            if ($glWarning !== null) {
-                $receiptUpdate['notes'] = trim(($header['notes'] ?? '') . ' ' . $glWarning);
             }
             if ($receiptUpdate !== []) {
                 $receiptModel->update($receiptId, $receiptUpdate);
@@ -185,8 +179,10 @@ class PurchaseReceiptService
                 'table_name' => 'purchase_receipts',
                 'record_id' => $receiptId,
                 'record_code' => $header['receipt_no'],
-                'description' => $glWarning !== null ? 'Purchase receipt posted and stock increased. ' . $glWarning : 'Purchase receipt posted, stock increased, and inventory/GRNI GL posted.',
-                'new_values' => ['header' => $header, 'lines' => $lines, 'inventory_value' => $totalInventoryValue, 'gl_entry_id' => $glEntryId, 'gl_warning' => $glWarning],
+                'description' => $glEntryId !== null
+                    ? 'Purchase receipt posted, stock increased, and inventory/GRNI GL posted.'
+                    : 'Purchase receipt posted with zero inventory value; no GL journal was required.',
+                'new_values' => ['header' => $header, 'lines' => $lines, 'inventory_value' => $inventoryValue, 'gl_entry_id' => $glEntryId],
             ]);
 
             return $receiptId;
@@ -345,9 +341,7 @@ class PurchaseReceiptService
             ->where('gl_entry_id', (int) $receipt['gl_entry_id'])
             ->orderBy('line_no', 'ASC')
             ->findAll();
-        if ($glLines === []) {
-            return null;
-        }
+        (new PostingIntegrityGuard())->assertReversalLines($glLines, 'Purchase receipt');
 
         $lines = [];
         foreach ($glLines as $line) {

@@ -14,6 +14,7 @@ use App\Services\Finance\GeneralLedgerService;
 use App\Services\Finance\PeriodCloseService;
 use App\Services\Finance\PostingProfileService;
 use App\Services\Inventory\InventoryStockService;
+use App\Services\Support\PostingIntegrityGuard;
 use App\Services\Support\TransactionDocumentGuard;
 use Config\Database;
 use RuntimeException;
@@ -67,7 +68,6 @@ class SalesDeliveryService
             $movementModel = new InventoryStockMovementModel();
             $totalCogs = 0.0;
             $postedLineCount = 0;
-            $glWarning = null;
 
             $deliveryModel->insert(array_replace($header, [
                 'status' => 'posted',
@@ -168,18 +168,13 @@ class SalesDeliveryService
 
             $this->recalculateSoDeliveryQuantities((int) $so['id'], $userId);
 
-            try {
-                $glEntryId = $this->postCogsGl($header, $deliveryId, round($totalCogs, 2), $userId);
-            } catch (RuntimeException $e) {
-                $glEntryId = null;
-                $glWarning = 'GL skipped: ' . $e->getMessage();
-            }
+            $cogsAmount = round($totalCogs, 2);
+            $glEntryId = $this->postCogsGl($header, $deliveryId, $cogsAmount, $userId);
+            (new PostingIntegrityGuard())->assertGlEntryForAmount($cogsAmount, $glEntryId, 'Sales delivery');
+
             $deliveryUpdate = [];
             if ($glEntryId !== null) {
                 $deliveryUpdate['gl_entry_id'] = $glEntryId;
-            }
-            if ($glWarning !== null) {
-                $deliveryUpdate['notes'] = trim(($header['notes'] ?? '') . ' ' . $glWarning);
             }
             if ($deliveryUpdate !== []) {
                 $deliveryModel->update($deliveryId, $deliveryUpdate);
@@ -199,8 +194,10 @@ class SalesDeliveryService
                 'table_name' => 'sales_deliveries',
                 'record_id' => $deliveryId,
                 'record_code' => $header['delivery_no'],
-                'description' => $glWarning !== null ? 'Sales delivery posted and stock decreased. ' . $glWarning : 'Sales delivery posted, stock decreased, and COGS GL posted.',
-                'new_values' => ['header' => $header, 'lines' => $lines, 'cogs_amount' => $totalCogs, 'gl_entry_id' => $glEntryId, 'gl_warning' => $glWarning],
+                'description' => $glEntryId !== null
+                    ? 'Sales delivery posted, stock decreased, and COGS GL posted.'
+                    : 'Sales delivery posted with zero COGS value; no GL journal was required.',
+                'new_values' => ['header' => $header, 'lines' => $lines, 'cogs_amount' => $cogsAmount, 'gl_entry_id' => $glEntryId],
             ]);
 
             return $deliveryId;
@@ -363,9 +360,7 @@ class SalesDeliveryService
             ->where('gl_entry_id', (int) $delivery['gl_entry_id'])
             ->orderBy('line_no', 'ASC')
             ->findAll();
-        if ($glLines === []) {
-            return null;
-        }
+        (new PostingIntegrityGuard())->assertReversalLines($glLines, 'Sales delivery');
 
         $lines = [];
         foreach ($glLines as $line) {

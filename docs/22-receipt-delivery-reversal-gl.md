@@ -33,9 +33,11 @@ Dokumen ini mencatat patch ERP core untuk memastikan reversal stock pada Purchas
 
 - Jika dokumen asal tidak punya `gl_entry_id`, reversal GL dilewati.
 - Jika dokumen asal punya `gl_entry_id`, sistem membaca semua baris GL asal.
+- Jika `gl_entry_id` ada tetapi detail jurnal asal hilang, reversal ditolak agar stock dan GL tidak berbeda.
 - Debit dan credit dibalik ke jurnal baru.
 - Jurnal baru disimpan sebagai `reversal_gl_entry_id`.
 - Jika periode GL tertutup, reversal ditolak oleh `GeneralLedgerService`.
+- Posting Receipt/Delivery bernilai dan jurnal GL berjalan dalam satu transaksi database; kegagalan GL me-rollback perubahan stock dan dokumen.
 
 ---
 
