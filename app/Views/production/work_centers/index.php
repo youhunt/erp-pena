@@ -4,7 +4,10 @@
 <div class="card"><div class="card-body">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div><h4 class="card-title mb-1">Work Center</h4><p class="text-muted mb-0">Machine, capacity, and cost settings for production operations.</p></div>
-        <a href="<?= site_url('production/work-centers/new') ?>" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New Work Center</a>
+        <div class="d-flex gap-2">
+            <a href="<?= site_url('production/imports/work-centers') ?>" class="btn btn-outline-primary"><i class="bx bx-upload me-1"></i> Import</a>
+            <a href="<?= site_url('production/work-centers/new') ?>" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New Work Center</a>
+        </div>
     </div>
     <div class="table-responsive"><table class="table table-nowrap table-hover align-middle mb-0">
         <thead class="table-light"><tr><th>Work Center</th><th>Site</th><th>Department</th><th>Warehouse</th><th>Machine</th><th class="text-end">Capacity %</th><th class="text-end">Cost</th></tr></thead>
