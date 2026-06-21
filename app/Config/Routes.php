@@ -32,7 +32,6 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('data-import/opening-stock/import', 'System\DataImportController::openingStockImportForm');
         $routes->post('data-import/opening-stock/import', 'System\DataImportController::openingStockImport');
         $routes->get('data-import/opening-stock/export', 'System\DataImportController::openingStockExport');
-
         $routes->get('excel-transfer', 'System\ExcelLiteTransferController::index');
         $routes->get('excel-transfer/(:segment)/template', 'System\ExcelLiteTransferController::template/$1');
         $routes->get('excel-transfer/(:segment)/import', 'System\ExcelLiteTransferController::importForm/$1');
@@ -225,18 +224,26 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('boms', 'Production\ProductionMasterController::boms');
         $routes->get('boms/new', 'Production\ProductionMasterController::newBom');
         $routes->post('boms', 'Production\ProductionMasterController::storeBom');
+        $routes->get('boms/(:num)/edit', 'Production\ProductionEditController::editBom/$1');
+        $routes->post('boms/(:num)', 'Production\ProductionEditController::updateBom/$1');
         $routes->get('boms/(:num)', 'Production\ProductionMasterController::showBom/$1');
         $routes->get('work-centers', 'Production\ProductionMasterController::workCenters');
         $routes->get('work-centers/new', 'Production\ProductionMasterController::newWorkCenter');
         $routes->post('work-centers', 'Production\ProductionMasterController::storeWorkCenter');
+        $routes->get('work-centers/(:num)/edit', 'Production\ProductionEditController::editWorkCenter/$1');
+        $routes->post('work-centers/(:num)', 'Production\ProductionEditController::updateWorkCenter/$1');
         $routes->get('work-centers/(:num)', 'Production\ProductionMasterController::showWorkCenter/$1');
         $routes->get('routings', 'Production\ProductionMasterController::routings');
         $routes->get('routings/new', 'Production\ProductionMasterController::newRouting');
         $routes->post('routings', 'Production\ProductionMasterController::storeRouting');
+        $routes->get('routings/(:num)/edit', 'Production\ProductionEditController::editRouting/$1');
+        $routes->post('routings/(:num)', 'Production\ProductionEditController::updateRouting/$1');
         $routes->get('routings/(:num)', 'Production\ProductionMasterController::showRouting/$1');
         $routes->get('work-orders', 'Production\WorkOrderController::index');
         $routes->get('work-orders/new', 'Production\WorkOrderController::create');
         $routes->post('work-orders', 'Production\WorkOrderController::store');
+        $routes->get('work-orders/(:num)/edit', 'Production\ProductionEditController::editWorkOrder/$1');
+        $routes->post('work-orders/(:num)', 'Production\ProductionEditController::updateWorkOrder/$1');
         $routes->get('work-orders/(:num)', 'Production\WorkOrderController::show/$1');
         $routes->post('work-orders/(:num)/allocate', 'Production\WorkOrderController::allocate/$1');
         $routes->post('work-orders/(:num)/issue-materials', 'Production\WorkOrderController::issueMaterials/$1');
@@ -247,7 +254,6 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->group('setup', static function (RouteCollection $routes): void {
         $routes->get('options/cities', 'Setup\MasterDataController::cityOptions');
         $routes->get('options/locations', 'Setup\MasterDataController::locationOptions');
-
         foreach (['transaction-codes','prefix-codes','companies','sites','departments','warehouses','locations','countries','provinces','cities','postal-codes','currencies','uoms','uom-conversions','vat','wht','item-vat','address-master','customer-terms','customer-promos','customers','supplier-terms','supplier-promos','suppliers','items','item-locations','batch-masters'] as $resource) {
             $routes->get($resource, 'Setup\MasterDataController::index/' . $resource);
             $routes->get($resource . '/new', 'Setup\MasterDataController::create/' . $resource);
