@@ -219,6 +219,9 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     });
 
     $routes->group('production', static function (RouteCollection $routes): void {
+        $routes->get('imports/(:segment)', 'Production\ProductionImportController::form/$1');
+        $routes->get('imports/(:segment)/template', 'Production\ProductionImportController::template/$1');
+        $routes->post('imports/(:segment)', 'Production\ProductionImportController::import/$1');
         $routes->get('boms', 'Production\ProductionMasterController::boms');
         $routes->get('boms/new', 'Production\ProductionMasterController::newBom');
         $routes->post('boms', 'Production\ProductionMasterController::storeBom');
