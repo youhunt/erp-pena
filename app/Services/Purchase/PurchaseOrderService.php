@@ -133,6 +133,48 @@ class PurchaseOrderService
         $this->transition($poId, ['draft', 'submitted'], 'cancelled', ['cancelled_at' => date('Y-m-d H:i:s'), 'cancelled_by' => $userId, 'cancel_reason' => $reason], $userId, 'po.cancel', 'Purchase order cancelled.');
     }
 
+    public function activate(int $poId, ?int $userId = null): void
+    {
+        $model = new PurchaseOrderModel();
+        $po = $model->find($poId);
+        if ($po === null) {
+            throw new RuntimeException('Purchase order not found.');
+        }
+
+        $current = (string) ($po['document_status'] ?? $po['status'] ?? 'draft');
+        if ($current !== 'cancelled') {
+            throw new RuntimeException('Only cancelled purchase order can be activated. Current status: ' . $current . '.');
+        }
+
+        $lineModel = new PurchaseOrderLineModel();
+        $lines = $lineModel->where('purchase_order_id', $poId)->findAll();
+        foreach ($lines as $line) {
+            if ((float) ($line['qty_received'] ?? 0) > 0) {
+                throw new RuntimeException('PO cannot be activated because one or more lines have already been received.');
+            }
+        }
+
+        $this->assertPeriodOpen($po);
+
+        $model->update($poId, [
+            'status' => 'draft',
+            'document_status' => 'draft',
+            'cancelled_at' => null,
+            'cancelled_by' => null,
+            'cancel_reason' => null,
+            'updated_by' => $userId,
+        ]);
+
+        foreach ($lines as $line) {
+            $lineModel->update((int) $line['id'], [
+                'line_status' => 'open',
+                'updated_by' => $userId,
+            ]);
+        }
+
+        $this->audit('po.activate', $poId, $po, ['to_status' => 'draft'], $userId, 'Purchase order activated back to draft.');
+    }
+
     private function validateHeader(array $header, array $lines): void
     {
         if (empty($header['company_id'])) {
@@ -245,8 +287,19 @@ class PurchaseOrderService
             $vatAmount = (float) ($line['vat_amount'] ?? 0);
             $whtAmount = (float) ($line['wht_amount'] ?? 0);
 
+            $itemCode = trim((string) ($line['item_code'] ?? ''));
+            $itemName = trim((string) ($line['item_name'] ?? ''));
+            if ($itemCode === '') {
+                throw new RuntimeException('Item code is required on PO line ' . $displayLine . '. Please reselect the item before saving.');
+            }
+            if ($itemName === '') {
+                $itemName = $itemCode;
+            }
+
             $line['po_line'] = $displayLine;
             $line['line_no'] = $displayLine;
+            $line['item_code'] = $itemCode;
+            $line['item_name'] = $itemName;
             $line['discount_percent'] = $discountPercent;
             $line['discount_amount'] = $discountAmount;
             $line['vat_amount'] = $vatAmount;
