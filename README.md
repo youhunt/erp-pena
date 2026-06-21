@@ -43,6 +43,8 @@ The current continuation adds:
 - Core master data code guard and physical unique indexes for core master data
 - ERP core transaction status guard documentation and UAT checklist
 - Purchase Receipt and Sales Delivery reversal GL reference tracking
+- PO activation and UAT fixes for PO VAT/WHT code screen
+- Sales Order edit/update and requested commercial fields
 - Development journey/status documentation and formal core UAT checklist
 
 Skote assets are stored in `resources.zip` and extracted into `public/assets/skote` for the current layout.
@@ -137,6 +139,8 @@ database/hosting/2026-06-20_update_purchase_receipt_core.sql
 database/hosting/2026-06-20_update_sales_delivery_core.sql
 database/hosting/2026-06-20_normalize_core_master_data.sql
 database/hosting/2026-06-20_update_receipt_delivery_reversal_gl.sql
+database/hosting/2026-06-21_update_po_uat_feedback.sql
+database/hosting/2026-06-21_update_sales_order_uat_feedback.sql
 ```
 
 Run this only after duplicate audit returns zero rows:
@@ -185,6 +189,8 @@ Order import fixes from runtime feedback:
 - Legacy import headers `discount_percent` and `discount_amount` are treated as PO line discount fields.
 - `freight_amount`, `other_amount`, `special_charge_amount`, `vat_amount`, and `wht_amount` are summed per PO+Site and no longer forced to be identical across rows.
 - Transaction status guard is documented in `docs/21-transaction-status-guard.md`; UAT scenarios are listed in `docs/16-core-uat-status-checklist.md`.
+- PO UAT feedback is documented in `docs/24-uat-feedback-po-fixes.md`.
+- Sales Order edit UAT feedback is documented in `docs/25-uat-feedback-sales-order-edit.md`.
 
 ## Documentation
 
@@ -209,3 +215,5 @@ Order import fixes from runtime feedback:
 - [Transaction Status Guard](docs/21-transaction-status-guard.md)
 - [Receipt and Delivery Reversal GL](docs/22-receipt-delivery-reversal-gl.md)
 - [Unique Core Master Indexes](docs/23-unique-core-master-indexes.md)
+- [PO UAT Feedback Fixes](docs/24-uat-feedback-po-fixes.md)
+- [Sales Order UAT Feedback Edit Patch](docs/25-uat-feedback-sales-order-edit.md)
