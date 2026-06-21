@@ -1,6 +1,7 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php $exportUrl = site_url('inventory/stock-card/export') . '?' . http_build_query($filters ?? []); ?>
 <div class="row">
     <div class="col-md-3">
         <div class="card mini-stats-wid"><div class="card-body"><p class="text-muted mb-2">Opening Qty</p><h4 class="mb-0"><?= esc(number_format((float) $summary['opening_qty'], 4)) ?></h4><small class="text-muted">Value <?= esc(number_format((float) $summary['opening_value'], 2)) ?></small></div></div>
@@ -23,7 +24,8 @@
                 <h4 class="card-title mb-1">Stock Card</h4>
                 <p class="text-muted mb-0">Audit trail chronological stock movement per item, batch, warehouse, and location.</p>
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-wrap gap-2">
+                <a href="<?= esc($exportUrl) ?>" class="btn btn-success"><i class="bx bx-download me-1"></i> Export Excel</a>
                 <a href="<?= site_url('inventory/stock-balances') ?>" class="btn btn-outline-primary"><i class="bx bx-layer me-1"></i> Stock Balance</a>
                 <a href="<?= site_url('inventory/stock-adjustment') ?>" class="btn btn-outline-primary"><i class="bx bx-edit-alt me-1"></i> Adjustment</a>
                 <a href="<?= site_url('inventory/transfers') ?>" class="btn btn-outline-primary"><i class="bx bx-transfer me-1"></i> Transfer</a>
