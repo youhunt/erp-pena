@@ -27,16 +27,16 @@
 <?php else: ?>
     <div class="row g-3 mb-3">
         <div class="col-xl-8">
-            <div class="card border border-primary bg-primary bg-soft h-100">
+            <div class="card border-0 h-100 shadow-sm" style="background: linear-gradient(135deg, #556ee6 0%, #3949ab 100%);">
                 <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
                     <div>
-                        <span class="badge bg-primary mb-2">ERP Core UAT</span>
-                        <h4 class="mb-1">Development Status & UAT Flow Board</h4>
-                        <p class="text-muted mb-0">
+                        <span class="badge bg-light text-primary mb-2">ERP Core UAT</span>
+                        <h4 class="mb-2 text-white">Development Status & UAT Flow Board</h4>
+                        <p class="mb-0 text-white-50">
                             Pantau progress modul, core guardrail, dan jalur test PO/SO/Inventory/GL dari satu halaman.
                         </p>
                     </div>
-                    <a href="<?= site_url('system/development-status') ?>" class="btn btn-primary">
+                    <a href="<?= site_url('system/development-status') ?>" class="btn btn-light text-primary fw-semibold">
                         <i class="bx bx-line-chart me-1"></i> Open Development Status
                     </a>
                 </div>
@@ -70,9 +70,9 @@
         <div class="row dashboard-metric-row g-3">
             <?php foreach ($metrics as $label => $value): ?>
                 <?php
-                    $isMoney = in_array($label, $metricMoney ?? [], true);
-                    $displayValue = number_format((float) $value, 0, ',', '.');
-                    $route = $metricLinks[$label] ?? 'dashboard';
+                $isMoney = in_array($label, $metricMoney ?? [], true);
+                $displayValue = number_format((float) $value, 0, ',', '.');
+                $route = $metricLinks[$label] ?? 'dashboard';
                 ?>
                 <div class="col-xl-4 col-md-6 col-sm-6">
                     <a href="<?= site_url($route) ?>" class="text-reset dashboard-metric-card-link">
@@ -162,17 +162,17 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                    <?php foreach ($recentActivities as $activity): ?>
-                                        <tr>
-                                            <td class="text-muted small"><?= esc($activity['created_at'] ?? '-') ?></td>
-                                            <td><span class="badge bg-info"><?= esc($activity['action'] ?? '-') ?></span></td>
-                                            <td>
-                                                <div class="fw-semibold"><?= esc($activity['record_code'] ?? $activity['record_id'] ?? '-') ?></div>
-                                                <small class="text-muted"><?= esc($activity['table_name'] ?? $activity['module'] ?? '-') ?></small>
-                                            </td>
-                                            <td><?= esc($activity['description'] ?? '-') ?></td>
-                                        </tr>
-                                    <?php endforeach ?>
+                                        <?php foreach ($recentActivities as $activity): ?>
+                                            <tr>
+                                                <td class="text-muted small"><?= esc($activity['created_at'] ?? '-') ?></td>
+                                                <td><span class="badge bg-info"><?= esc($activity['action'] ?? '-') ?></span></td>
+                                                <td>
+                                                    <div class="fw-semibold"><?= esc($activity['record_code'] ?? $activity['record_id'] ?? '-') ?></div>
+                                                    <small class="text-muted"><?= esc($activity['table_name'] ?? $activity['module'] ?? '-') ?></small>
+                                                </td>
+                                                <td><?= esc($activity['description'] ?? '-') ?></td>
+                                            </tr>
+                                        <?php endforeach ?>
                                     </tbody>
                                 </table>
                             </div>
@@ -207,7 +207,9 @@
                                         </tr>
                                     <?php endforeach ?>
                                     <?php if (empty($pendingWork)): ?>
-                                        <tr><td class="text-center text-muted py-4">No pending work.</td></tr>
+                                        <tr>
+                                            <td class="text-center text-muted py-4">No pending work.</td>
+                                        </tr>
                                     <?php endif ?>
                                 </tbody>
                             </table>
