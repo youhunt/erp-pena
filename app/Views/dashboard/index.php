@@ -25,6 +25,40 @@
         </div>
     </div>
 <?php else: ?>
+    <div class="row g-3 mb-3">
+        <div class="col-xl-8">
+            <div class="card border border-primary bg-primary bg-soft h-100">
+                <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <div>
+                        <span class="badge bg-primary mb-2">ERP Core UAT</span>
+                        <h4 class="mb-1">Development Status & UAT Flow Board</h4>
+                        <p class="text-muted mb-0">
+                            Pantau progress modul, core guardrail, dan jalur test PO/SO/Inventory/GL dari satu halaman.
+                        </p>
+                    </div>
+                    <a href="<?= site_url('system/development-status') ?>" class="btn btn-primary">
+                        <i class="bx bx-line-chart me-1"></i> Open Development Status
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="font-size-15 mb-2">Quick Audit</h5>
+                    <div class="d-grid gap-2">
+                        <a href="<?= site_url('inventory/stock-card') ?>" class="btn btn-outline-primary btn-sm text-start">
+                            <i class="bx bx-package me-1"></i> Stock Card Audit
+                        </a>
+                        <a href="<?= site_url('gl/entries') ?>" class="btn btn-outline-primary btn-sm text-start">
+                            <i class="bx bx-book me-1"></i> GL Entries Audit
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <section class="dashboard-section dashboard-section-summary">
         <div class="dashboard-section-header">
             <div>
