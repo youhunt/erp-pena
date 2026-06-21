@@ -292,3 +292,15 @@ PENA ERP can be considered production candidate only when:
 - Cash/Bank account dibatasi ke company-wide account atau site transaksi yang sama.
 - Tidak ada perubahan database pada patch ini.
 - Detail guard dan skenario UAT tersedia di `docs/29-purchasing-e2e-tenant-payload-guard.md`.
+
+---
+
+## 13. Update 2026-06-22 - Sales E2E Boundary Hardening
+
+- Edit draft SO/PO sekarang menolak perpindahan company/site pada service layer.
+- Sales Delivery mengambil tenant, SO, dan customer dari Sales Order yang tervalidasi.
+- Sales Invoice mengambil tenant, delivery, SO, dan customer dari Delivery Order yang tervalidasi.
+- Status dan total hasil kalkulasi SO, Delivery, AR Invoice, dan A/R Receipt tidak dapat dioverride payload.
+- A/R Receipt dan Cash/Bank telah memakai strict tenant guard dari settlement hardening sebelumnya.
+- Tidak ada perubahan database pada patch ini.
+- Detail tersedia di `docs/30-sales-e2e-tenant-payload-guard.md`.

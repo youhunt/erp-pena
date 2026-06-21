@@ -6,6 +6,7 @@ use App\Models\PurchaseOrderLineModel;
 use App\Models\PurchaseOrderModel;
 use App\Services\AuditLogService;
 use App\Services\Finance\PeriodCloseService;
+use App\Services\Support\TransactionDocumentGuard;
 use Config\Database;
 use RuntimeException;
 use Throwable;
@@ -69,6 +70,11 @@ class PurchaseOrderService
         if ($po === null) {
             throw new RuntimeException('Purchase order not found.');
         }
+        (new TransactionDocumentGuard())->assertSameTenant($po, $header, 'Purchase order');
+        $header = array_replace($header, [
+            'company_id' => $po['company_id'],
+            'site_id' => $po['site_id'] ?? null,
+        ]);
         $this->assertPeriodOpen($header + $po);
 
         $status = (string) ($po['document_status'] ?? $po['status'] ?? 'draft');

@@ -15,6 +15,7 @@ use App\Services\AuditLogService;
 use App\Services\Finance\GeneralLedgerService;
 use App\Services\Finance\PeriodCloseService;
 use App\Services\Finance\PostingProfileService;
+use App\Services\Support\TransactionDocumentGuard;
 use Config\Database;
 use RuntimeException;
 use Throwable;
@@ -57,7 +58,7 @@ class SalesInvoiceService
         try {
             $invoiceDate = (string) ($header['invoice_date'] ?? date('Y-m-d'));
             $dueDate = $header['due_date'] ?? $invoiceDate;
-            $invoiceModel->insert($header + [
+            $invoiceModel->insert(array_replace($header, [
                 'invoice_date' => $invoiceDate,
                 'due_date' => $dueDate,
                 'source_type' => 'manual',
@@ -72,7 +73,7 @@ class SalesInvoiceService
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ]);
+            ]));
             $invoiceId = (int) $invoiceModel->getInsertID();
             if ($invoiceId < 1) {
                 throw new RuntimeException('Failed to create sales invoice header.');
@@ -81,7 +82,7 @@ class SalesInvoiceService
             $lineModel = new SalesInvoiceLineModel();
             foreach ($lines as $line) {
                 unset($line['line_subtotal']);
-                $lineModel->insert($line + ['sales_invoice_id' => $invoiceId]);
+                $lineModel->insert(array_replace($line, ['sales_invoice_id' => $invoiceId]));
             }
 
             (new ArReceivableModel())->insert([
@@ -139,12 +140,21 @@ class SalesInvoiceService
         if ($delivery === null) {
             throw new RuntimeException('Delivery order not found.');
         }
+        (new TransactionDocumentGuard())->assertSameTenant($delivery, $header, 'Delivery order');
         $deliveryStatus = (string) ($delivery['status'] ?? '');
         if ($deliveryStatus !== 'posted') {
             throw new RuntimeException('Only posted delivery order can be invoiced. Current status: ' . ($deliveryStatus !== '' ? $deliveryStatus : 'unknown') . '.');
         }
 
         $invoiceModel = new SalesInvoiceModel();
+        $duplicateNumber = $invoiceModel
+            ->where('company_id', (int) $header['company_id'])
+            ->where('invoice_no', (string) $header['invoice_no'])
+            ->where('deleted_at', null)
+            ->first();
+        if ($duplicateNumber !== null) {
+            throw new RuntimeException('Sales invoice number already exists.');
+        }
         $existing = $invoiceModel
             ->where('sales_delivery_id', (int) $header['sales_delivery_id'])
             ->where('status !=', 'cancelled')
@@ -161,6 +171,18 @@ class SalesInvoiceService
         if ($deliveryLines === []) {
             throw new RuntimeException('Delivery order has no lines.');
         }
+
+        $header = array_replace($header, [
+            'company_id' => $delivery['company_id'],
+            'site_id' => $delivery['site_id'] ?? null,
+            'sales_order_id' => $delivery['sales_order_id'] ?? null,
+            'sales_delivery_id' => $delivery['id'],
+            'so_no' => $delivery['so_no'] ?? null,
+            'delivery_no' => $delivery['delivery_no'] ?? null,
+            'customer_id' => $delivery['customer_id'] ?? null,
+            'customer_code' => $delivery['customer_code'] ?? null,
+            'customer_name' => $delivery['customer_name'] ?? null,
+        ]);
 
         $db = Database::connect();
         $db->transBegin();
@@ -221,7 +243,7 @@ class SalesInvoiceService
             $invoiceDate = (string) ($header['invoice_date'] ?? date('Y-m-d'));
             $dueDate = $header['due_date'] ?? $invoiceDate;
 
-            $invoiceModel->insert($header + [
+            $invoiceModel->insert(array_replace($header, [
                 'invoice_date' => $invoiceDate,
                 'due_date' => $dueDate,
                 'sales_order_id' => $delivery['sales_order_id'] ?? null,
@@ -231,6 +253,7 @@ class SalesInvoiceService
                 'customer_id' => $delivery['customer_id'] ?? null,
                 'customer_code' => $delivery['customer_code'] ?? null,
                 'customer_name' => $delivery['customer_name'] ?? null,
+                'source_type' => 'sales_delivery',
                 'status' => 'open',
                 'subtotal_amount' => $subtotal,
                 'discount_amount' => $discount,
@@ -242,14 +265,14 @@ class SalesInvoiceService
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ]);
+            ]));
             $invoiceId = (int) $invoiceModel->getInsertID();
             if ($invoiceId < 1) {
                 throw new RuntimeException('Failed to create sales invoice header.');
             }
 
             foreach ($lines as $line) {
-                $invoiceLineModel->insert($line + ['sales_invoice_id' => $invoiceId]);
+                $invoiceLineModel->insert(array_replace($line, ['sales_invoice_id' => $invoiceId]));
             }
 
             $receivableModel->insert([

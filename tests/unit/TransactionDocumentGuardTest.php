@@ -65,4 +65,16 @@ final class TransactionDocumentGuardTest extends CIUnitTestCase
             'A/P payable'
         );
     }
+
+    public function testCompanyWideSourceCannotBeMovedIntoASite(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Sales order belongs to a different site.');
+
+        (new TransactionDocumentGuard())->assertSameTenant(
+            ['company_id' => 10, 'site_id' => null],
+            ['company_id' => 10, 'site_id' => 20],
+            'Sales order'
+        );
+    }
 }

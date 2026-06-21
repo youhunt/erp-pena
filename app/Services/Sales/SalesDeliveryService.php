@@ -14,6 +14,7 @@ use App\Services\Finance\GeneralLedgerService;
 use App\Services\Finance\PeriodCloseService;
 use App\Services\Finance\PostingProfileService;
 use App\Services\Inventory\InventoryStockService;
+use App\Services\Support\TransactionDocumentGuard;
 use Config\Database;
 use RuntimeException;
 use Throwable;
@@ -38,11 +39,22 @@ class SalesDeliveryService
         if ($so === null) {
             throw new RuntimeException('Sales order not found.');
         }
+        (new TransactionDocumentGuard())->assertSameTenant($so, $header, 'Sales order');
 
         $soStatus = (string) ($so['document_status'] ?? $so['status'] ?? 'draft');
         if (! in_array($soStatus, ['approved', 'reserved', 'partial_delivered'], true)) {
             throw new RuntimeException('Only approved, reserved, or partially delivered SO can be delivered. Current status: ' . $soStatus);
         }
+
+        $header = array_replace($header, [
+            'company_id' => $so['company_id'],
+            'site_id' => $so['site_id'] ?? null,
+            'sales_order_id' => $so['id'],
+            'so_no' => $so['so_no'] ?? $so['document_no'] ?? null,
+            'customer_id' => $so['customer_id'] ?? null,
+            'customer_code' => $so['customer_code'] ?? $so['customer'] ?? null,
+            'customer_name' => $so['customer_name'] ?? null,
+        ]);
 
         $db = Database::connect();
         $db->transBegin();
@@ -57,13 +69,13 @@ class SalesDeliveryService
             $postedLineCount = 0;
             $glWarning = null;
 
-            $deliveryModel->insert($header + [
+            $deliveryModel->insert(array_replace($header, [
                 'status' => 'posted',
                 'posted_at' => date('Y-m-d H:i:s'),
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ]);
+            ]));
             $deliveryId = (int) $deliveryModel->getInsertID();
             if ($deliveryId < 1) {
                 throw new RuntimeException('Failed to create sales delivery header.');

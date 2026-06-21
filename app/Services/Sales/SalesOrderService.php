@@ -7,6 +7,7 @@ use App\Models\SalesOrderModel;
 use App\Services\AuditLogService;
 use App\Services\Finance\PeriodCloseService;
 use App\Services\Inventory\InventoryStockService;
+use App\Services\Support\TransactionDocumentGuard;
 use Config\Database;
 use RuntimeException;
 use Throwable;
@@ -31,12 +32,12 @@ class SalesOrderService
             $header['document_no'] = $header['document_no'] ?? $header['so_no'];
             $header['document_date'] = $header['document_date'] ?? $header['so_date'];
 
-            $soModel->insert($header + $totals + [
+            $soModel->insert(array_replace($header, $totals, [
                 'status' => $status,
                 'document_status' => $status,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ]);
+            ]));
             $soId = (int) $soModel->getInsertID();
             if ($soId < 1) {
                 throw new RuntimeException('Failed to create sales order header.');
@@ -51,7 +52,7 @@ class SalesOrderService
             }
 
             $db->transCommit();
-            $this->audit('so.create', $soId, $header, ['header' => $header + $totals, 'lines' => $lines], $userId, 'Sales order created.');
+            $this->audit('so.create', $soId, $header, ['header' => array_replace($header, $totals), 'lines' => $lines], $userId, 'Sales order created.');
 
             return $soId;
         } catch (Throwable $exception) {
@@ -70,6 +71,11 @@ class SalesOrderService
         if ($so === null) {
             throw new RuntimeException('Sales order not found.');
         }
+        (new TransactionDocumentGuard())->assertSameTenant($so, $header, 'Sales order');
+        $header = array_replace($header, [
+            'company_id' => $so['company_id'],
+            'site_id' => $so['site_id'] ?? null,
+        ]);
 
         $status = (string) ($so['document_status'] ?? $so['status'] ?? 'draft');
         if ($status !== 'draft') {
@@ -93,7 +99,7 @@ class SalesOrderService
         $db->transBegin();
 
         try {
-            $soModel->update($soId, $header + $totals + ['updated_by' => $userId]);
+            $soModel->update($soId, array_replace($header, $totals, ['updated_by' => $userId]));
 
             $lineModel->where('sales_order_id', $soId)->delete();
             foreach ($lines as $line) {
@@ -105,7 +111,7 @@ class SalesOrderService
             }
 
             $db->transCommit();
-            $this->audit('so.update', $soId, $header, ['header' => $header + $totals, 'lines' => $lines], $userId, 'Sales order updated.');
+            $this->audit('so.update', $soId, $header, ['header' => array_replace($header, $totals), 'lines' => $lines], $userId, 'Sales order updated.');
         } catch (Throwable $exception) {
             $db->transRollback();
             throw new RuntimeException($exception->getMessage());
@@ -227,7 +233,7 @@ class SalesOrderService
             throw new RuntimeException('SO status ' . $current . ' cannot be changed to ' . $toStatus . '.');
         }
         $this->assertPeriodOpen($so);
-        $model->update($soId, $extra + ['status' => $toStatus, 'document_status' => $toStatus, 'updated_by' => $userId]);
+        $model->update($soId, array_replace($extra, ['status' => $toStatus, 'document_status' => $toStatus, 'updated_by' => $userId]));
         $this->audit($action, $soId, $so, ['to_status' => $toStatus] + $extra, $userId, $description);
     }
 

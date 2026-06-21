@@ -232,3 +232,24 @@ Gunakan bagian ini untuk mencatat hasil test per tanggal.
 | 6 | Inject total PO yang berbeda dari line | Total hasil kalkulasi service yang disimpan | NOT TESTED |  |
 | 7 | Gunakan cash/bank account site lain | Ditolak sebagai account tidak valid | NOT TESTED |  |
 | 8 | Replay nomor Purchase Invoice yang sama | Ditolak sebelum posting | NOT TESTED |  |
+
+---
+
+## 14. Sales E2E Tenant and Payload Guard
+
+| No | Test Case | Expected Result | Result | Notes |
+|---:|---|---|---|---|
+| 1 | Edit draft SO dengan company/site berbeda | Ditolak tanpa mengubah SO | NOT TESTED |  |
+| 2 | Post Delivery memakai SO company lain | Ditolak sebelum stock/header delivery dibuat | NOT TESTED |  |
+| 3 | Post Delivery memakai SO site lain | Ditolak sebelum stock/header delivery dibuat | NOT TESTED |  |
+| 4 | Buat AR Invoice dari Delivery company/site lain | Ditolak sebelum invoice, receivable, dan GL dibuat | NOT TESTED |  |
+| 5 | Post A/R Receipt ke receivable company/site lain | Ditolak sebelum cash/bank berubah | NOT TESTED |  |
+| 6 | Inject status atau total ke SO/Delivery/Invoice/Receipt | Nilai authoritative service yang disimpan | NOT TESTED |  |
+| 7 | Gunakan cash/bank account site lain | Ditolak sebagai account tidak valid | NOT TESTED |  |
+| 8 | Replay nomor Sales Invoice yang sama | Ditolak sebelum posting | NOT TESTED |  |
+
+### Bug Fix Log Tambahan
+
+| Date | Bug / Feedback | Severity | Status | Fix Commit / Notes |
+|---|---|---|---|---|
+| 2026-06-22 | Rantai SO-Delivery-AR-Receipt masih menerima payload tenant/status yang tidak konsisten di service boundary | High | Patched | Strict tenant and authoritative payload guard; needs UAT |
