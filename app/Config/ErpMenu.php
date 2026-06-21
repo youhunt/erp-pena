@@ -33,7 +33,7 @@ class ErpMenu extends BaseConfig
             $this->group('System', 'bx-data', 25, [
                 $this->leaf('User Management', 'admin/users', 'users.view'),
                 $this->leaf('Roles & Permissions', 'admin/roles', 'roles.view'),
-                $this->leaf('Data Import Export', 'system/data-import', 'setup.master.view'),
+                $this->leaf('Development Status', 'system/development-status', 'dashboard.view'),
                 $this->leaf('Excel Import Export', 'system/excel-transfer', 'setup.master.view'),
                 $this->leaf('Audit Logs', 'audit-logs', 'audit.logs.view'),
             ]),
