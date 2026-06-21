@@ -77,9 +77,7 @@ class PermissionGuardFilter implements FilterInterface
         }
 
         if (str_starts_with($path, 'production/')) {
-            return $method === 'GET' && ! str_contains($path, '/new')
-                ? 'production.view'
-                : 'production.manage';
+            return $this->productionPermission($path, $method);
         }
 
         if (str_starts_with($path, 'ap/')) {
@@ -238,6 +236,22 @@ class PermissionGuardFilter implements FilterInterface
         }
 
         return 'inventory.stock.view';
+    }
+
+    private function productionPermission(string $path, string $method): string
+    {
+        if ($method !== 'GET') {
+            return 'production.manage';
+        }
+
+        if (str_contains($path, '/edit')
+            || str_contains($path, '/new')
+            || str_contains($path, '/import')
+            || str_contains($path, '/template')) {
+            return 'production.manage';
+        }
+
+        return 'production.view';
     }
 
     private function aiDocumentPermission(string $path, string $method): string
