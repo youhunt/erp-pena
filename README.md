@@ -49,6 +49,7 @@ The current continuation adds:
 - Production edit for BOM, Work Center, Routing, and draft Work Order
 - ERP Core UAT Flow Board at `/system/development-status`
 - Development journey/status documentation and formal core UAT checklist
+- ERP Core UAT manual test scenarios with sample input data and PASS/FAIL checklist
 
 Skote assets are stored in `resources.zip` and extracted into `public/assets/skote` for the current layout.
 
@@ -144,6 +145,7 @@ database/hosting/2026-06-20_normalize_core_master_data.sql
 database/hosting/2026-06-20_update_receipt_delivery_reversal_gl.sql
 database/hosting/2026-06-21_update_po_uat_feedback.sql
 database/hosting/2026-06-21_update_sales_order_uat_feedback.sql
+database/hosting/2026-06-21_update_system_menu_development_status.sql
 ```
 
 Run this only after duplicate audit returns zero rows:
@@ -197,6 +199,7 @@ Order import fixes from runtime feedback:
 - Production import UAT feedback is documented in `docs/26-production-imports.md`.
 - Production edit UAT is documented in `docs/27-production-edit-crud.md`.
 - ERP Core continuation plan is documented in `docs/28-erp-core-continuation.md`.
+- ERP Core manual UAT scenarios are documented in `docs/29-erp-core-uat-test-scenarios.md`.
 
 ## Documentation
 
@@ -220,9 +223,5 @@ Order import fixes from runtime feedback:
 - [Core Master Data Code Guard](docs/20-master-data-code-guard.md)
 - [Transaction Status Guard](docs/21-transaction-status-guard.md)
 - [Receipt and Delivery Reversal GL](docs/22-receipt-delivery-reversal-gl.md)
-- [Unique Core Master Indexes](docs/23-unique-core-master-indexes.md)
-- [PO UAT Feedback Fixes](docs/24-uat-feedback-po-fixes.md)
-- [Sales Order UAT Feedback Edit Patch](docs/25-uat-feedback-sales-order-edit.md)
-- [Production Imports](docs/26-production-imports.md)
-- [Production Edit CRUD](docs/27-production-edit-crud.md)
-- [ERP Core Continuation](docs/28-erp-core-continuation.md)
+- [ERP Core Continuation Plan](docs/28-erp-core-continuation.md)
+- [ERP Core UAT Test Scenarios](docs/29-erp-core-uat-test-scenarios.md)
