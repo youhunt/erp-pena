@@ -15,22 +15,10 @@ class SalesOrderService
 {
     public function create(array $header, array $lines, ?int $userId = null): int
     {
-        if (empty($header['company_id'])) {
-            throw new RuntimeException('Company is required.');
-        }
-        if (empty($header['so_no'])) {
-            throw new RuntimeException('SO number is required.');
-        }
-        if (empty($header['so_date'])) {
-            throw new RuntimeException('SO date is required.');
-        }
-        if ($lines === []) {
-            throw new RuntimeException('At least one SO line is required.');
-        }
+        $this->validateHeader($header, $lines);
         $this->assertPeriodOpen($header);
         $lines = $this->normalizeLines($lines);
-
-        $totals = $this->calculateTotals($lines);
+        $totals = $this->calculateTotals($lines, $header);
         $db = Database::connect();
         $db->transBegin();
 
@@ -55,33 +43,7 @@ class SalesOrderService
             }
 
             foreach ($lines as $line) {
-                $lineNo = (int) $line['so_line'];
-                $qty = (float) ($line['qty'] ?? 0);
-                $unitPrice = (float) ($line['unit_price'] ?? 0);
-                $discount = (float) ($line['discount_amount'] ?? 0);
-                $tax = (float) ($line['tax_amount'] ?? 0);
-                $lineTotal = ($qty * $unitPrice) - $discount + $tax;
-
-                $lineModel->insert([
-                    'sales_order_id' => $soId,
-                    'line_no' => $lineNo,
-                    'so_line' => $lineNo,
-                    'item_id' => $line['item_id'] ?? null,
-                    'item_code' => $line['item_code'] ?? null,
-                    'item_name' => $line['item_name'] ?? null,
-                    'qty' => $qty,
-                    'qty_ordered' => $qty,
-                    'qty_reserved' => 0,
-                    'qty_delivered' => 0,
-                    'qty_outstanding' => $qty,
-                    'uom_code' => $line['uom_code'] ?? null,
-                    'unit_price' => $unitPrice,
-                    'discount_amount' => $discount,
-                    'tax_amount' => $tax,
-                    'line_total' => $lineTotal,
-                    'line_status' => 'open',
-                ]);
-
+                $lineModel->insert($this->linePayload($soId, $line, 'open'));
             }
 
             if ($db->transStatus() === false) {
@@ -92,6 +54,58 @@ class SalesOrderService
             $this->audit('so.create', $soId, $header, ['header' => $header + $totals, 'lines' => $lines], $userId, 'Sales order created.');
 
             return $soId;
+        } catch (Throwable $exception) {
+            $db->transRollback();
+            throw new RuntimeException($exception->getMessage());
+        }
+    }
+
+    public function update(int $soId, array $header, array $lines, ?int $userId = null): void
+    {
+        $this->validateHeader($header, $lines);
+
+        $soModel = new SalesOrderModel();
+        $lineModel = new SalesOrderLineModel();
+        $so = $soModel->find($soId);
+        if ($so === null) {
+            throw new RuntimeException('Sales order not found.');
+        }
+
+        $status = (string) ($so['document_status'] ?? $so['status'] ?? 'draft');
+        if ($status !== 'draft') {
+            throw new RuntimeException('Only draft sales order can be edited. Current status: ' . $status . '.');
+        }
+
+        $existingLines = $lineModel->where('sales_order_id', $soId)->findAll();
+        foreach ($existingLines as $existingLine) {
+            if ((float) ($existingLine['qty_reserved'] ?? 0) > 0 || (float) ($existingLine['qty_delivered'] ?? 0) > 0) {
+                throw new RuntimeException('SO cannot be edited because one or more lines have already been reserved or delivered.');
+            }
+        }
+
+        $this->assertPeriodOpen($header + $so);
+        $lines = $this->normalizeLines($lines);
+        $totals = $this->calculateTotals($lines, $header);
+        $header['document_no'] = $header['document_no'] ?? $header['so_no'];
+        $header['document_date'] = $header['document_date'] ?? $header['so_date'];
+
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            $soModel->update($soId, $header + $totals + ['updated_by' => $userId]);
+
+            $lineModel->where('sales_order_id', $soId)->delete();
+            foreach ($lines as $line) {
+                $lineModel->insert($this->linePayload($soId, $line, 'open'));
+            }
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to update sales order.');
+            }
+
+            $db->transCommit();
+            $this->audit('so.update', $soId, $header, ['header' => $header + $totals, 'lines' => $lines], $userId, 'Sales order updated.');
         } catch (Throwable $exception) {
             $db->transRollback();
             throw new RuntimeException($exception->getMessage());
@@ -227,25 +241,59 @@ class SalesOrderService
         );
     }
 
-    public function calculateTotals(array $lines): array
+    private function validateHeader(array $header, array $lines): void
+    {
+        if (empty($header['company_id'])) {
+            throw new RuntimeException('Company is required.');
+        }
+        if (empty($header['so_no'])) {
+            throw new RuntimeException('SO number is required.');
+        }
+        if (empty($header['so_date'])) {
+            throw new RuntimeException('SO date is required.');
+        }
+        if ($lines === []) {
+            throw new RuntimeException('At least one SO line is required.');
+        }
+    }
+
+    public function calculateTotals(array $lines, array $header = []): array
     {
         $subtotal = 0.0;
-        $discount = 0.0;
+        $lineDiscount = 0.0;
+        $lineCharges = 0.0;
         $tax = 0.0;
+
         foreach ($lines as $line) {
             $qty = (float) ($line['qty'] ?? $line['qty_ordered'] ?? 0);
             $unitPrice = (float) ($line['unit_price'] ?? 0);
-            $lineDiscount = (float) ($line['discount_amount'] ?? 0);
-            $lineTax = (float) ($line['tax_amount'] ?? 0);
-            $subtotal += $qty * $unitPrice;
-            $discount += $lineDiscount;
-            $tax += $lineTax;
+            $gross = $qty * $unitPrice;
+            $discountPercent = (float) ($line['discount_percent'] ?? 0);
+            $discountAmount = (float) ($line['discount_amount'] ?? 0);
+            if ($discountPercent > 0) {
+                $discountAmount += round($gross * $discountPercent / 100, 2);
+            }
+            $subtotal += $gross;
+            $lineDiscount += $discountAmount;
+            $lineCharges += (float) ($line['freight_amount'] ?? 0) + (float) ($line['special_charge_amount'] ?? 0) + (float) ($line['other_amount'] ?? 0);
+            $tax += (float) ($line['tax_amount'] ?? 0);
         }
+
+        $headerDiscountPercent = (float) ($header['discount_percent'] ?? 0);
+        $headerDiscountAmount = (float) ($header['discount_amount'] ?? 0);
+        $headerDiscount = round($subtotal * $headerDiscountPercent / 100, 2) + $headerDiscountAmount;
+        $headerCharges = (float) ($header['freight_amount'] ?? 0) + (float) ($header['other_amount'] ?? 0);
+        $totalDiscount = round($headerDiscount + $lineDiscount, 2);
+        $total = $subtotal - $totalDiscount + $headerCharges + $lineCharges + $tax;
+
         return [
-            'subtotal_amount' => $subtotal,
-            'discount_amount' => $discount,
-            'tax_amount' => $tax,
-            'total_amount' => $subtotal - $discount + $tax,
+            'subtotal_amount' => round($subtotal, 2),
+            'discount_percent' => $headerDiscountPercent,
+            'discount_amount' => round($headerDiscountAmount, 2),
+            'freight_amount' => round((float) ($header['freight_amount'] ?? 0), 2),
+            'other_amount' => round((float) ($header['other_amount'] ?? 0), 2),
+            'tax_amount' => round($tax, 2),
+            'total_amount' => round($total, 2),
         ];
     }
 
@@ -264,9 +312,39 @@ class SalesOrderService
                 throw new RuntimeException('Duplicate SO line number: ' . $displayLine);
             }
 
+            $qty = (float) ($line['qty'] ?? $line['qty_ordered'] ?? 0);
+            $unitPrice = (float) ($line['unit_price'] ?? 0);
+            $gross = round($qty * $unitPrice, 2);
+            $discountPercent = (float) ($line['discount_percent'] ?? 0);
+            $discountAmount = (float) ($line['discount_amount'] ?? 0);
+            if ($discountPercent > 0) {
+                $discountAmount += round($gross * $discountPercent / 100, 2);
+            }
+            $freight = (float) ($line['freight_amount'] ?? 0);
+            $special = (float) ($line['special_charge_amount'] ?? 0);
+            $other = (float) ($line['other_amount'] ?? 0);
+            $tax = (float) ($line['tax_amount'] ?? 0);
+            $itemCode = trim((string) ($line['item_code'] ?? ''));
+            $itemName = trim((string) ($line['item_name'] ?? ''));
+            if ($itemCode === '') {
+                throw new RuntimeException('Item code is required on SO line ' . $displayLine . '. Please reselect the item before saving.');
+            }
+            if ($itemName === '') {
+                $itemName = $itemCode;
+            }
+
             $seen[$displayLine] = true;
             $line['so_line'] = $displayLine;
             $line['line_no'] = $displayLine;
+            $line['item_code'] = $itemCode;
+            $line['item_name'] = $itemName;
+            $line['discount_percent'] = $discountPercent;
+            $line['discount_amount'] = $discountAmount;
+            $line['freight_amount'] = $freight;
+            $line['special_charge_amount'] = $special;
+            $line['other_amount'] = $other;
+            $line['tax_amount'] = $tax;
+            $line['line_total'] = $gross - $discountAmount + $freight + $special + $other + $tax;
             $normalized[] = $line;
             $autoLine++;
         }
@@ -282,6 +360,37 @@ class SalesOrderService
         }
 
         return $normalized;
+    }
+
+    private function linePayload(int $soId, array $line, string $status): array
+    {
+        $lineNo = (int) $line['so_line'];
+        $qty = (float) ($line['qty'] ?? 0);
+
+        return [
+            'sales_order_id' => $soId,
+            'line_no' => $lineNo,
+            'so_line' => $lineNo,
+            'item_id' => $line['item_id'] ?? null,
+            'item_code' => $line['item_code'] ?? null,
+            'item_name' => $line['item_name'] ?? null,
+            'description' => $line['description'] ?? null,
+            'qty' => $qty,
+            'qty_ordered' => $qty,
+            'qty_reserved' => 0,
+            'qty_delivered' => 0,
+            'qty_outstanding' => $qty,
+            'uom_code' => $line['uom_code'] ?? null,
+            'unit_price' => (float) ($line['unit_price'] ?? 0),
+            'discount_percent' => (float) ($line['discount_percent'] ?? 0),
+            'discount_amount' => (float) ($line['discount_amount'] ?? 0),
+            'freight_amount' => (float) ($line['freight_amount'] ?? 0),
+            'special_charge_amount' => (float) ($line['special_charge_amount'] ?? 0),
+            'other_amount' => (float) ($line['other_amount'] ?? 0),
+            'tax_amount' => (float) ($line['tax_amount'] ?? 0),
+            'line_total' => (float) ($line['line_total'] ?? 0),
+            'line_status' => $status,
+        ];
     }
 
     private function audit(string $action, int $soId, array $header, array $payload, ?int $userId, string $description): void
