@@ -55,6 +55,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('stock-balances', 'Inventory\StockBalanceController::index');
         $routes->get('stock-alerts', 'Inventory\StockAlertController::index');
         $routes->get('stock-card', 'Inventory\StockCardController::index');
+        $routes->get('stock-card/export', 'System\CoreAuditExportController::stockCard');
         $routes->get('in-out', 'Inventory\InventoryMovementController::inOut');
         $routes->post('in-out', 'Inventory\InventoryMovementController::storeInOut');
         $routes->get('movement-documents/(:num)', 'Inventory\InventoryMovementController::showDocument/$1');
@@ -178,6 +179,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('posting-profiles', 'Finance\GeneralLedgerController::updatePostingProfiles');
         $routes->get('recurring', 'Finance\GeneralLedgerController::recurring');
         $routes->get('entries', 'Finance\GeneralLedgerController::entries');
+        $routes->get('entries/export', 'System\CoreAuditExportController::glEntries');
         $routes->get('entries/new', 'Finance\GeneralLedgerController::newEntry');
         $routes->post('entries', 'Finance\GeneralLedgerController::storeEntry');
         $routes->get('entries/(:num)', 'Finance\GeneralLedgerController::showEntry/$1');
