@@ -10,7 +10,7 @@
             <tr><th>Department</th><td><?= esc($routing['department_code']) ?></td></tr>
             <tr><th>Warehouse</th><td><?= esc($routing['warehouse_code'] ?? '-') ?></td></tr>
         </tbody></table>
-        <div class="mt-3"><a href="<?= site_url('production/routings') ?>" class="btn btn-light">Back</a></div>
+        <div class="d-flex gap-2 mt-3"><a href="<?= site_url('production/routings') ?>" class="btn btn-light">Back</a><a href="<?= site_url('production/routings/' . $routing['id'] . '/edit') ?>" class="btn btn-outline-primary"><i class="bx bx-edit me-1"></i> Edit</a></div>
     </div></div></div>
     <div class="col-xl-8"><div class="card"><div class="card-body">
         <h4 class="card-title mb-3">Operations</h4>
