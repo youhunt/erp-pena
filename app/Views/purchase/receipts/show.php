@@ -3,6 +3,7 @@
 <?= $this->section('content') ?>
 <?php
 $status = (string) ($receipt['status'] ?? 'posted');
+$existingInvoice = $existingInvoice ?? null;
 $statusClass = match ($status) {
     'posted' => 'bg-success',
     'invoiced' => 'bg-info',
@@ -30,6 +31,7 @@ $statusClass = match ($status) {
                         <tr><th>Warehouse</th><td><?= esc($warehouseLabel ?? '-') ?></td></tr>
                         <tr><th>Location</th><td><?= esc($locationLabel ?? '-') ?></td></tr>
                         <tr><th>Receipt GL Entry</th><td><?= ! empty($receipt['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $receipt['gl_entry_id']) . '">#' . esc($receipt['gl_entry_id']) . '</a>' : '-' ?></td></tr>
+                        <tr><th>AP Invoice</th><td><?= ! empty($existingInvoice) ? '<a href="' . site_url('ap/purchase-invoices/' . (int) $existingInvoice['id']) . '">' . esc($existingInvoice['invoice_no'] ?? ('#' . $existingInvoice['id'])) . '</a>' : '-' ?></td></tr>
                         <tr><th>Reversal GL</th><td><?= ! empty($receipt['reversal_gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $receipt['reversal_gl_entry_id']) . '">#' . esc($receipt['reversal_gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Posted</th><td><?= esc($receipt['posted_at'] ?? '-') ?></td></tr>
                         <?php if ($status === 'reversed'): ?>
@@ -41,7 +43,9 @@ $statusClass = match ($status) {
                 <div class="mt-3 d-flex flex-wrap gap-2">
                     <a href="<?= site_url('purchase/orders/' . $receipt['purchase_order_id']) ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to PO</a>
                     <a href="<?= site_url('print/purchase-receipts/' . (int) $receipt['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
-                    <?php if ($status === 'posted'): ?>
+                    <?php if (! empty($existingInvoice)): ?>
+                        <a href="<?= site_url('ap/purchase-invoices/' . (int) $existingInvoice['id']) ?>" class="btn btn-info"><i class="bx bx-receipt me-1"></i> View AP Invoice</a>
+                    <?php elseif ($status === 'posted'): ?>
                         <a href="<?= site_url('purchase/receipts/' . $receipt['id'] . '/invoice') ?>" class="btn btn-primary"><i class="bx bx-receipt me-1"></i> Create AP Invoice</a>
                         <form method="post" action="<?= site_url('purchase/receipts/' . (int) $receipt['id'] . '/reverse') ?>" class="d-flex gap-2">
                             <?= csrf_field() ?>
