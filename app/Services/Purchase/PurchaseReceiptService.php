@@ -14,6 +14,7 @@ use App\Services\Finance\GeneralLedgerService;
 use App\Services\Finance\PeriodCloseService;
 use App\Services\Finance\PostingProfileService;
 use App\Services\Inventory\InventoryStockService;
+use App\Services\Support\TransactionDocumentGuard;
 use Config\Database;
 use RuntimeException;
 use Throwable;
@@ -38,11 +39,22 @@ class PurchaseReceiptService
         if ($po === null) {
             throw new RuntimeException('Purchase order not found.');
         }
+        (new TransactionDocumentGuard())->assertSameTenant($po, $header, 'Purchase order');
 
         $poStatus = (string) ($po['document_status'] ?? $po['status'] ?? 'draft');
         if (! in_array($poStatus, ['approved', 'partial_received'], true)) {
             throw new RuntimeException('Only approved or partially received PO can be received. Current status: ' . $poStatus);
         }
+
+        $header = array_replace($header, [
+            'company_id' => $po['company_id'],
+            'site_id' => $po['site_id'] ?? null,
+            'purchase_order_id' => $po['id'],
+            'po_no' => $po['po_no'] ?? $po['document_no'] ?? null,
+            'supplier_id' => $po['supplier_id'] ?? null,
+            'supplier_code' => $po['supplier_code'] ?? $po['supplier'] ?? null,
+            'supplier_name' => $po['supplier_name'] ?? null,
+        ]);
 
         $db = Database::connect();
         $db->transBegin();
@@ -57,13 +69,13 @@ class PurchaseReceiptService
             $postedLineCount = 0;
             $glWarning = null;
 
-            $receiptModel->insert($header + [
+            $receiptModel->insert(array_replace($header, [
                 'status' => 'posted',
                 'posted_at' => date('Y-m-d H:i:s'),
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ]);
+            ]));
             $receiptId = (int) $receiptModel->getInsertID();
             if ($receiptId < 1) {
                 throw new RuntimeException('Failed to create purchase receipt header.');

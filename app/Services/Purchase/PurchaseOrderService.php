@@ -30,12 +30,12 @@ class PurchaseOrderService
             $header['document_no'] = $header['document_no'] ?? $header['po_no'];
             $header['document_date'] = $header['document_date'] ?? $header['po_date'];
 
-            $poModel->insert($header + $totals + [
+            $poModel->insert(array_replace($header, $totals, [
                 'status' => $status,
                 'document_status' => $status,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ]);
+            ]));
             $poId = (int) $poModel->getInsertID();
             if ($poId < 1) {
                 throw new RuntimeException('Failed to create purchase order header.');
@@ -92,9 +92,9 @@ class PurchaseOrderService
         $db->transBegin();
 
         try {
-            $poModel->update($poId, $header + $totals + [
+            $poModel->update($poId, array_replace($header, $totals, [
                 'updated_by' => $userId,
-            ]);
+            ]));
 
             $lineModel->where('purchase_order_id', $poId)->delete();
             foreach ($lines as $line) {
@@ -205,7 +205,7 @@ class PurchaseOrderService
         }
         $this->assertPeriodOpen($po);
 
-        $model->update($poId, $extra + ['status' => $toStatus, 'document_status' => $toStatus, 'updated_by' => $userId]);
+        $model->update($poId, array_replace($extra, ['status' => $toStatus, 'document_status' => $toStatus, 'updated_by' => $userId]));
         $this->audit($action, $poId, $po, ['to_status' => $toStatus] + $extra, $userId, $description);
     }
 

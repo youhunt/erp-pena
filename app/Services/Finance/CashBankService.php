@@ -32,11 +32,22 @@ class CashBankService
         (new PeriodCloseService())->assertOpen('cashbank', $companyId, (string) ($data['entry_date'] ?? date('Y-m-d')), ! empty($data['site_id']) ? (int) $data['site_id'] : null);
 
         $accountModel = new CashBankAccountModel();
-        $account = $accountModel
+        $accountQuery = $accountModel
             ->where('company_id', $companyId)
             ->where('cash_bank_code', (string) ($data['cash_bank_code'] ?? ''))
-            ->where('is_active', 1)
-            ->first();
+            ->where('is_active', 1);
+
+        if (! empty($data['site_id'])) {
+            $accountQuery->groupStart()
+                ->where('site_id', (int) $data['site_id'])
+                ->orWhere('site_id', null)
+                ->groupEnd()
+                ->orderBy('site_id', 'DESC');
+        } else {
+            $accountQuery->where('site_id', null);
+        }
+
+        $account = $accountQuery->first();
 
         if ($account === null) {
             throw new RuntimeException('Cash/Bank account not found or inactive.');

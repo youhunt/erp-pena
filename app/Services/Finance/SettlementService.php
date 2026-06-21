@@ -11,6 +11,7 @@ use App\Models\CashBankEntryModel;
 use App\Models\PurchaseInvoiceModel;
 use App\Models\SalesInvoiceModel;
 use App\Services\AuditLogService;
+use App\Services\Support\TransactionDocumentGuard;
 use Config\Database;
 use RuntimeException;
 use Throwable;
@@ -37,7 +38,9 @@ class SettlementService
         if ($purchaseInvoice === null || ! in_array($invoiceStatus, ['open', 'partial'], true)) {
             throw new RuntimeException('Related purchase invoice is not open for payment. Current status: ' . ($invoiceStatus !== '' ? $invoiceStatus : 'not found') . '.');
         }
-        $this->assertSameSite($payable, $data, 'A/P payable');
+        $tenantGuard = new TransactionDocumentGuard();
+        $tenantGuard->assertSameTenant($payable, $data, 'A/P payable');
+        $tenantGuard->assertSameTenant($purchaseInvoice, $payable, 'Purchase invoice');
         $this->assertUniqueDocumentNo('ap_payments', 'payment_no', (string) $data['payment_no'], (int) $data['company_id'], $data['site_id'] ?? null);
 
         $amount = round((float) ($data['payment_amount'] ?? 0), 6);
@@ -62,7 +65,7 @@ class SettlementService
 
         try {
             $paymentModel = new ApPaymentModel();
-            $paymentModel->insert($data + [
+            $paymentModel->insert(array_replace($data, [
                 'purchase_invoice_id' => $payable['purchase_invoice_id'],
                 'invoice_no' => $payable['invoice_no'],
                 'supplier_id' => $payable['supplier_id'] ?? null,
@@ -75,7 +78,7 @@ class SettlementService
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ]);
+            ]));
             $paymentId = (int) $paymentModel->getInsertID();
             if ($paymentId < 1) {
                 throw new RuntimeException('Failed to create A/P payment.');
@@ -86,7 +89,7 @@ class SettlementService
                 'site_id' => $data['site_id'] ?? null,
                 'entry_no' => 'CB-' . ($data['payment_no'] ?? date('Ymd-His')),
                 'entry_date' => $data['payment_date'] ?? date('Y-m-d'),
-                'entry_type' => $this->cashBankEntryType((int) $data['company_id'], (string) $data['cash_bank_code'], 'out'),
+                'entry_type' => $this->cashBankEntryType((int) $data['company_id'], (string) $data['cash_bank_code'], 'out', $data['site_id'] ?? null),
                 'cash_bank_code' => $data['cash_bank_code'],
                 'currency_code' => $payable['currency_code'] ?? 'IDR',
                 'amount' => $amount,
@@ -145,7 +148,9 @@ class SettlementService
         if ($salesInvoice === null || ! in_array($invoiceStatus, ['open', 'partial'], true)) {
             throw new RuntimeException('Related sales invoice is not open for receipt. Current status: ' . ($invoiceStatus !== '' ? $invoiceStatus : 'not found') . '.');
         }
-        $this->assertSameSite($receivable, $data, 'A/R receivable');
+        $tenantGuard = new TransactionDocumentGuard();
+        $tenantGuard->assertSameTenant($receivable, $data, 'A/R receivable');
+        $tenantGuard->assertSameTenant($salesInvoice, $receivable, 'Sales invoice');
         $this->assertUniqueDocumentNo('ar_receipts', 'receipt_no', (string) $data['receipt_no'], (int) $data['company_id'], $data['site_id'] ?? null);
 
         $amount = round((float) ($data['receipt_amount'] ?? 0), 6);
@@ -170,7 +175,7 @@ class SettlementService
 
         try {
             $receiptModel = new ArReceiptModel();
-            $receiptModel->insert($data + [
+            $receiptModel->insert(array_replace($data, [
                 'sales_invoice_id' => $receivable['sales_invoice_id'],
                 'invoice_no' => $receivable['invoice_no'],
                 'customer_id' => $receivable['customer_id'] ?? null,
@@ -183,7 +188,7 @@ class SettlementService
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ]);
+            ]));
             $receiptId = (int) $receiptModel->getInsertID();
             if ($receiptId < 1) {
                 throw new RuntimeException('Failed to create A/R receipt.');
@@ -194,7 +199,7 @@ class SettlementService
                 'site_id' => $data['site_id'] ?? null,
                 'entry_no' => 'CB-' . ($data['receipt_no'] ?? date('Ymd-His')),
                 'entry_date' => $data['receipt_date'] ?? date('Y-m-d'),
-                'entry_type' => $this->cashBankEntryType((int) $data['company_id'], (string) $data['cash_bank_code'], 'in'),
+                'entry_type' => $this->cashBankEntryType((int) $data['company_id'], (string) $data['cash_bank_code'], 'in', $data['site_id'] ?? null),
                 'cash_bank_code' => $data['cash_bank_code'],
                 'currency_code' => $receivable['currency_code'] ?? 'IDR',
                 'amount' => $amount,
@@ -271,7 +276,7 @@ class SettlementService
                 'site_id' => $payment['site_id'] ?? null,
                 'entry_no' => $this->cancellationEntryNo('CB-CNL-AP-', (string) ($payment['payment_no'] ?? 'APPAY'), $paymentId),
                 'entry_date' => $paymentDate,
-                'entry_type' => $this->cashBankEntryType((int) $payment['company_id'], (string) $payment['cash_bank_code'], 'in'),
+                'entry_type' => $this->cashBankEntryType((int) $payment['company_id'], (string) $payment['cash_bank_code'], 'in', $payment['site_id'] ?? null),
                 'cash_bank_code' => $payment['cash_bank_code'],
                 'currency_code' => $payment['currency_code'] ?? 'IDR',
                 'amount' => $amount,
@@ -356,7 +361,7 @@ class SettlementService
                 'site_id' => $receipt['site_id'] ?? null,
                 'entry_no' => $this->cancellationEntryNo('CB-CNL-AR-', (string) ($receipt['receipt_no'] ?? 'ARREC'), $receiptId),
                 'entry_date' => $receiptDate,
-                'entry_type' => $this->cashBankEntryType((int) $receipt['company_id'], (string) $receipt['cash_bank_code'], 'out'),
+                'entry_type' => $this->cashBankEntryType((int) $receipt['company_id'], (string) $receipt['cash_bank_code'], 'out', $receipt['site_id'] ?? null),
                 'cash_bank_code' => $receipt['cash_bank_code'],
                 'currency_code' => $receipt['currency_code'] ?? 'IDR',
                 'amount' => $amount,
@@ -403,13 +408,21 @@ class SettlementService
         ]);
     }
 
-    private function cashBankEntryType(int $companyId, string $cashBankCode, string $direction): string
+    private function cashBankEntryType(int $companyId, string $cashBankCode, string $direction, mixed $siteId = null): string
     {
-        $account = (new CashBankAccountModel())
+        $query = (new CashBankAccountModel())
             ->where('company_id', $companyId)
             ->where('cash_bank_code', $cashBankCode)
-            ->where('is_active', 1)
-            ->first();
+            ->where('is_active', 1);
+
+        if (! empty($siteId)) {
+            $query->groupStart()->where('site_id', (int) $siteId)->orWhere('site_id', null)->groupEnd()
+                ->orderBy('site_id', 'DESC');
+        } else {
+            $query->where('site_id', null);
+        }
+
+        $account = $query->first();
 
         if ($account === null) {
             throw new RuntimeException('Cash/Bank account not found or inactive.');
@@ -427,16 +440,6 @@ class SettlementService
         $maxDocumentLength = max(1, 60 - strlen($prefix) - strlen($suffix));
 
         return $prefix . substr($cleanDocumentNo !== '' ? $cleanDocumentNo : 'DOC', 0, $maxDocumentLength) . $suffix;
-    }
-
-    private function assertSameSite(array $document, array $data, string $label): void
-    {
-        if (empty($data['site_id']) || empty($document['site_id'])) {
-            return;
-        }
-        if ((int) $data['site_id'] !== (int) $document['site_id']) {
-            throw new RuntimeException($label . ' belongs to a different site.');
-        }
     }
 
     private function assertUniqueDocumentNo(string $table, string $field, string $documentNo, int $companyId, mixed $siteId = null): void

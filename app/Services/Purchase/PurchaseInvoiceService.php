@@ -14,6 +14,7 @@ use App\Services\AuditLogService;
 use App\Services\Finance\GeneralLedgerService;
 use App\Services\Finance\PeriodCloseService;
 use App\Services\Finance\PostingProfileService;
+use App\Services\Support\TransactionDocumentGuard;
 use Config\Database;
 use RuntimeException;
 use Throwable;
@@ -56,7 +57,7 @@ class PurchaseInvoiceService
         try {
             $invoiceDate = (string) ($header['invoice_date'] ?? date('Y-m-d'));
             $dueDate = $header['due_date'] ?? $invoiceDate;
-            $invoiceModel->insert($header + [
+            $invoiceModel->insert(array_replace($header, [
                 'invoice_date' => $invoiceDate,
                 'due_date' => $dueDate,
                 'source_type' => 'manual',
@@ -71,7 +72,7 @@ class PurchaseInvoiceService
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ]);
+            ]));
             $invoiceId = (int) $invoiceModel->getInsertID();
             if ($invoiceId < 1) {
                 throw new RuntimeException('Failed to create purchase invoice header.');
@@ -80,7 +81,7 @@ class PurchaseInvoiceService
             $lineModel = new PurchaseInvoiceLineModel();
             foreach ($lines as $line) {
                 unset($line['line_subtotal']);
-                $lineModel->insert($line + ['purchase_invoice_id' => $invoiceId]);
+                $lineModel->insert(array_replace($line, ['purchase_invoice_id' => $invoiceId]));
             }
 
             (new ApPayableModel())->insert([
@@ -138,12 +139,21 @@ class PurchaseInvoiceService
         if ($receipt === null) {
             throw new RuntimeException('Purchase receipt not found.');
         }
+        (new TransactionDocumentGuard())->assertSameTenant($receipt, $header, 'Purchase receipt');
         $receiptStatus = (string) ($receipt['status'] ?? '');
         if ($receiptStatus !== 'posted') {
             throw new RuntimeException('Only posted purchase receipt can be invoiced. Current status: ' . ($receiptStatus !== '' ? $receiptStatus : 'unknown') . '.');
         }
 
         $invoiceModel = new PurchaseInvoiceModel();
+        $duplicateNumber = $invoiceModel
+            ->where('company_id', (int) $header['company_id'])
+            ->where('invoice_no', (string) $header['invoice_no'])
+            ->where('deleted_at', null)
+            ->first();
+        if ($duplicateNumber !== null) {
+            throw new RuntimeException('Purchase invoice number already exists.');
+        }
         $existing = $invoiceModel
             ->where('purchase_receipt_id', (int) $header['purchase_receipt_id'])
             ->where('status !=', 'cancelled')
@@ -160,6 +170,18 @@ class PurchaseInvoiceService
         if ($receiptLines === []) {
             throw new RuntimeException('Purchase receipt has no lines.');
         }
+
+        $header = array_replace($header, [
+            'company_id' => $receipt['company_id'],
+            'site_id' => $receipt['site_id'] ?? null,
+            'purchase_order_id' => $receipt['purchase_order_id'] ?? null,
+            'purchase_receipt_id' => $receipt['id'],
+            'po_no' => $receipt['po_no'] ?? null,
+            'receipt_no' => $receipt['receipt_no'] ?? null,
+            'supplier_id' => $receipt['supplier_id'] ?? null,
+            'supplier_code' => $receipt['supplier_code'] ?? null,
+            'supplier_name' => $receipt['supplier_name'] ?? null,
+        ]);
 
         $db = Database::connect();
         $db->transBegin();
@@ -220,7 +242,7 @@ class PurchaseInvoiceService
             $invoiceDate = (string) ($header['invoice_date'] ?? date('Y-m-d'));
             $dueDate = $header['due_date'] ?? $invoiceDate;
 
-            $invoiceModel->insert($header + [
+            $invoiceModel->insert(array_replace($header, [
                 'invoice_date' => $invoiceDate,
                 'due_date' => $dueDate,
                 'purchase_order_id' => $receipt['purchase_order_id'] ?? null,
@@ -230,6 +252,7 @@ class PurchaseInvoiceService
                 'supplier_id' => $receipt['supplier_id'] ?? null,
                 'supplier_code' => $receipt['supplier_code'] ?? null,
                 'supplier_name' => $receipt['supplier_name'] ?? null,
+                'source_type' => 'purchase_receipt',
                 'status' => 'open',
                 'subtotal_amount' => $subtotal,
                 'discount_amount' => $discount,
@@ -241,14 +264,14 @@ class PurchaseInvoiceService
                 'posted_by' => $userId,
                 'created_by' => $userId,
                 'updated_by' => $userId,
-            ]);
+            ]));
             $invoiceId = (int) $invoiceModel->getInsertID();
             if ($invoiceId < 1) {
                 throw new RuntimeException('Failed to create purchase invoice header.');
             }
 
             foreach ($lines as $line) {
-                $invoiceLineModel->insert($line + ['purchase_invoice_id' => $invoiceId]);
+                $invoiceLineModel->insert(array_replace($line, ['purchase_invoice_id' => $invoiceId]));
             }
 
             $payableModel->insert([

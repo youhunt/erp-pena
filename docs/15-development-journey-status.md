@@ -281,3 +281,14 @@ PENA ERP can be considered production candidate only when:
 - Required hosting SQL is applied.
 - Backup/restore process is documented.
 - Known risks have owner and resolution plan.
+
+---
+
+## 12. Update 2026-06-22 - Purchasing E2E Boundary Hardening
+
+- Rantai PO, receipt, AP invoice, payable, payment, dan cash/bank sekarang memvalidasi company/site pada service layer.
+- Source document menjadi sumber kebenaran untuk parent ID, supplier, company, dan site.
+- Status dan total hasil kalkulasi tidak dapat dioverride oleh payload request/import.
+- Cash/Bank account dibatasi ke company-wide account atau site transaksi yang sama.
+- Tidak ada perubahan database pada patch ini.
+- Detail guard dan skenario UAT tersedia di `docs/29-purchasing-e2e-tenant-payload-guard.md`.

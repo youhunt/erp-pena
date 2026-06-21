@@ -216,3 +216,19 @@ Gunakan bagian ini untuk mencatat hasil test per tanggal.
 | 2026-06-20 | DO stock out/SO qty update | High | Patched | Needs UAT |
 | 2026-06-20 | Direct URL/replay action dapat melewati kondisi tombol | High | Patched | Service-layer transaction status guard; needs UAT |
 | 2026-06-21 | Work Order action belum tenant-scoped dan combined posting belum atomic | High | Patched | Production service tenant/transaction guard; needs UAT |
+| 2026-06-22 | Rantai PO-Receipt-AP-Payment masih dapat menerima payload tenant/status yang tidak konsisten di service boundary | High | Patched | Strict company/site and authoritative payload guard; needs UAT |
+
+---
+
+## 13. Purchasing E2E Tenant and Payload Guard
+
+| No | Test Case | Expected Result | Result | Notes |
+|---:|---|---|---|---|
+| 1 | Post receipt memakai PO company lain melalui request langsung | Ditolak sebelum stock/header receipt dibuat | NOT TESTED |  |
+| 2 | Post receipt memakai PO site lain | Ditolak sebelum stock/header receipt dibuat | NOT TESTED |  |
+| 3 | Buat AP Invoice dari receipt company/site lain | Ditolak sebelum invoice, payable, dan GL dibuat | NOT TESTED |  |
+| 4 | Post A/P Payment ke payable company/site lain | Ditolak sebelum cash/bank berubah | NOT TESTED |  |
+| 5 | Inject status ke payload receipt/invoice/payment | Status tetap ditentukan service | NOT TESTED |  |
+| 6 | Inject total PO yang berbeda dari line | Total hasil kalkulasi service yang disimpan | NOT TESTED |  |
+| 7 | Gunakan cash/bank account site lain | Ditolak sebagai account tidak valid | NOT TESTED |  |
+| 8 | Replay nomor Purchase Invoice yang sama | Ditolak sebelum posting | NOT TESTED |  |
