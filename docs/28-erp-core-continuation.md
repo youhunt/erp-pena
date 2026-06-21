@@ -19,6 +19,7 @@ PENA ERP sekarang sudah tidak berada pada tahap blueprint kosong. Core applicati
 - Production core: BOM, Work Center, Routing, Work Order, import, edit, dan action guard.
 - Stock Card Excel export untuk audit inventory.
 - GL Entries Excel export untuk audit finance.
+- System menu Development Status untuk monitoring progress dan UAT board.
 
 Status yang benar saat ini adalah **Internal UAT / Core Stabilization**.
 
@@ -97,7 +98,17 @@ Catatan:
 - Export tetap mengikuti active company/site.
 - Export membutuhkan dependency PhpSpreadsheet dari Composer.
 
-## 5. Next Core Backlog
+## 5. System Menu Update
+
+Sidebar menu dibaca dari tabel `menu_items` melalui `MenuService`, bukan langsung dari `Config\ErpMenu`. Karena itu, perubahan menu di hosting perlu menjalankan SQL berikut:
+
+```text
+database/hosting/2026-06-21_update_system_menu_development_status.sql
+```
+
+SQL ini mengganti menu lama `Data Import Export` menjadi `Development Status` dengan route `/system/development-status`.
+
+## 6. Next Core Backlog
 
 | Priority | Item | Target |
 |---:|---|---|
@@ -107,7 +118,7 @@ Catatan:
 | 4 | Non-admin permission UAT | Hak akses lebih aman untuk user operasional |
 | 5 | Master data cleanup | Dropdown dan mapping transaksi lebih stabil |
 
-## 6. Catatan Deploy Hosting
+## 7. Catatan Deploy Hosting
 
 Setelah pull source terbaru, pastikan SQL hosting minimum sudah dijalankan:
 
@@ -119,11 +130,12 @@ database/hosting/2026-06-20_normalize_core_master_data.sql
 database/hosting/2026-06-20_update_receipt_delivery_reversal_gl.sql
 database/hosting/2026-06-21_update_po_uat_feedback.sql
 database/hosting/2026-06-21_update_sales_order_uat_feedback.sql
+database/hosting/2026-06-21_update_system_menu_development_status.sql
 ```
 
 Jika database belum menjalankan SQL di atas, UAT browser bisa gagal walaupun source code sudah benar.
 
-## 7. Target Setelah Ini
+## 8. Target Setelah Ini
 
 Target berikutnya adalah memilih satu flow dan menyelesaikannya sampai `PASS`:
 
