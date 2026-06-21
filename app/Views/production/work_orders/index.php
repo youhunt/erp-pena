@@ -4,7 +4,10 @@
 <div class="card"><div class="card-body">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div><h4 class="card-title mb-1">Work Order</h4><p class="text-muted mb-0">Production orders generated from BOM and Routing.</p></div>
-        <a href="<?= site_url('production/work-orders/new') ?>" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New Work Order</a>
+        <div class="d-flex gap-2">
+            <a href="<?= site_url('production/imports/work-orders') ?>" class="btn btn-outline-primary"><i class="bx bx-upload me-1"></i> Import</a>
+            <a href="<?= site_url('production/work-orders/new') ?>" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New Work Order</a>
+        </div>
     </div>
     <div class="table-responsive"><table class="table table-nowrap table-hover align-middle mb-0">
         <thead class="table-light"><tr><th>WO No</th><th>Date</th><th>Parent Item</th><th>Site</th><th>Dept</th><th>Work Center</th><th class="text-end">WO Qty</th><th>Status</th><th class="text-end">Action</th></tr></thead>
