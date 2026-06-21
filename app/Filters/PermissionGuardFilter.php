@@ -203,7 +203,7 @@ class PermissionGuardFilter implements FilterInterface
             return 'purchase.po.approve';
         }
 
-        if (preg_match('~^purchase/orders/\d+/(submit|close|cancel|receive)$~', $path)
+        if (preg_match('~^purchase/orders/\d+/(submit|close|cancel|activate|receive)$~', $path)
             || preg_match('~^purchase/receipts/\d+/reverse$~', $path)) {
             return 'purchase.po.create';
         }
