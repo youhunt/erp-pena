@@ -4,7 +4,10 @@
 <div class="card"><div class="card-body">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div><h4 class="card-title mb-1">Routing</h4><p class="text-muted mb-0">Production operation sequence per item.</p></div>
-        <a href="<?= site_url('production/routings/new') ?>" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New Routing</a>
+        <div class="d-flex gap-2">
+            <a href="<?= site_url('production/imports/routings') ?>" class="btn btn-outline-primary"><i class="bx bx-upload me-1"></i> Import</a>
+            <a href="<?= site_url('production/routings/new') ?>" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New Routing</a>
+        </div>
     </div>
     <div class="table-responsive"><table class="table table-nowrap table-hover align-middle mb-0">
         <thead class="table-light"><tr><th>Item</th><th>Site</th><th>Department</th><th>Warehouse</th><th>Description</th><th class="text-end">Action</th></tr></thead>
