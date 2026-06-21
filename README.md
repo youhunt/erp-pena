@@ -45,6 +45,7 @@ The current continuation adds:
 - Purchase Receipt and Sales Delivery reversal GL reference tracking
 - PO activation and UAT fixes for PO VAT/WHT code screen
 - Sales Order edit/update and requested commercial fields
+- Production imports for BOM, Work Center, Routing, and Work Order
 - Development journey/status documentation and formal core UAT checklist
 
 Skote assets are stored in `resources.zip` and extracted into `public/assets/skote` for the current layout.
@@ -191,6 +192,7 @@ Order import fixes from runtime feedback:
 - Transaction status guard is documented in `docs/21-transaction-status-guard.md`; UAT scenarios are listed in `docs/16-core-uat-status-checklist.md`.
 - PO UAT feedback is documented in `docs/24-uat-feedback-po-fixes.md`.
 - Sales Order edit UAT feedback is documented in `docs/25-uat-feedback-sales-order-edit.md`.
+- Production import UAT feedback is documented in `docs/26-production-imports.md`.
 
 ## Documentation
 
@@ -217,3 +219,4 @@ Order import fixes from runtime feedback:
 - [Unique Core Master Indexes](docs/23-unique-core-master-indexes.md)
 - [PO UAT Feedback Fixes](docs/24-uat-feedback-po-fixes.md)
 - [Sales Order UAT Feedback Edit Patch](docs/25-uat-feedback-sales-order-edit.md)
+- [Production Imports](docs/26-production-imports.md)
