@@ -1,7 +1,17 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
-<?php $status = (string) ($order['document_status'] ?? $order['status'] ?? 'draft'); ?>
+<?php
+$status = (string) ($order['document_status'] ?? $order['status'] ?? 'draft');
+$hasProcessedLine = false;
+foreach ($lines as $line) {
+    if ((float) ($line['qty_reserved'] ?? 0) > 0 || (float) ($line['qty_delivered'] ?? 0) > 0) {
+        $hasProcessedLine = true;
+        break;
+    }
+}
+$canEditSo = $status === 'draft' && ! $hasProcessedLine;
+?>
 <div class="row">
     <div class="col-xl-4">
         <div class="card">
@@ -32,6 +42,9 @@
                 <div class="d-flex flex-wrap gap-2 mt-3">
                     <a href="<?= site_url('sales/orders') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to List</a>
                     <a href="<?= site_url('print/sales-orders/' . (int) $order['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
+                    <?php if ($canEditSo): ?>
+                        <a href="<?= site_url('sales/orders/' . $order['id'] . '/edit') ?>" class="btn btn-outline-primary"><i class="bx bx-edit me-1"></i> Edit</a>
+                    <?php endif ?>
                     <?php if ($status === 'draft'): ?>
                         <form method="post" action="<?= site_url('sales/orders/' . $order['id'] . '/submit') ?>"><?= csrf_field() ?><button class="btn btn-info" onclick="return confirm('Submit this SO?')">Submit</button></form>
                     <?php endif ?>
@@ -61,6 +74,22 @@
                 </div>
             </div>
         </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h4 class="card-title mb-3">Header Amount</h4>
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr><th>Subtotal</th><td class="text-end"><?= esc(number_format((float) ($order['subtotal_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr><th>Discount Amt</th><td class="text-end"><?= esc(number_format((float) ($order['discount_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr><th>Freight</th><td class="text-end"><?= esc(number_format((float) ($order['freight_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr><th>Other Amount</th><td class="text-end"><?= esc(number_format((float) ($order['other_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr><th>Tax</th><td class="text-end"><?= esc(number_format((float) ($order['tax_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr class="table-light"><th>Total</th><td class="text-end fw-semibold"><?= esc(number_format((float) ($order['total_amount'] ?? 0), 2)) ?></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <div class="col-xl-8">
@@ -71,47 +100,42 @@
                     <table class="table table-nowrap align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th>#</th>
-                                <th>Item</th>
-                                <th class="text-end">Ordered</th>
-                                <th class="text-end">Reserved</th>
-                                <th class="text-end">Delivered</th>
-                                <th class="text-end">Outstanding</th>
-                                <th>UoM</th>
-                                <th class="text-end">Price</th>
-                                <th class="text-end">Total</th>
-                                <th>Status</th>
+                                <th>#</th><th>Item</th><th>Description</th><th class="text-end">Ordered</th><th class="text-end">Reserved</th><th class="text-end">Delivered</th><th class="text-end">Outstanding</th><th>UoM</th><th class="text-end">Price</th><th class="text-end">Disc</th><th class="text-end">Charges</th><th class="text-end">Total</th><th>Status</th>
                             </tr>
                         </thead>
                         <tbody>
                         <?php foreach ($lines as $line): ?>
+                            <?php $charges = (float) ($line['freight_amount'] ?? 0) + (float) ($line['special_charge_amount'] ?? 0) + (float) ($line['other_amount'] ?? 0); ?>
                             <tr>
                                 <td><?= esc($line['so_line'] ?? $line['line_no']) ?></td>
                                 <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
+                                <td><?= esc($line['description'] ?? '-') ?></td>
                                 <td class="text-end"><?= esc(number_format((float) ($line['qty_ordered'] ?? $line['qty'] ?? 0), 4)) ?></td>
                                 <td class="text-end"><?= esc(number_format((float) ($line['qty_reserved'] ?? 0), 4)) ?></td>
                                 <td class="text-end"><?= esc(number_format((float) ($line['qty_delivered'] ?? 0), 4)) ?></td>
                                 <td class="text-end fw-semibold"><?= esc(number_format((float) ($line['qty_outstanding'] ?? $line['qty'] ?? 0), 4)) ?></td>
                                 <td><?= esc($line['uom_code'] ?? '-') ?></td>
                                 <td class="text-end"><?= esc(number_format((float) $line['unit_price'], 2)) ?></td>
+                                <td class="text-end"><?= esc(number_format((float) ($line['discount_amount'] ?? 0), 2)) ?></td>
+                                <td class="text-end"><?= esc(number_format($charges, 2)) ?></td>
                                 <td class="text-end fw-semibold"><?= esc(number_format((float) $line['line_total'], 2)) ?></td>
                                 <td><span class="badge bg-secondary"><?= esc($line['line_status'] ?? 'open') ?></span></td>
                             </tr>
                         <?php endforeach ?>
                         </tbody>
                         <tfoot class="table-light">
-                            <tr><th colspan="8" class="text-end">Subtotal</th><th class="text-end"><?= esc(number_format((float) $order['subtotal_amount'], 2)) ?></th><th></th></tr>
-                            <tr><th colspan="8" class="text-end">Discount</th><th class="text-end"><?= esc(number_format((float) $order['discount_amount'], 2)) ?></th><th></th></tr>
-                            <tr><th colspan="8" class="text-end">Tax</th><th class="text-end"><?= esc(number_format((float) $order['tax_amount'], 2)) ?></th><th></th></tr>
-                            <tr><th colspan="8" class="text-end">Total</th><th class="text-end"><?= esc(number_format((float) $order['total_amount'], 2)) ?></th><th></th></tr>
+                            <tr><th colspan="11" class="text-end">Total</th><th class="text-end"><?= esc(number_format((float) $order['total_amount'], 2)) ?></th><th></th></tr>
                         </tfoot>
                     </table>
                 </div>
             </div>
         </div>
 
-        <?php if (! empty($order['notes'])): ?>
-            <div class="card"><div class="card-body"><h4 class="card-title mb-3">Notes</h4><p class="text-muted mb-0"><?= esc($order['notes']) ?></p></div></div>
+        <?php if (! empty($order['notes']) || ! empty($order['remarks'])): ?>
+            <div class="card"><div class="card-body">
+                <?php if (! empty($order['notes'])): ?><h4 class="card-title mb-3">Notes</h4><p class="text-muted"><?= esc($order['notes']) ?></p><?php endif ?>
+                <?php if (! empty($order['remarks'])): ?><h4 class="card-title mb-3">Remarks</h4><p class="text-muted mb-0"><?= esc($order['remarks']) ?></p><?php endif ?>
+            </div></div>
         <?php endif ?>
     </div>
 </div>
