@@ -23,36 +23,10 @@ class ProductionImportController extends BaseController
 {
     private const MAX_UPLOAD_BYTES = 10485760;
 
-    private array $configs = [
-        'boms' => [
-            'title' => 'BOM',
-            'return_to' => 'production/boms',
-            'headers' => ['site_code', 'department_code', 'warehouse_code', 'parent_item_code', 'bom_type', 'qty_batch', 'uom_code', 'ratio_percent', 'description', 'active_date', 'inactive_date', 'line_no', 'child_item_code', 'component_type', 'qty_used', 'line_uom_code', 'factor', 'line_description'],
-            'sample' => ['HO', 'PROD', 'MAIN', 'FG-001', 'standard', '1', 'PCS', '100', 'Example BOM', '', '', '10', 'RM-001', 'material', '2', 'PCS', '1', 'Material line'],
-        ],
-        'work-centers' => [
-            'title' => 'Work Center',
-            'return_to' => 'production/work-centers',
-            'headers' => ['site_code', 'department_code', 'warehouse_code', 'work_center_code', 'description', 'machine_code', 'notes', 'speed', 'capacity_percent', 'max_length', 'length_uom', 'max_width', 'width_uom', 'max_height', 'height_uom', 'max_volume', 'volume_uom', 'qty_labor', 'working_hour', 'cost_type', 'cost_amount', 'cost_uom', 'active_date', 'inactive_date'],
-            'sample' => ['HO', 'PROD', 'MAIN', 'WC-001', 'Cutting Machine', 'MC-001', '', '100', '100', '0', '', '0', '', '0', '', '0', '', '1', '8', 'LABOR', '0', 'Hour', '', ''],
-        ],
-        'routings' => [
-            'title' => 'Routing',
-            'return_to' => 'production/routings',
-            'headers' => ['site_code', 'department_code', 'warehouse_code', 'item_code', 'description', 'line_no', 'routing_name', 'work_center_code', 'operation_type', 'hour_qty', 'hour_uom', 'std_speed', 'speed_uom', 'notes'],
-            'sample' => ['HO', 'PROD', 'MAIN', 'FG-001', 'Routing FG-001', '10', 'Cutting', 'WC-001', 'process', '1', 'Hour', '100', 'Unit/Hour', ''],
-        ],
-        'work-orders' => [
-            'title' => 'Work Order',
-            'return_to' => 'production/work-orders',
-            'headers' => ['site_code', 'department_code', 'warehouse_code', 'work_center_code', 'wo_no', 'wo_date', 'parent_item_code', 'parent_item_name', 'wo_qty', 'uom_code', 'description', 'line_no', 'component_item_code', 'component_item_name', 'qty_used', 'line_uom_code', 'route_work_center_code', 'routing_name', 'hour_qty', 'route_uom'],
-            'sample' => ['HO', 'PROD', 'MAIN', 'WC-001', 'WO-001', date('Y-m-d'), 'FG-001', 'Finished Good', '10', 'PCS', 'Example WO', '10', 'RM-001', 'Raw Material', '20', 'PCS', 'WC-001', 'Cutting', '1', 'Hour'],
-        ],
-    ];
-
     public function form(string $resource): string
     {
         $config = $this->config($resource);
+
         return view('production/imports/form', [
             'title' => 'Import ' . $config['title'],
             'resource' => $resource,
@@ -63,8 +37,12 @@ class ProductionImportController extends BaseController
     public function template(string $resource)
     {
         $config = $this->config($resource);
-        $rows = [$config['headers'], $config['sample']];
-        return $this->xlsxResponse('production-' . $resource . '-template.xlsx', $rows, $config['title'] . ' Import');
+
+        return $this->xlsxResponse(
+            'production-' . $resource . '-template.xlsx',
+            [$config['headers'], $config['sample']],
+            $config['title'] . ' Import'
+        );
     }
 
     public function import(string $resource)
@@ -98,6 +76,46 @@ class ProductionImportController extends BaseController
         ));
     }
 
+    private function configs(): array
+    {
+        return [
+            'boms' => [
+                'title' => 'BOM',
+                'return_to' => 'production/boms',
+                'headers' => ['site_code', 'department_code', 'warehouse_code', 'parent_item_code', 'bom_type', 'qty_batch', 'uom_code', 'ratio_percent', 'description', 'active_date', 'inactive_date', 'line_no', 'child_item_code', 'component_type', 'qty_used', 'line_uom_code', 'factor', 'line_description'],
+                'sample' => ['HO', 'PROD', 'MAIN', 'FG-001', 'standard', '1', 'PCS', '100', 'Example BOM', '', '', '10', 'RM-001', 'material', '2', 'PCS', '1', 'Material line'],
+            ],
+            'work-centers' => [
+                'title' => 'Work Center',
+                'return_to' => 'production/work-centers',
+                'headers' => ['site_code', 'department_code', 'warehouse_code', 'work_center_code', 'description', 'machine_code', 'notes', 'speed', 'capacity_percent', 'max_length', 'length_uom', 'max_width', 'width_uom', 'max_height', 'height_uom', 'max_volume', 'volume_uom', 'qty_labor', 'working_hour', 'cost_type', 'cost_amount', 'cost_uom', 'active_date', 'inactive_date'],
+                'sample' => ['HO', 'PROD', 'MAIN', 'WC-001', 'Cutting Machine', 'MC-001', '', '100', '100', '0', '', '0', '', '0', '', '0', '', '1', '8', 'LABOR', '0', 'Hour', '', ''],
+            ],
+            'routings' => [
+                'title' => 'Routing',
+                'return_to' => 'production/routings',
+                'headers' => ['site_code', 'department_code', 'warehouse_code', 'item_code', 'description', 'line_no', 'routing_name', 'work_center_code', 'operation_type', 'hour_qty', 'hour_uom', 'std_speed', 'speed_uom', 'notes'],
+                'sample' => ['HO', 'PROD', 'MAIN', 'FG-001', 'Routing FG-001', '10', 'Cutting', 'WC-001', 'process', '1', 'Hour', '100', 'Unit/Hour', ''],
+            ],
+            'work-orders' => [
+                'title' => 'Work Order',
+                'return_to' => 'production/work-orders',
+                'headers' => ['site_code', 'department_code', 'warehouse_code', 'work_center_code', 'wo_no', 'wo_date', 'parent_item_code', 'parent_item_name', 'wo_qty', 'uom_code', 'description', 'line_no', 'component_item_code', 'component_item_name', 'qty_used', 'line_uom_code', 'route_work_center_code', 'routing_name', 'hour_qty', 'route_uom'],
+                'sample' => ['HO', 'PROD', 'MAIN', 'WC-001', 'WO-001', date('Y-m-d'), 'FG-001', 'Finished Good', '10', 'PCS', 'Example WO', '10', 'RM-001', 'Raw Material', '20', 'PCS', 'WC-001', 'Cutting', '1', 'Hour'],
+            ],
+        ];
+    }
+
+    private function config(string $resource): array
+    {
+        $configs = $this->configs();
+        if (! isset($configs[$resource])) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        return $configs[$resource];
+    }
+
     private function importBoms(array $rows): array
     {
         $tenant = new TenantContext(session());
@@ -118,31 +136,26 @@ class ProductionImportController extends BaseController
         try {
             foreach ($groups as $group) {
                 $header = $group['header'];
-                $siteId = $this->siteId($header['site_code'], $companyId, (int) ($group['lines'][0]['_row'] ?? 0));
-                $parentItem = $this->itemByCode($header['parent_item_code']);
+                $siteId = $this->siteId((string) $header['site_code'], $companyId, (int) ($group['lines'][0]['_row'] ?? 0));
+                $parentItem = $this->itemByCode((string) $header['parent_item_code']);
                 $model = new ProductionBomModel();
-                $existing = $model->where([
+                $where = [
                     'company_id' => $companyId,
-                    'site_code' => $header['site_code'],
-                    'department_code' => $header['department_code'],
-                    'warehouse_code' => $header['warehouse_code'] ?? '',
-                    'parent_item_code' => $header['parent_item_code'],
-                ])->first();
-
-                $payload = [
-                    'company_id' => $companyId,
+                    'site_code' => (string) $header['site_code'],
+                    'department_code' => (string) $header['department_code'],
+                    'warehouse_code' => (string) ($header['warehouse_code'] ?? ''),
+                    'parent_item_code' => (string) $header['parent_item_code'],
+                ];
+                $existing = $model->where($where)->first();
+                $payload = $where + [
                     'site_id' => $siteId,
-                    'site_code' => $header['site_code'],
-                    'department_code' => $header['department_code'],
-                    'warehouse_code' => $header['warehouse_code'] ?? '',
                     'parent_item_id' => $parentItem['id'] ?? null,
-                    'parent_item_code' => $header['parent_item_code'],
-                    'parent_item_name' => $this->itemName($parentItem, $header['parent_item_code']),
-                    'bom_type' => $header['bom_type'] ?? 'standard',
+                    'parent_item_name' => $this->itemName($parentItem, (string) $header['parent_item_code']),
+                    'bom_type' => (string) ($header['bom_type'] ?? 'standard'),
                     'qty_batch' => $this->decimal($header['qty_batch'] ?? 1),
-                    'uom_code' => $header['uom_code'] ?? 'PCS',
+                    'uom_code' => (string) ($header['uom_code'] ?? 'PCS'),
                     'ratio_percent' => $this->decimal($header['ratio_percent'] ?? 100),
-                    'description' => $header['description'] ?? '',
+                    'description' => (string) ($header['description'] ?? ''),
                     'active_date' => $this->nullableDateTime($header['active_date'] ?? null),
                     'inactive_date' => $this->nullableDateTime($header['inactive_date'] ?? null),
                     'is_active' => 1,
@@ -168,31 +181,31 @@ class ProductionImportController extends BaseController
                         throw new RuntimeException('Duplicate BOM line_no ' . $lineNo . ' for parent item ' . $header['parent_item_code'] . '.');
                     }
                     $seen[$lineNo] = true;
-                    $childItem = $this->itemByCode($line['child_item_code']);
+                    $childItem = $this->itemByCode((string) $line['child_item_code']);
                     $lineModel->insert([
                         'production_bom_id' => $bomId,
                         'child_no' => $lineNo,
                         'child_item_id' => $childItem['id'] ?? null,
-                        'child_item_code' => $line['child_item_code'],
-                        'child_item_name' => $this->itemName($childItem, $line['child_item_code']),
-                        'component_type' => $line['component_type'] ?? 'material',
+                        'child_item_code' => (string) $line['child_item_code'],
+                        'child_item_name' => $this->itemName($childItem, (string) $line['child_item_code']),
+                        'component_type' => (string) ($line['component_type'] ?? 'material'),
                         'qty_used' => $this->decimal($line['qty_used'] ?? 0),
-                        'uom_code' => $line['line_uom_code'] ?? $header['uom_code'] ?? 'PCS',
+                        'uom_code' => (string) ($line['line_uom_code'] ?? $header['uom_code'] ?? 'PCS'),
                         'factor' => $this->decimal($line['factor'] ?? 1),
-                        'description' => $line['line_description'] ?? '',
+                        'description' => (string) ($line['line_description'] ?? ''),
                     ]);
                     $lineCount++;
                 }
             }
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('BOM import failed. No data was saved.');
+            }
+            $db->transCommit();
         } catch (\Throwable $e) {
             $db->transRollback();
             throw new RuntimeException($e->getMessage(), 0, $e);
         }
-        if ($db->transStatus() === false) {
-            $db->transRollback();
-            throw new RuntimeException('BOM import failed. No data was saved.');
-        }
-        $db->transCommit();
+
         $this->audit('production.bom', 'bom.import', 'BOM import completed.');
         return ['created' => $created, 'updated' => $updated, 'lines' => $lineCount];
     }
@@ -210,40 +223,39 @@ class ProductionImportController extends BaseController
                 foreach (['site_code', 'department_code', 'warehouse_code', 'work_center_code'] as $field) {
                     $this->requireValue($row, $field, $rowNumber);
                 }
-                $siteId = $this->siteId($row['site_code'], $companyId, $rowNumber);
+                $siteId = $this->siteId((string) $row['site_code'], $companyId, $rowNumber);
                 $where = [
                     'company_id' => $companyId,
-                    'site_code' => $row['site_code'],
-                    'department_code' => $row['department_code'],
-                    'warehouse_code' => $row['warehouse_code'],
-                    'work_center_code' => $row['work_center_code'],
+                    'site_code' => (string) $row['site_code'],
+                    'department_code' => (string) $row['department_code'],
+                    'warehouse_code' => (string) $row['warehouse_code'],
+                    'work_center_code' => (string) $row['work_center_code'],
                 ];
                 $payload = $where + [
                     'site_id' => $siteId,
-                    'description' => $row['description'] ?? '',
-                    'machine_code' => $row['machine_code'] ?? '',
-                    'notes' => $row['notes'] ?? '',
+                    'description' => (string) ($row['description'] ?? ''),
+                    'machine_code' => (string) ($row['machine_code'] ?? ''),
+                    'notes' => (string) ($row['notes'] ?? ''),
                     'speed' => $this->decimal($row['speed'] ?? 0),
                     'capacity_percent' => $this->decimal($row['capacity_percent'] ?? 100),
                     'max_length' => $this->decimal($row['max_length'] ?? 0),
-                    'length_uom' => $row['length_uom'] ?? '',
+                    'length_uom' => (string) ($row['length_uom'] ?? ''),
                     'max_width' => $this->decimal($row['max_width'] ?? 0),
-                    'width_uom' => $row['width_uom'] ?? '',
+                    'width_uom' => (string) ($row['width_uom'] ?? ''),
                     'max_height' => $this->decimal($row['max_height'] ?? 0),
-                    'height_uom' => $row['height_uom'] ?? '',
+                    'height_uom' => (string) ($row['height_uom'] ?? ''),
                     'max_volume' => $this->decimal($row['max_volume'] ?? 0),
-                    'volume_uom' => $row['volume_uom'] ?? '',
+                    'volume_uom' => (string) ($row['volume_uom'] ?? ''),
                     'qty_labor' => $this->decimal($row['qty_labor'] ?? 0),
                     'working_hour' => $this->decimal($row['working_hour'] ?? 0),
-                    'cost_type' => $row['cost_type'] ?? '',
+                    'cost_type' => (string) ($row['cost_type'] ?? ''),
                     'cost_amount' => $this->decimal($row['cost_amount'] ?? 0),
-                    'cost_uom' => $row['cost_uom'] ?? '',
+                    'cost_uom' => (string) ($row['cost_uom'] ?? ''),
                     'active_date' => $this->nullableDate($row['active_date'] ?? null),
                     'inactive_date' => $this->nullableDate($row['inactive_date'] ?? null),
                     'is_active' => 1,
                     'updated_by' => auth()->id(),
                 ];
-
                 $existing = $model->where($where)->first();
                 if ($existing !== null) {
                     $model->update((int) $existing['id'], $payload);
@@ -255,15 +267,15 @@ class ProductionImportController extends BaseController
                 }
                 $lineCount++;
             }
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Work Center import failed. No data was saved.');
+            }
+            $db->transCommit();
         } catch (\Throwable $e) {
             $db->transRollback();
             throw new RuntimeException($e->getMessage(), 0, $e);
         }
-        if ($db->transStatus() === false) {
-            $db->transRollback();
-            throw new RuntimeException('Work Center import failed. No data was saved.');
-        }
-        $db->transCommit();
+
         $this->audit('production.work_center', 'work_center.import', 'Work center import completed.');
         return ['created' => $created, 'updated' => $updated, 'lines' => $lineCount];
     }
@@ -288,17 +300,17 @@ class ProductionImportController extends BaseController
         try {
             foreach ($groups as $group) {
                 $header = $group['header'];
-                $siteId = $this->siteId($header['site_code'], $companyId, (int) ($group['lines'][0]['_row'] ?? 0));
-                $item = $this->itemByCode($header['item_code']);
+                $siteId = $this->siteId((string) $header['site_code'], $companyId, (int) ($group['lines'][0]['_row'] ?? 0));
+                $item = $this->itemByCode((string) $header['item_code']);
                 $model = new ProductionRoutingModel();
-                $where = ['company_id' => $companyId, 'site_code' => $header['site_code'], 'item_code' => $header['item_code']];
+                $where = ['company_id' => $companyId, 'site_code' => (string) $header['site_code'], 'item_code' => (string) $header['item_code']];
                 $existing = $model->where($where)->first();
                 $payload = $where + [
                     'site_id' => $siteId,
-                    'department_code' => $header['department_code'],
-                    'warehouse_code' => $header['warehouse_code'] ?? '',
+                    'department_code' => (string) $header['department_code'],
+                    'warehouse_code' => (string) ($header['warehouse_code'] ?? ''),
                     'item_id' => $item['id'] ?? null,
-                    'description' => $header['description'] ?? '',
+                    'description' => (string) ($header['description'] ?? ''),
                     'is_active' => 1,
                     'updated_by' => auth()->id(),
                 ];
@@ -324,27 +336,27 @@ class ProductionImportController extends BaseController
                     $lineModel->insert([
                         'production_routing_id' => $routingId,
                         'route_no' => (string) $lineNo,
-                        'routing_name' => $line['routing_name'] ?? '',
-                        'work_center_code' => $line['work_center_code'],
-                        'operation_type' => $line['operation_type'] ?? 'process',
+                        'routing_name' => (string) ($line['routing_name'] ?? ''),
+                        'work_center_code' => (string) $line['work_center_code'],
+                        'operation_type' => (string) ($line['operation_type'] ?? 'process'),
                         'hour_qty' => $this->decimal($line['hour_qty'] ?? 0),
-                        'hour_uom' => $line['hour_uom'] ?? 'Hour',
+                        'hour_uom' => (string) ($line['hour_uom'] ?? 'Hour'),
                         'std_speed' => $this->decimal($line['std_speed'] ?? 0),
-                        'speed_uom' => $line['speed_uom'] ?? 'Unit/Hour',
-                        'notes' => $line['notes'] ?? '',
+                        'speed_uom' => (string) ($line['speed_uom'] ?? 'Unit/Hour'),
+                        'notes' => (string) ($line['notes'] ?? ''),
                     ]);
                     $lineCount++;
                 }
             }
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Routing import failed. No data was saved.');
+            }
+            $db->transCommit();
         } catch (\Throwable $e) {
             $db->transRollback();
             throw new RuntimeException($e->getMessage(), 0, $e);
         }
-        if ($db->transStatus() === false) {
-            $db->transRollback();
-            throw new RuntimeException('Routing import failed. No data was saved.');
-        }
-        $db->transCommit();
+
         $this->audit('production.routing', 'routing.import', 'Routing import completed.');
         return ['created' => $created, 'updated' => $updated, 'lines' => $lineCount];
     }
@@ -368,30 +380,30 @@ class ProductionImportController extends BaseController
         try {
             foreach ($groups as $woNo => $group) {
                 $header = $group['header'];
-                $siteId = $this->siteId($header['site_code'], $companyId, (int) ($group['lines'][0]['_row'] ?? 0));
-                $parentItem = $this->itemByCode($header['parent_item_code']);
+                $siteId = $this->siteId((string) $header['site_code'], $companyId, (int) ($group['lines'][0]['_row'] ?? 0));
+                $parentItem = $this->itemByCode((string) $header['parent_item_code']);
                 $model = new ProductionWorkOrderModel();
                 $existing = $model->where(['company_id' => $companyId, 'wo_no' => $woNo])->first();
                 $payload = [
                     'company_id' => $companyId,
                     'site_id' => $siteId,
                     'company' => session('active_company_code') ?: null,
-                    'site' => $header['site_code'],
+                    'site' => (string) $header['site_code'],
                     'wo_code' => 'WO',
-                    'wo_no' => $woNo,
-                    'wo_date' => $header['wo_date'],
-                    'site_code' => $header['site_code'],
-                    'department_code' => $header['department_code'],
-                    'warehouse_code' => $header['warehouse_code'] ?? '',
-                    'work_center_code' => $header['work_center_code'] ?? '',
+                    'wo_no' => (string) $woNo,
+                    'wo_date' => (string) $header['wo_date'],
+                    'site_code' => (string) $header['site_code'],
+                    'department_code' => (string) $header['department_code'],
+                    'warehouse_code' => (string) ($header['warehouse_code'] ?? ''),
+                    'work_center_code' => (string) ($header['work_center_code'] ?? ''),
                     'parent_item_id' => $parentItem['id'] ?? null,
-                    'parent_item_code' => $header['parent_item_code'],
-                    'parent_item_name' => $header['parent_item_name'] ?? $this->itemName($parentItem, $header['parent_item_code']),
+                    'parent_item_code' => (string) $header['parent_item_code'],
+                    'parent_item_name' => (string) ($header['parent_item_name'] ?? $this->itemName($parentItem, (string) $header['parent_item_code'])),
                     'wo_qty' => $this->decimal($header['wo_qty']),
                     'std_qty_finished' => $this->decimal($header['wo_qty']),
                     'act_qty_finished' => 0,
-                    'uom_code' => $header['uom_code'] ?? 'PCS',
-                    'description' => $header['description'] ?? '',
+                    'uom_code' => (string) ($header['uom_code'] ?? 'PCS'),
+                    'description' => (string) ($header['description'] ?? ''),
                     'status' => 'draft',
                     'updated_by' => auth()->id(),
                 ];
@@ -419,18 +431,17 @@ class ProductionImportController extends BaseController
                         throw new RuntimeException('Duplicate Work Order line_no ' . $lineNo . ' for WO ' . $woNo . '.');
                     }
                     $seen[$lineNo] = true;
-
                     if (! empty($line['component_item_code'])) {
-                        $item = $this->itemByCode($line['component_item_code']);
+                        $item = $this->itemByCode((string) $line['component_item_code']);
                         $componentModel->insert([
                             'production_work_order_id' => $woId,
                             'line_no' => $lineNo,
                             'component_item_id' => $item['id'] ?? null,
-                            'component_item_code' => $line['component_item_code'],
-                            'component_item_name' => $line['component_item_name'] ?? $this->itemName($item, $line['component_item_code']),
+                            'component_item_code' => (string) $line['component_item_code'],
+                            'component_item_name' => (string) ($line['component_item_name'] ?? $this->itemName($item, (string) $line['component_item_code'])),
                             'qty_used' => $this->decimal($line['qty_used'] ?? 0),
-                            'uom_code' => $line['line_uom_code'] ?? $header['uom_code'] ?? 'PCS',
-                            'warehouse_code' => $line['warehouse_code'] ?? $header['warehouse_code'] ?? '',
+                            'uom_code' => (string) ($line['line_uom_code'] ?? $header['uom_code'] ?? 'PCS'),
+                            'warehouse_code' => (string) ($line['warehouse_code'] ?? $header['warehouse_code'] ?? ''),
                             'location_code' => '',
                             'batch_no' => '',
                             'booking_qty' => $this->decimal($line['qty_used'] ?? 0),
@@ -439,41 +450,32 @@ class ProductionImportController extends BaseController
                             'line_status' => 'open',
                         ]);
                     }
-
-                    $routeWorkCenter = $line['route_work_center_code'] ?? '';
+                    $routeWorkCenter = (string) ($line['route_work_center_code'] ?? '');
                     if ($routeWorkCenter !== '') {
                         $routingModel->insert([
                             'production_work_order_id' => $woId,
                             'line_no' => $lineNo,
-                            'routing_name' => $line['routing_name'] ?? '',
+                            'routing_name' => (string) ($line['routing_name'] ?? ''),
                             'work_center_code' => $routeWorkCenter,
                             'work_center_name' => $routeWorkCenter,
                             'hour_qty' => $this->decimal($line['hour_qty'] ?? 0),
-                            'uom_code' => $line['route_uom'] ?? 'Hour',
+                            'uom_code' => (string) ($line['route_uom'] ?? 'Hour'),
                         ]);
                     }
                     $lineCount++;
                 }
             }
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Work Order import failed. No data was saved.');
+            }
+            $db->transCommit();
         } catch (\Throwable $e) {
             $db->transRollback();
             throw new RuntimeException($e->getMessage(), 0, $e);
         }
-        if ($db->transStatus() === false) {
-            $db->transRollback();
-            throw new RuntimeException('Work Order import failed. No data was saved.');
-        }
-        $db->transCommit();
+
         $this->audit('production.wo', 'wo.import', 'Work order import completed.');
         return ['created' => $created, 'updated' => $updated, 'lines' => $lineCount];
-    }
-
-    private function config(string $resource): array
-    {
-        if (! isset($this->configs[$resource])) {
-            throw PageNotFoundException::forPageNotFound();
-        }
-        return $this->configs[$resource];
     }
 
     private function uploadedRows(string $path, array $allowedHeaders): array
@@ -486,7 +488,7 @@ class ProductionImportController extends BaseController
         if ($rawRows === [] || ! isset($rawRows[0])) {
             throw new RuntimeException('Uploaded file has no rows.');
         }
-        $headers = array_map(fn ($value): string => strtolower(trim((string) $value)), $rawRows[0]);
+        $headers = array_map(static fn ($value): string => strtolower(trim((string) $value)), $rawRows[0]);
         $rows = [];
         foreach (array_slice($rawRows, 1) as $index => $raw) {
             $rowNumber = $index + 2;
