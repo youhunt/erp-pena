@@ -152,6 +152,7 @@ class SalesDeliveryController extends BaseController
         return view('sales/deliveries/show', [
             'title' => 'Delivery Order Detail',
             'delivery' => $delivery,
+            'existingInvoice' => $this->existingSalesInvoice((int) $delivery['id']),
             'lines' => (new SalesDeliveryLineModel())->where('sales_delivery_id', $id)->orderBy('line_no', 'ASC')->findAll(),
         ]);
     }
@@ -190,6 +191,23 @@ class SalesDeliveryController extends BaseController
             $model->where('site_id', $tenant->activeSiteId());
         }
         return $model->find($soId);
+    }
+
+    private function existingSalesInvoice(int $salesDeliveryId): ?array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('sales_invoices')) {
+            return null;
+        }
+
+        $builder = $db->table('sales_invoices')
+            ->where('sales_delivery_id', $salesDeliveryId)
+            ->where('status !=', 'cancelled');
+        if ($db->fieldExists('deleted_at', 'sales_invoices')) {
+            $builder->where('deleted_at', null);
+        }
+
+        return $builder->orderBy('id', 'DESC')->get(1)->getRowArray() ?: null;
     }
 
     private function postedLines(): array
