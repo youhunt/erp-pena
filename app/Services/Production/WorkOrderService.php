@@ -15,6 +15,7 @@ use App\Services\Finance\PeriodCloseService;
 use App\Services\Inventory\InventoryStockService;
 use Config\Database;
 use RuntimeException;
+use Throwable;
 
 class WorkOrderService
 {
@@ -54,6 +55,7 @@ class WorkOrderService
             $batchQty = max(1.0, (float) ($bom['qty_batch'] ?? 1));
             $scale = $woQty / $batchQty;
 
+            $header['status'] = 'draft';
             $woModel->insert($header + [
                 'bom_id' => $bom['id'],
                 'routing_id' => $routing['id'] ?? null,
@@ -123,20 +125,17 @@ class WorkOrderService
             ]);
 
             return $woId;
-        } catch (RuntimeException $e) {
+        } catch (Throwable $e) {
             $db->transRollback();
-            throw $e;
+            throw new RuntimeException($e->getMessage(), 0, $e);
         }
     }
 
-    public function allocate(int $workOrderId, ?int $userId = null): void
+    public function allocate(int $workOrderId, array $tenantScope, ?int $userId = null): void
     {
         $woModel = new ProductionWorkOrderModel();
         $componentModel = new ProductionWorkOrderComponentModel();
-        $workOrder = $woModel->find($workOrderId);
-        if ($workOrder === null) {
-            throw new RuntimeException('Work order not found.');
-        }
+        $workOrder = $this->findScopedWorkOrder($workOrderId, $tenantScope);
 
         $status = (string) ($workOrder['status'] ?? 'draft');
         if (! in_array($status, ['draft', 'partial_allocated'], true)) {
@@ -221,20 +220,17 @@ class WorkOrderService
                 'record_code' => $workOrder['wo_no'] ?? null,
                 'description' => 'Work order components allocated to inventory reservation.',
             ]);
-        } catch (RuntimeException $e) {
+        } catch (Throwable $e) {
             $db->transRollback();
-            throw $e;
+            throw new RuntimeException($e->getMessage(), 0, $e);
         }
     }
 
-    public function issueMaterials(int $workOrderId, ?int $userId = null): void
+    public function issueMaterials(int $workOrderId, array $tenantScope, ?int $userId = null): void
     {
         $woModel = new ProductionWorkOrderModel();
         $componentModel = new ProductionWorkOrderComponentModel();
-        $workOrder = $woModel->find($workOrderId);
-        if ($workOrder === null) {
-            throw new RuntimeException('Work order not found.');
-        }
+        $workOrder = $this->findScopedWorkOrder($workOrderId, $tenantScope);
 
         $status = (string) ($workOrder['status'] ?? 'draft');
         if (! in_array($status, ['allocated', 'partial_issued'], true)) {
@@ -314,19 +310,16 @@ class WorkOrderService
                 'record_code' => $workOrder['wo_no'] ?? null,
                 'description' => 'Work order components issued to production.',
             ]);
-        } catch (RuntimeException $e) {
+        } catch (Throwable $e) {
             $db->transRollback();
-            throw $e;
+            throw new RuntimeException($e->getMessage(), 0, $e);
         }
     }
 
-    public function receiveFinishedGoods(int $workOrderId, ?float $qty = null, ?int $userId = null): void
+    public function receiveFinishedGoods(int $workOrderId, ?float $qty, array $tenantScope, ?int $userId = null): void
     {
         $woModel = new ProductionWorkOrderModel();
-        $workOrder = $woModel->find($workOrderId);
-        if ($workOrder === null) {
-            throw new RuntimeException('Work order not found.');
-        }
+        $workOrder = $this->findScopedWorkOrder($workOrderId, $tenantScope);
 
         $status = (string) ($workOrder['status'] ?? 'draft');
         if (! in_array($status, ['material_issued', 'partial_finished'], true)) {
@@ -398,18 +391,15 @@ class WorkOrderService
                 'description' => 'Work order finished good received to inventory.',
                 'new_values' => ['received_qty' => $receiveQty, 'act_qty_finished' => $newActualQty],
             ]);
-        } catch (RuntimeException $e) {
+        } catch (Throwable $e) {
             $db->transRollback();
-            throw $e;
+            throw new RuntimeException($e->getMessage(), 0, $e);
         }
     }
 
-    public function issueAndReceive(int $workOrderId, ?float $receiveQty = null, ?int $userId = null): void
+    public function issueAndReceive(int $workOrderId, ?float $receiveQty, array $tenantScope, ?int $userId = null): void
     {
-        $workOrder = (new ProductionWorkOrderModel())->find($workOrderId);
-        if ($workOrder === null) {
-            throw new RuntimeException('Work order not found.');
-        }
+        $workOrder = $this->findScopedWorkOrder($workOrderId, $tenantScope);
 
         $status = (string) ($workOrder['status'] ?? 'draft');
         if (! in_array($status, ['allocated', 'partial_issued', 'material_issued', 'partial_finished'], true)) {
@@ -417,21 +407,55 @@ class WorkOrderService
         }
         $this->assertProductionPeriodOpen($workOrder);
 
-        if (in_array($status, ['allocated', 'partial_issued'], true)) {
-            $this->issueMaterials($workOrderId, $userId);
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            if (in_array($status, ['allocated', 'partial_issued'], true)) {
+                $this->issueMaterials($workOrderId, $tenantScope, $userId);
+            }
+
+            $this->receiveFinishedGoods($workOrderId, $receiveQty, $tenantScope, $userId);
+
+            (new AuditLogService())->log('production.wo', 'wo.issue_receive', [
+                'company_id' => $workOrder['company_id'] ?? null,
+                'site_id' => $workOrder['site_id'] ?? null,
+                'user_id' => $userId,
+                'table_name' => 'production_work_orders',
+                'record_id' => $workOrderId,
+                'record_code' => $workOrder['wo_no'] ?? null,
+                'description' => 'Work order material issue and finished good receipt processed together.',
+            ]);
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to issue material and receive finished good.');
+            }
+            $db->transCommit();
+        } catch (Throwable $e) {
+            $db->transRollback();
+            throw new RuntimeException($e->getMessage(), 0, $e);
+        }
+    }
+
+    private function findScopedWorkOrder(int $workOrderId, array $tenantScope): array
+    {
+        $companyId = (int) ($tenantScope['company_id'] ?? 0);
+        if ($companyId < 1) {
+            throw new RuntimeException('Active company is required.');
         }
 
-        $this->receiveFinishedGoods($workOrderId, $receiveQty, $userId);
+        $model = new ProductionWorkOrderModel();
+        $model->where('company_id', $companyId);
+        if (! empty($tenantScope['site_id'])) {
+            $model->where('site_id', (int) $tenantScope['site_id']);
+        }
 
-        (new AuditLogService())->log('production.wo', 'wo.issue_receive', [
-            'company_id' => $workOrder['company_id'] ?? null,
-            'site_id' => $workOrder['site_id'] ?? null,
-            'user_id' => $userId,
-            'table_name' => 'production_work_orders',
-            'record_id' => $workOrderId,
-            'record_code' => $workOrder['wo_no'] ?? null,
-            'description' => 'Work order material issue and finished good receipt processed together.',
-        ]);
+        $workOrder = $model->find($workOrderId);
+        if ($workOrder === null) {
+            throw new RuntimeException('Work order not found in the active company/site.');
+        }
+
+        return $workOrder;
     }
 
     private function refreshAllocationStatus(int $workOrderId, ?int $userId): void

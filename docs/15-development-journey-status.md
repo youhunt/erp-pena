@@ -51,6 +51,7 @@ Persentase berikut adalah estimasi readiness berbasis implementasi + patch + UAT
 | AR Receipt | Auto ARR numbering + settlement flow | 55% |
 | Inventory stock card | Qty/value movement audit sudah tampil | 65% |
 | GL validation | Debit/credit/difference + trial balance summary | 60% |
+| Production Work Order | CRUD/import tersedia; tenant/status/atomic posting guard diperkuat | 60% |
 | AI/OCR document | Foundation ada, belum full UAT | 45% |
 | Reporting enterprise | Baru baseline | 35% |
 | Production readiness | Belum full | 40% |
@@ -153,6 +154,7 @@ Persentase berikut adalah estimasi readiness berbasis implementasi + patch + UAT
 | 14 | GL harus bisa divalidasi | GL validation cards + trial balance summary | Done |
 | 15 | Stock Card harus bisa audit value | Value in/out/running value ditambahkan | Done |
 | 16 | Action transaksi bisa ditembak ulang lewat URL/status lama | Guard dipusatkan di service, controller dan tombol diselaraskan | Patched, perlu UAT |
+| 17 | Action Work Order dapat memakai ID tenant lain dan Issue + Receive tidak atomic | Scope company/site diwajibkan dan combined posting dibungkus satu transaksi | Patched, perlu UAT |
 
 ---
 

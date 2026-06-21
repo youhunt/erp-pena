@@ -178,7 +178,24 @@ Jalankan skenario ini juga dengan URL/action POST langsung. Tombol yang tersembu
 
 ---
 
-## 10. UAT Sign-off Notes
+## 10. Production Work Order Guard
+
+| No | Test Case | Expected Result | Result | Notes |
+|---:|---|---|---|---|
+| 1 | Create Work Order dengan payload status non-draft | Work Order tetap dibuat sebagai draft | NOT TESTED |  |
+| 2 | Allocate Work Order tenant aktif | Reservation komponen dan status berhasil diperbarui | NOT TESTED |  |
+| 3 | Tembak allocate/issue/receive untuk WO company lain | Ditolak sebagai tidak ditemukan pada company/site aktif | NOT TESTED |  |
+| 4 | Tembak action WO site lain saat site aktif dipilih | Ditolak oleh service | NOT TESTED |  |
+| 5 | Allocate WO yang sudah allocated/finished | Ditolak dengan status saat ini | NOT TESTED |  |
+| 6 | Issue material sebelum allocation | Ditolak tanpa stock movement | NOT TESTED |  |
+| 7 | Receive finished good sebelum material issued | Ditolak tanpa stock movement | NOT TESTED |  |
+| 8 | Issue + Receive valid | Material keluar dan finished good masuk dalam satu transaksi | NOT TESTED |  |
+| 9 | Paksa Receive gagal setelah Issue dalam combined action | Seluruh issue/receive rollback | NOT TESTED |  |
+| 10 | Action WO pada production/inventory period closed | Ditolak tanpa perubahan stock/status | NOT TESTED |  |
+
+---
+
+## 11. UAT Sign-off Notes
 
 Gunakan bagian ini untuk mencatat hasil test per tanggal.
 
@@ -188,7 +205,7 @@ Gunakan bagian ini untuk mencatat hasil test per tanggal.
 
 ---
 
-## 11. Next Bug Fix Log
+## 12. Next Bug Fix Log
 
 | Date | Bug / Feedback | Severity | Status | Fix Commit / Notes |
 |---|---|---|---|---|
@@ -198,3 +215,4 @@ Gunakan bagian ini untuk mencatat hasil test per tanggal.
 | 2026-06-20 | PO receipt qty tidak update | High | Patched | Needs UAT |
 | 2026-06-20 | DO stock out/SO qty update | High | Patched | Needs UAT |
 | 2026-06-20 | Direct URL/replay action dapat melewati kondisi tombol | High | Patched | Service-layer transaction status guard; needs UAT |
+| 2026-06-21 | Work Order action belum tenant-scoped dan combined posting belum atomic | High | Patched | Production service tenant/transaction guard; needs UAT |

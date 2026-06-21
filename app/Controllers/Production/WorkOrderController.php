@@ -114,7 +114,7 @@ class WorkOrderController extends BaseController
     public function allocate(int $id)
     {
         try {
-            (new WorkOrderService())->allocate($id, auth()->id());
+            (new WorkOrderService())->allocate($id, $this->tenantScope(), auth()->id());
         } catch (RuntimeException $e) {
             return redirect()->back()->with('error', $e->getMessage());
         }
@@ -125,7 +125,7 @@ class WorkOrderController extends BaseController
     public function issueMaterials(int $id)
     {
         try {
-            (new WorkOrderService())->issueMaterials($id, auth()->id());
+            (new WorkOrderService())->issueMaterials($id, $this->tenantScope(), auth()->id());
         } catch (RuntimeException $e) {
             return redirect()->back()->with('error', $e->getMessage());
         }
@@ -143,7 +143,12 @@ class WorkOrderController extends BaseController
 
         $qty = $this->request->getPost('receive_qty');
         try {
-            (new WorkOrderService())->receiveFinishedGoods($id, $qty === null || $qty === '' ? null : (float) $qty, auth()->id());
+            (new WorkOrderService())->receiveFinishedGoods(
+                $id,
+                $qty === null || $qty === '' ? null : (float) $qty,
+                $this->tenantScope(),
+                auth()->id()
+            );
         } catch (RuntimeException $e) {
             return redirect()->back()->with('error', $e->getMessage());
         }
@@ -161,7 +166,12 @@ class WorkOrderController extends BaseController
 
         $qty = $this->request->getPost('receive_qty');
         try {
-            (new WorkOrderService())->issueAndReceive($id, $qty === null || $qty === '' ? null : (float) $qty, auth()->id());
+            (new WorkOrderService())->issueAndReceive(
+                $id,
+                $qty === null || $qty === '' ? null : (float) $qty,
+                $this->tenantScope(),
+                auth()->id()
+            );
         } catch (RuntimeException $e) {
             return redirect()->back()->with('error', $e->getMessage());
         }
@@ -214,5 +224,19 @@ class WorkOrderController extends BaseController
         $db->fieldExists('item_code', 'items') ? $builder->where('item_code', $code) : $builder->where('code', $code);
 
         return $builder->get()->getRowArray();
+    }
+
+    private function tenantScope(): array
+    {
+        $tenant = new TenantContext(session());
+        $companyId = $tenant->activeCompanyId();
+        if ($companyId === null || $companyId < 1) {
+            throw new RuntimeException('Active company is required.');
+        }
+
+        return [
+            'company_id' => $companyId,
+            'site_id' => $tenant->activeSiteId(),
+        ];
     }
 }
