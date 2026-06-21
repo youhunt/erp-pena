@@ -184,6 +184,17 @@ class PurchaseOrderController extends BaseController
         return redirect()->to('/purchase/orders/' . $id)->with('message', 'PO cancelled.');
     }
 
+    public function activate(int $id)
+    {
+        try {
+            (new PurchaseOrderService())->activate($id, auth()->id());
+        } catch (RuntimeException $exception) {
+            return redirect()->back()->with('error', $exception->getMessage());
+        }
+
+        return redirect()->to('/purchase/orders/' . $id)->with('message', 'PO activated back to draft.');
+    }
+
     private function transition(int $id, string $method, string $message)
     {
         try {
@@ -238,8 +249,10 @@ class PurchaseOrderController extends BaseController
             'freight_amount' => (float) $this->request->getPost('freight_amount'),
             'other_amount' => (float) $this->request->getPost('other_amount'),
             'special_charge_amount' => (float) $this->request->getPost('special_charge_amount'),
-            'vat_amount' => (float) $this->request->getPost('vat_amount'),
-            'wht_amount' => (float) $this->request->getPost('wht_amount'),
+            'vat_code' => trim((string) $this->request->getPost('vat_code')),
+            'wht_code' => trim((string) $this->request->getPost('wht_code')),
+            'vat_amount' => (float) ($existing['vat_amount'] ?? 0),
+            'wht_amount' => (float) ($existing['wht_amount'] ?? 0),
             'status' => $existing['status'] ?? 'draft',
             'document_status' => $existing['document_status'] ?? 'draft',
             'notes' => trim((string) $this->request->getPost('notes')),
@@ -251,6 +264,7 @@ class PurchaseOrderController extends BaseController
     {
         $poLines = (array) $this->request->getPost('po_line');
         $itemCodes = (array) $this->request->getPost('item_code');
+        $itemOriginalCodes = (array) $this->request->getPost('item_code_original');
         $itemIds = (array) $this->request->getPost('item_id');
         $itemNames = (array) $this->request->getPost('item_name');
         $descriptions = (array) $this->request->getPost('description');
@@ -268,6 +282,10 @@ class PurchaseOrderController extends BaseController
             $price = (float) ($prices[$index] ?? 0);
             $name = trim((string) ($itemNames[$index] ?? ''));
             $code = trim((string) $code);
+            $originalCode = trim((string) ($itemOriginalCodes[$index] ?? ''));
+            if ($code === '' && $originalCode !== '') {
+                $code = $originalCode;
+            }
             if ($code === '' && $name === '' && $qty <= 0) {
                 continue;
             }
