@@ -8,7 +8,10 @@
                 <h4 class="card-title mb-1">Bill of Material</h4>
                 <p class="text-muted mb-0">Parent item and material structure for production.</p>
             </div>
-            <a href="<?= site_url('production/boms/new') ?>" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New BOM</a>
+            <div class="d-flex gap-2">
+                <a href="<?= site_url('production/imports/boms') ?>" class="btn btn-outline-primary"><i class="bx bx-upload me-1"></i> Import</a>
+                <a href="<?= site_url('production/boms/new') ?>" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New BOM</a>
+            </div>
         </div>
         <div class="table-responsive">
             <table class="table table-nowrap table-hover align-middle mb-0">
