@@ -73,9 +73,17 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
 
     <div class="card">
         <div class="card-body">
-            <h4 class="card-title mb-3">Outstanding Lines</h4>
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <div>
+                    <h4 class="card-title mb-1">Outstanding Lines</h4>
+                    <p class="text-muted mb-0">Available stock dihitung dari warehouse dan location yang sedang dipilih.</p>
+                </div>
+                <button type="button" id="refreshStockButton" class="btn btn-outline-primary btn-sm">
+                    <i class="bx bx-refresh me-1"></i> Refresh Stock
+                </button>
+            </div>
             <div class="alert alert-info py-2">
-                Isi <strong>Deliver Now</strong> sesuai qty barang yang benar-benar dikirim. Setelah posting berhasil, sistem akan update SO delivered/outstanding dan mengurangi stock inventory.
+                Isi <strong>Deliver Now</strong> sesuai qty barang yang benar-benar dikirim. Kalau baru tambah stok / ganti warehouse-location, klik <strong>Refresh Stock</strong> dulu.
             </div>
             <div class="table-responsive">
                 <table class="table table-nowrap align-middle mb-0" id="deliveryLinesTable">
@@ -111,7 +119,7 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_reserved'] ?? 0), 4)) ?></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_delivered'] ?? 0), 4)) ?></td>
                             <td class="text-end fw-semibold outstanding-qty"><?= esc(number_format($outstanding, 4, '.', '')) ?></td>
-                            <td class="text-end <?= $available <= 0 ? 'text-danger fw-semibold' : '' ?>"><?= esc(number_format($available, 4, '.', '')) ?></td>
+                            <td class="text-end <?= $available <= 0 ? 'text-danger fw-semibold' : 'text-success fw-semibold' ?>"><?= esc(number_format($available, 4, '.', '')) ?></td>
                             <td>
                                 <input
                                     type="text"
@@ -144,7 +152,7 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
             </div>
 
             <div class="alert alert-warning mt-4 mb-0">
-                Stok dihitung berdasarkan warehouse dan location yang dipilih saat halaman dibuka. Jika stok terlihat kosong, lakukan Purchase Receipt atau Stock Adjustment dulu, lalu buka ulang form DO.
+                Stok dihitung berdasarkan warehouse dan location yang dipilih. Jika stok baru ditambah, klik <strong>Refresh Stock</strong> atau buka ulang form DO.
             </div>
 
             <div class="d-flex gap-2 mt-4">
@@ -159,7 +167,9 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
 document.addEventListener('DOMContentLoaded', function () {
     const warehouse = document.getElementById('deliveryWarehouse');
     const location = document.getElementById('deliveryLocation');
+    const refreshStockButton = document.getElementById('refreshStockButton');
     const totalDeliverNow = document.getElementById('totalDeliverNow');
+    const deliveryUrl = '<?= site_url('sales/orders/' . (int) $so['id'] . '/deliver') ?>';
 
     function number(value) {
         value = String(value || '').trim();
@@ -211,7 +221,28 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    if (warehouse && location) warehouse.addEventListener('change', syncLocations);
+    function refreshStock() {
+        if (!warehouse || !location || !warehouse.value || !location.value) {
+            alert('Pilih warehouse dan location dulu.');
+            return;
+        }
+        const params = new URLSearchParams();
+        params.set('warehouse_id', warehouse.value);
+        params.set('location_id', location.value);
+        window.location.href = deliveryUrl + '?' + params.toString();
+    }
+
+    if (warehouse && location) {
+        warehouse.addEventListener('change', function () {
+            syncLocations();
+        });
+        location.addEventListener('change', function () {
+            // Stock value akan dihitung ulang saat klik Refresh Stock.
+        });
+    }
+    if (refreshStockButton) {
+        refreshStockButton.addEventListener('click', refreshStock);
+    }
     syncLocations();
     recalcDeliverTotal();
 });
