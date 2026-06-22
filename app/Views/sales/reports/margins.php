@@ -4,6 +4,12 @@
 <?php
 $summary = $summary ?? [];
 $rows = $rows ?? [];
+$exportUrl = current_url() . '?' . http_build_query(array_filter([
+    'date_from' => $dateFrom ?? null,
+    'date_to' => $dateTo ?? null,
+    'margin_status' => $selectedStatus ?? null,
+    'export' => 'csv',
+], static fn ($value): bool => $value !== null && $value !== ''));
 $statusClass = static function (string $status): string {
     return match ($status) {
         'PROFIT_OK' => 'bg-success',
@@ -24,26 +30,29 @@ $profitClass = static fn (float $amount): string => $amount >= 0 ? 'text-success
                         <h4 class="card-title mb-1">Sales Margin Report</h4>
                         <p class="text-muted mb-0">Audit invoice revenue, delivery COGS, gross profit/loss, and margin.</p>
                     </div>
-                    <form method="get" class="d-flex flex-wrap gap-2 align-items-end">
-                        <div>
-                            <label class="form-label small mb-1">From</label>
-                            <input type="date" name="date_from" value="<?= esc($dateFrom) ?>" class="form-control form-control-sm">
-                        </div>
-                        <div>
-                            <label class="form-label small mb-1">To</label>
-                            <input type="date" name="date_to" value="<?= esc($dateTo) ?>" class="form-control form-control-sm">
-                        </div>
-                        <div>
-                            <label class="form-label small mb-1">Status</label>
-                            <select name="margin_status" class="form-select form-select-sm">
-                                <option value="">All</option>
-                                <?php foreach ($statusOptions as $option): ?>
-                                    <option value="<?= esc($option) ?>" <?= $selectedStatus === $option ? 'selected' : '' ?>><?= esc($option) ?></option>
-                                <?php endforeach ?>
-                            </select>
-                        </div>
-                        <button class="btn btn-sm btn-primary" type="submit">Filter</button>
-                    </form>
+                    <div class="d-flex flex-wrap gap-2 align-items-end">
+                        <form method="get" class="d-flex flex-wrap gap-2 align-items-end">
+                            <div>
+                                <label class="form-label small mb-1">From</label>
+                                <input type="date" name="date_from" value="<?= esc($dateFrom) ?>" class="form-control form-control-sm">
+                            </div>
+                            <div>
+                                <label class="form-label small mb-1">To</label>
+                                <input type="date" name="date_to" value="<?= esc($dateTo) ?>" class="form-control form-control-sm">
+                            </div>
+                            <div>
+                                <label class="form-label small mb-1">Status</label>
+                                <select name="margin_status" class="form-select form-select-sm">
+                                    <option value="">All</option>
+                                    <?php foreach ($statusOptions as $option): ?>
+                                        <option value="<?= esc($option) ?>" <?= $selectedStatus === $option ? 'selected' : '' ?>><?= esc($option) ?></option>
+                                    <?php endforeach ?>
+                                </select>
+                            </div>
+                            <button class="btn btn-sm btn-primary" type="submit">Filter</button>
+                        </form>
+                        <a href="<?= esc($exportUrl) ?>" class="btn btn-sm btn-outline-success"><i class="bx bx-download me-1"></i> Export CSV</a>
+                    </div>
                 </div>
 
                 <div class="row g-3 mb-4">
