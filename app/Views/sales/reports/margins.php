@@ -8,7 +8,7 @@ $exportUrl = current_url() . '?' . http_build_query(array_filter([
     'date_from' => $dateFrom ?? null,
     'date_to' => $dateTo ?? null,
     'margin_status' => $selectedStatus ?? null,
-    'export' => 'csv',
+    'export' => 'xlsx',
 ], static fn ($value): bool => $value !== null && $value !== ''));
 $statusClass = static function (string $status): string {
     return match ($status) {
@@ -51,7 +51,7 @@ $profitClass = static fn (float $amount): string => $amount >= 0 ? 'text-success
                             </div>
                             <button class="btn btn-sm btn-primary" type="submit">Filter</button>
                         </form>
-                        <a href="<?= esc($exportUrl) ?>" class="btn btn-sm btn-outline-success"><i class="bx bx-download me-1"></i> Export CSV</a>
+                        <a href="<?= esc($exportUrl) ?>" class="btn btn-sm btn-outline-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
                     </div>
                 </div>
 
