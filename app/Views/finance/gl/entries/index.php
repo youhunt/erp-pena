@@ -13,6 +13,7 @@ $validation = $validation ?? [
 $trialBalanceRows = $trialBalanceRows ?? [];
 $filters = $filters ?? ['date_from' => date('Y-m-01'), 'date_to' => date('Y-m-d'), 'source_module' => ''];
 $exportUrl = site_url('gl/entries/export') . '?' . http_build_query($filters);
+$trialBalanceExportUrl = site_url('gl/entries/export') . '?' . http_build_query(array_merge($filters, ['report' => 'trial-balance']));
 ?>
 <div class="row">
     <div class="col-md-3">
@@ -38,7 +39,10 @@ $exportUrl = site_url('gl/entries/export') . '?' . http_build_query($filters);
             </div>
             <div class="d-flex flex-wrap gap-2">
                 <a href="<?= esc($exportUrl) ?>" class="btn btn-success">
-                    <i class="bx bx-download me-1"></i> Export Excel
+                    <i class="bx bx-download me-1"></i> Export GL Detail XLSX
+                </a>
+                <a href="<?= esc($trialBalanceExportUrl) ?>" class="btn btn-outline-success">
+                    <i class="bx bx-spreadsheet me-1"></i> Export Trial Balance XLSX
                 </a>
                 <a href="<?= site_url('gl/entries/new') ?>" class="btn btn-primary">
                     <i class="bx bx-plus me-1"></i> New GL Entry
@@ -129,7 +133,12 @@ $exportUrl = site_url('gl/entries/export') . '?' . http_build_query($filters);
                 <h4 class="card-title mb-1">Trial Balance Summary</h4>
                 <p class="text-muted mb-0">Summary by account for selected period/source.</p>
             </div>
-            <span class="badge bg-light text-dark"><?= esc((string) count($trialBalanceRows)) ?> account(s)</span>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <a href="<?= esc($trialBalanceExportUrl) ?>" class="btn btn-sm btn-outline-success">
+                    <i class="bx bx-download me-1"></i> Export XLSX
+                </a>
+                <span class="badge bg-light text-dark"><?= esc((string) count($trialBalanceRows)) ?> account(s)</span>
+            </div>
         </div>
         <div class="table-responsive">
             <table class="table table-nowrap table-hover align-middle mb-0">
