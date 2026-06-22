@@ -10,6 +10,15 @@ $statusClass = match ($status) {
     'reversed' => 'bg-warning text-dark',
     default => 'bg-secondary',
 };
+$hasCogsGl = ! empty($delivery['gl_entry_id']);
+$hasInvoice = ! empty($existingInvoice);
+$hasMovements = false;
+foreach ($lines as $auditLine) {
+    if (! empty($auditLine['stock_movement_id'])) {
+        $hasMovements = true;
+        break;
+    }
+}
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -22,14 +31,26 @@ $statusClass = match ($status) {
                     </div>
                     <span class="badge <?= esc($statusClass) ?>"><?= esc($status) ?></span>
                 </div>
+
+                <?php if ($hasMovements && ! $hasCogsGl): ?>
+                    <div class="alert alert-warning py-2 small mb-3">
+                        <strong>Audit note:</strong> Stock movement already exists, but COGS GL Entry is not linked yet. Continue AR flow is allowed for UAT, but COGS posting should be reviewed.
+                    </div>
+                <?php elseif ($hasMovements && $hasCogsGl): ?>
+                    <div class="alert alert-success py-2 small mb-3">
+                        <strong>Audit complete:</strong> Stock movement and COGS GL Entry are linked.
+                    </div>
+                <?php endif ?>
+
                 <table class="table table-sm mb-0">
                     <tbody>
                         <tr><th>Delivery No</th><td><?= esc($delivery['delivery_no']) ?></td></tr>
                         <tr><th>Date</th><td><?= esc($delivery['delivery_date']) ?></td></tr>
                         <tr><th>SO No</th><td><a href="<?= site_url('sales/orders/' . $delivery['sales_order_id']) ?>"><?= esc($delivery['so_no']) ?></a></td></tr>
                         <tr><th>Customer</th><td><?= esc(($delivery['customer_code'] ?? '-') . ' ' . ($delivery['customer_name'] ?? '')) ?></td></tr>
-                        <tr><th>COGS GL Entry</th><td><?= ! empty($delivery['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $delivery['gl_entry_id']) . '">#' . esc($delivery['gl_entry_id']) . '</a>' : '-' ?></td></tr>
-                        <tr><th>AR Invoice</th><td><?= ! empty($existingInvoice) ? '<a href="' . site_url('ar/sales-invoices/' . (int) $existingInvoice['id']) . '">' . esc($existingInvoice['invoice_no'] ?? ('#' . $existingInvoice['id'])) . '</a>' : '-' ?></td></tr>
+                        <tr><th>Stock Movement</th><td><?= $hasMovements ? '<span class="badge bg-success">posted</span>' : '<span class="badge bg-secondary">none</span>' ?></td></tr>
+                        <tr><th>COGS GL Entry</th><td><?= $hasCogsGl ? '<a href="' . site_url('gl/entries/' . $delivery['gl_entry_id']) . '">#' . esc($delivery['gl_entry_id']) . '</a>' : '<span class="text-muted">Not posted / not linked</span>' ?></td></tr>
+                        <tr><th>AR Invoice</th><td><?= $hasInvoice ? '<a href="' . site_url('ar/sales-invoices/' . (int) $existingInvoice['id']) . '">' . esc($existingInvoice['invoice_no'] ?? ('#' . $existingInvoice['id'])) . '</a>' : '-' ?></td></tr>
                         <tr><th>Reversal GL</th><td><?= ! empty($delivery['reversal_gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $delivery['reversal_gl_entry_id']) . '">#' . esc($delivery['reversal_gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Posted</th><td><?= esc($delivery['posted_at'] ?? '-') ?></td></tr>
                         <?php if ($status === 'reversed'): ?>
@@ -40,8 +61,12 @@ $statusClass = match ($status) {
                 </table>
                 <div class="d-flex flex-wrap gap-2 mt-3">
                     <a href="<?= site_url('sales/orders/' . $delivery['sales_order_id']) ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to SO</a>
+                    <a href="<?= site_url('inventory/stock-card?item_code=' . urlencode((string) ($lines[0]['item_code'] ?? ''))) ?>" class="btn btn-outline-info"><i class="bx bx-list-ul me-1"></i> Stock Card</a>
                     <a href="<?= site_url('print/sales-deliveries/' . (int) $delivery['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
-                    <?php if (! empty($existingInvoice)): ?>
+                    <?php if ($hasCogsGl): ?>
+                        <a href="<?= site_url('gl/entries/' . (int) $delivery['gl_entry_id']) ?>" class="btn btn-outline-primary"><i class="bx bx-book me-1"></i> COGS GL</a>
+                    <?php endif ?>
+                    <?php if ($hasInvoice): ?>
                         <a href="<?= site_url('ar/sales-invoices/' . (int) $existingInvoice['id']) ?>" class="btn btn-info"><i class="bx bx-receipt me-1"></i> View AR Invoice</a>
                     <?php elseif ($status === 'posted'): ?>
                         <a href="<?= site_url('sales/deliveries/' . $delivery['id'] . '/invoice') ?>" class="btn btn-primary"><i class="bx bx-receipt me-1"></i> Create Invoice</a>
@@ -54,11 +79,26 @@ $statusClass = match ($status) {
                 </div>
             </div>
         </div>
+        <?php if ($hasInvoice): ?>
+            <div class="card border-info">
+                <div class="card-body py-3">
+                    <h5 class="card-title mb-2">Next Step</h5>
+                    <p class="text-muted small mb-2">Invoice already created. Continue to AR receipt / cash-bank audit from the invoice detail.</p>
+                    <a href="<?= site_url('ar/sales-invoices/' . (int) $existingInvoice['id']) ?>" class="btn btn-sm btn-info">Open AR Invoice</a>
+                </div>
+            </div>
+        <?php endif ?>
     </div>
     <div class="col-xl-8">
         <div class="card">
             <div class="card-body">
-                <h4 class="card-title mb-3">Delivered Lines</h4>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h4 class="card-title mb-1">Delivered Lines</h4>
+                        <p class="text-muted mb-0">Stock movement audit per delivered item.</p>
+                    </div>
+                    <span class="badge <?= $hasMovements ? 'bg-success' : 'bg-secondary' ?>"><?= $hasMovements ? 'movement posted' : 'no movement' ?></span>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-nowrap align-middle mb-0">
                         <thead class="table-light"><tr><th>#</th><th>Item</th><th>Batch</th><th class="text-end">Qty</th><th>UoM</th><th class="text-end">Price</th><th>Movement</th><th>Reversal</th></tr></thead>
@@ -71,8 +111,8 @@ $statusClass = match ($status) {
                                 <td class="text-end"><?= esc(number_format((float) $line['qty_delivered'], 4)) ?></td>
                                 <td><?= esc($line['uom_code'] ?? '-') ?></td>
                                 <td class="text-end"><?= esc(number_format((float) $line['unit_price'], 6)) ?></td>
-                                <td><?= ! empty($line['stock_movement_id']) ? '#' . esc($line['stock_movement_id']) : '-' ?></td>
-                                <td><?= ! empty($line['reversal_movement_id']) ? '#' . esc($line['reversal_movement_id']) : '-' ?></td>
+                                <td><?= ! empty($line['stock_movement_id']) ? '<span class="badge bg-success">#' . esc($line['stock_movement_id']) . '</span>' : '-' ?></td>
+                                <td><?= ! empty($line['reversal_movement_id']) ? '<span class="badge bg-warning text-dark">#' . esc($line['reversal_movement_id']) . '</span>' : '-' ?></td>
                             </tr>
                         <?php endforeach ?>
                         </tbody>
