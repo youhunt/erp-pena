@@ -65,8 +65,8 @@ class SalesDeliveryController extends BaseController
 
         $warehouses = $this->masterRows('warehouses');
         $locations = $this->masterRows('locations');
-        $warehouseId = $this->oldOrDefaultId('warehouse_id', $warehouses);
-        $locationId = $this->oldOrDefaultLocationId($locations, $warehouseId);
+        $warehouseId = $this->nullableInt($this->request->getGet('warehouse_id')) ?? $this->oldOrDefaultId('warehouse_id', $warehouses);
+        $locationId = $this->nullableInt($this->request->getGet('location_id')) ?? $this->oldOrDefaultLocationId($locations, $warehouseId);
         $lines = (new SalesOrderLineModel())->where('sales_order_id', $soId)->where('qty_outstanding >', 0)->orderBy('line_no', 'ASC')->findAll();
 
         return view('sales/deliveries/form', [
@@ -244,7 +244,11 @@ class SalesDeliveryController extends BaseController
             $builder->where('company_id', $tenant->activeCompanyId());
         }
         if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', $table)) {
-            $builder->where('site_id', $tenant->activeSiteId());
+            if (in_array($table, ['items', 'locations'], true)) {
+                $builder->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->groupEnd();
+            } else {
+                $builder->where('site_id', $tenant->activeSiteId());
+            }
         }
         return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get()->getResultArray();
     }
@@ -289,31 +293,65 @@ class SalesDeliveryController extends BaseController
             return [];
         }
 
-        $db = Database::connect();
-        if (! $db->tableExists('inventory_stock_balances')) {
-            return [];
-        }
-
-        $builder = $db->table('inventory_stock_balances')
-            ->select('item_code, SUM(qty_on_hand) qty_on_hand, SUM(qty_reserved) qty_reserved, SUM(qty_available) qty_available')
-            ->whereIn('item_code', $codes);
-
-        if ($tenant->activeCompanyId() !== null) {
-            $builder->where('company_id', $tenant->activeCompanyId());
-        }
-        if ($tenant->activeSiteId() !== null) {
-            $builder->where('site_id', $tenant->activeSiteId());
-        }
-        $warehouseId === null ? $builder->where('warehouse_id', null) : $builder->where('warehouse_id', $warehouseId);
-        $locationId === null ? $builder->where('location_id', null) : $builder->where('location_id', $locationId);
-
         $stock = [];
-        foreach ($builder->groupBy('item_code')->get()->getResultArray() as $row) {
-            $stock[(string) $row['item_code']] = [
-                'on_hand' => (float) ($row['qty_on_hand'] ?? 0),
-                'reserved' => (float) ($row['qty_reserved'] ?? 0),
-                'available' => (float) ($row['qty_available'] ?? 0),
-            ];
+        foreach ($codes as $code) {
+            $stock[$code] = ['on_hand' => 0.0, 'reserved' => 0.0, 'available' => 0.0];
+        }
+
+        $db = Database::connect();
+        if ($db->tableExists('inventory_stock_balances')) {
+            $builder = $db->table('inventory_stock_balances')
+                ->select('item_code, SUM(qty_on_hand) qty_on_hand, SUM(qty_reserved) qty_reserved, SUM(qty_available) qty_available')
+                ->whereIn('item_code', $codes);
+
+            if ($tenant->activeCompanyId() !== null) {
+                $builder->where('company_id', $tenant->activeCompanyId());
+            }
+            if ($tenant->activeSiteId() !== null) {
+                $builder->where('site_id', $tenant->activeSiteId());
+            }
+            $warehouseId === null ? $builder->where('warehouse_id', null) : $builder->where('warehouse_id', $warehouseId);
+            $locationId === null ? $builder->where('location_id', null) : $builder->where('location_id', $locationId);
+
+            foreach ($builder->groupBy('item_code')->get()->getResultArray() as $row) {
+                $code = (string) $row['item_code'];
+                $stock[$code] = [
+                    'on_hand' => (float) ($row['qty_on_hand'] ?? 0),
+                    'reserved' => (float) ($row['qty_reserved'] ?? 0),
+                    'available' => (float) ($row['qty_available'] ?? 0),
+                ];
+            }
+        }
+
+        if ($db->tableExists('inventory_stock_movements')) {
+            $movementBuilder = $db->table('inventory_stock_movements')
+                ->select("item_code, SUM(CASE WHEN direction = 'in' THEN qty ELSE -qty END) AS movement_qty", false)
+                ->whereIn('item_code', $codes);
+
+            if ($tenant->activeCompanyId() !== null) {
+                $movementBuilder->where('company_id', $tenant->activeCompanyId());
+            }
+            if ($tenant->activeSiteId() !== null) {
+                $movementBuilder->where('site_id', $tenant->activeSiteId());
+            }
+            if ($warehouseId !== null) {
+                $movementBuilder->where('warehouse_id', $warehouseId);
+            }
+            if ($locationId !== null) {
+                $movementBuilder->where('location_id', $locationId);
+            }
+
+            foreach ($movementBuilder->groupBy('item_code')->get()->getResultArray() as $row) {
+                $code = (string) $row['item_code'];
+                $movementQty = (float) ($row['movement_qty'] ?? 0);
+                if (($stock[$code]['available'] ?? 0.0) <= 0 && $movementQty > 0) {
+                    $stock[$code] = [
+                        'on_hand' => $movementQty,
+                        'reserved' => 0.0,
+                        'available' => $movementQty,
+                    ];
+                }
+            }
         }
 
         return $stock;
@@ -346,7 +384,7 @@ class SalesDeliveryController extends BaseController
             $location->where('company_id', $tenant->activeCompanyId());
         }
         if ($tenant->activeSiteId() !== null) {
-            $location->where('site_id', $tenant->activeSiteId());
+            $location->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->groupEnd();
         }
         if ($db->fieldExists('deleted_at', 'locations')) {
             $location->where('deleted_at', null);
