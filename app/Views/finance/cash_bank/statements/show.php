@@ -8,7 +8,10 @@
                 <h4 class="card-title mb-1"><?= esc($import['cash_bank_code'] ?? '-') ?> Statement Import</h4>
                 <p class="text-muted mb-0"><?= esc($import['source_filename'] ?? '-') ?></p>
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-wrap gap-2">
+                <a href="<?= site_url('cash-bank/statements/' . $import['id'] . '/export') ?>" class="btn btn-outline-success">
+                    <i class="bx bx-download me-1"></i> Export XLSX
+                </a>
                 <form method="post" action="<?= site_url('cash-bank/statements/' . $import['id'] . '/match') ?>" onsubmit="return confirm('Auto match statement lines to posted bank entries?')">
                     <?= csrf_field() ?>
                     <button type="submit" class="btn btn-primary"><i class="bx bx-link me-1"></i> Auto Match</button>
