@@ -2,26 +2,49 @@
 
 Tanggal: 2026-06-22
 
-Dokumen ini menjelaskan kapan dan bagaimana menjalankan script/command rebuild `inventory_stock_balances` dari `inventory_stock_movements`.
+Dokumen ini menjelaskan kapan dan bagaimana menjalankan script/command rebuild `inventory_stock_balances` dari `inventory_stock_movements`, termasuk repair orphan stock.
 
 ## 1. Kapan Dipakai
 
-Gunakan rebuild jika terjadi kondisi berikut:
+Gunakan rebuild/repair jika terjadi kondisi berikut:
 
 1. Stock Card menunjukkan stok ada, tetapi Delivery Order menunjukkan available `0`.
 2. `inventory_stock_movements` sudah benar, tetapi `inventory_stock_balances` tidak sinkron.
 3. Ada data stok lama hasil import yang warehouse/location-nya belum rapi.
-4. Setelah manual repair warehouse/location stok orphan.
+4. Ada stock balance/movement dengan `warehouse_id` atau `location_id` NULL/0.
 
 Jangan gunakan rebuild kalau movement ledger masih salah, karena balance akan dibangun ulang dari movement.
 
-## 2. File SQL
+## 2. Repair Orphan Stock Command
+
+Jika masalahnya hanya stok orphan untuk item tertentu, gunakan command ini dulu. Ini lebih aman daripada rebuild semua balance.
+
+```bash
+php spark inventory:repair-orphan-stock --item=ITEM-0003 --warehouse=MAIN --location=A01 --dry-run
+php spark inventory:repair-orphan-stock --item=ITEM-0003 --warehouse=MAIN --location=A01
+```
+
+Command berada di:
+
+```text
+app/Commands/RepairOrphanStockCommand.php
+```
+
+Command ini akan:
+
+1. mencari balance item yang warehouse/location-nya NULL/0,
+2. merge qty orphan ke balance target jika row target sudah ada,
+3. menghapus row orphan yang sudah dimerge,
+4. mengisi warehouse/location pada stock movement orphan,
+5. adaptif terhadap kolom `updated_at` yang mungkin tidak ada.
+
+## 3. File SQL Rebuild
 
 ```text
 database/hosting/2026-06-22_rebuild_stock_balances_from_movements.sql
 ```
 
-## 3. Spark Command
+## 4. Spark Command Rebuild
 
 Untuk server yang bisa akses terminal, gunakan command resmi:
 
@@ -42,7 +65,7 @@ Command berada di:
 app/Commands/RebuildStockBalancesCommand.php
 ```
 
-## 4. Prinsip
+## 5. Prinsip Rebuild
 
 `inventory_stock_movements` diperlakukan sebagai sumber kebenaran. Rebuild akan:
 
@@ -57,22 +80,23 @@ app/Commands/RebuildStockBalancesCommand.php
    - stock_value
    - last_movement_date
 
-## 5. Langkah Aman
+## 6. Langkah Aman
 
 1. Backup database.
-2. Jalankan diagnostic SQL atau command `--dry-run`.
-3. Cek baris yang mismatch / preview output.
-4. Jika movement sudah benar, baru jalankan rebuild tanpa `--dry-run`.
-5. Setelah rebuild, buka Delivery Order dan klik Refresh Stock.
-6. Cek Stock Card dan Stock Balance.
+2. Jika hanya item tertentu yang orphan, jalankan `inventory:repair-orphan-stock --dry-run` dulu.
+3. Jika balance global tidak sinkron, jalankan diagnostic SQL atau command `inventory:rebuild-balances --dry-run`.
+4. Cek baris yang mismatch / preview output.
+5. Jika movement sudah benar, baru jalankan command tanpa `--dry-run`.
+6. Setelah repair/rebuild, buka Delivery Order dan klik Refresh Stock.
+7. Cek Stock Card dan Stock Balance.
 
-## 6. Catatan Reserved Quantity
+## 7. Catatan Reserved Quantity
 
 Pada rebuild ini `qty_reserved` diset `0` karena belum ada rebuild allocation/reservation detail. Jika modul allocation sudah aktif dan data reservation dianggap final, perlu script khusus untuk menghitung ulang reserved quantity dari allocation order.
 
 Untuk UAT Sales Delivery dasar, nilai ini aman karena Delivery memakai outstanding SO dan available stock.
 
-## 7. Setelah Rebuild
+## 8. Setelah Repair/Rebuild
 
 Validasi minimal:
 
