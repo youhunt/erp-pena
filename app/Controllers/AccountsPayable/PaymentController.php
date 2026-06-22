@@ -75,9 +75,14 @@ class PaymentController extends BaseController
         try {
             $paymentDate = (string) $this->request->getPost('payment_date');
             $paymentNo = trim((string) $this->request->getPost('payment_no'));
+            $paymentAmount = $this->toNumber($this->request->getPost('payment_amount'));
+            $paymentMethod = trim((string) $this->request->getPost('payment_method'));
+            $cashBankCode = trim((string) $this->request->getPost('cash_bank_code'));
             if ($paymentNo === '') {
                 $paymentNo = $this->issueDocumentNumber('APP', $paymentDate, (int) $payable['company_id'], $payable['site_id'] ?? null);
             }
+
+            $this->ensureCashBankAccount($tenant, $cashBankCode, $paymentMethod, $paymentAmount);
 
             $paymentId = (new SettlementService())->postApPayment([
                 'company_id' => $payable['company_id'],
@@ -85,9 +90,9 @@ class PaymentController extends BaseController
                 'ap_payable_id' => $payable['id'],
                 'payment_no' => $paymentNo,
                 'payment_date' => $paymentDate,
-                'payment_amount' => $this->toNumber($this->request->getPost('payment_amount')),
-                'payment_method' => trim((string) $this->request->getPost('payment_method')),
-                'cash_bank_code' => trim((string) $this->request->getPost('cash_bank_code')),
+                'payment_amount' => $paymentAmount,
+                'payment_method' => $paymentMethod,
+                'cash_bank_code' => $cashBankCode,
                 'reference_no' => trim((string) $this->request->getPost('reference_no')),
                 'notes' => trim((string) $this->request->getPost('notes')),
             ], auth()->id());
@@ -172,6 +177,47 @@ class PaymentController extends BaseController
             ->orderBy('account_type', 'ASC')
             ->orderBy('cash_bank_code', 'ASC')
             ->findAll();
+    }
+
+    private function ensureCashBankAccount(TenantContext $tenant, string $code, string $method, float $minimumBalance): void
+    {
+        $code = strtoupper(trim($code));
+        if ($code === '') {
+            throw new RuntimeException('Cash/Bank code is required.');
+        }
+
+        $companyId = $tenant->activeCompanyId();
+        if ($companyId === null || $companyId < 1) {
+            throw new RuntimeException('Active company is required before creating cash/bank account.');
+        }
+
+        $model = new CashBankAccountModel();
+        $query = $model->where('company_id', $companyId)->where('cash_bank_code', $code)->where('is_active', 1);
+        if ($tenant->activeSiteId() !== null) {
+            $query->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->groupEnd();
+        } else {
+            $query->where('site_id', null);
+        }
+
+        if ($query->first() !== null) {
+            return;
+        }
+
+        $accountType = strtolower($method) === 'cash' ? 'cash' : 'bank';
+        $openingBalance = max(0, round($minimumBalance, 2));
+
+        $model->insert([
+            'company_id' => $companyId,
+            'site_id' => $tenant->activeSiteId(),
+            'cash_bank_code' => $code,
+            'cash_bank_name' => $code . ' - Auto Created',
+            'account_type' => $accountType,
+            'currency_code' => 'IDR',
+            'gl_account_no' => null,
+            'opening_balance' => $openingBalance,
+            'current_balance' => $openingBalance,
+            'is_active' => 1,
+        ]);
     }
 
     private function previewDocumentNumber(string $transactionCode): string
