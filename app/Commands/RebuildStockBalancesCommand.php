@@ -30,6 +30,7 @@ class RebuildStockBalancesCommand extends BaseCommand
         $companyId = $this->positiveInt(CLI::getOption('company'));
         $siteId = $this->positiveInt(CLI::getOption('site'));
         $dryRun = CLI::getOption('dry-run') !== null;
+        $valueExpression = $this->movementValueExpression($db);
 
         CLI::write('Inventory Stock Balance Rebuild', 'green');
         CLI::write('Source : inventory_stock_movements');
@@ -37,9 +38,10 @@ class RebuildStockBalancesCommand extends BaseCommand
         CLI::write('Company: ' . ($companyId !== null ? (string) $companyId : 'ALL'));
         CLI::write('Site   : ' . ($siteId !== null ? (string) $siteId : 'ALL'));
         CLI::write('Mode   : ' . ($dryRun ? 'DRY RUN' : 'REBUILD'));
+        CLI::write('Value  : ' . $valueExpression['label']);
         CLI::newLine();
 
-        $rows = $this->movementRows($db, $companyId, $siteId);
+        $rows = $this->movementRows($db, $companyId, $siteId, $valueExpression['sql']);
         CLI::write('Movement groups found: ' . count($rows));
 
         if ($rows === []) {
@@ -117,7 +119,7 @@ class RebuildStockBalancesCommand extends BaseCommand
         $this->printPreview(array_slice($rows, 0, 10));
     }
 
-    private function movementRows($db, ?int $companyId, ?int $siteId): array
+    private function movementRows($db, ?int $companyId, ?int $siteId, string $valueSql): array
     {
         $where = [
             'm.warehouse_id IS NOT NULL',
@@ -136,19 +138,24 @@ class RebuildStockBalancesCommand extends BaseCommand
             $bindings[] = $siteId;
         }
 
+        $itemIdSelect = $db->fieldExists('item_id', 'inventory_stock_movements') ? 'MAX(m.item_id) AS item_id' : 'NULL AS item_id';
+        $uomSelect = $db->fieldExists('uom_code', 'inventory_stock_movements') ? 'MAX(m.uom_code) AS uom_code' : "'PCS' AS uom_code";
+        $itemNameSelect = $db->fieldExists('item_name', 'inventory_stock_movements') ? 'MAX(m.item_name) AS item_name' : 'm.item_code AS item_name';
+        $dateSelect = $db->fieldExists('movement_date', 'inventory_stock_movements') ? 'MAX(m.movement_date) AS last_movement_date' : 'MAX(m.created_at) AS last_movement_date';
+
         $sql = "
             SELECT
                 m.company_id,
                 m.site_id,
                 m.warehouse_id,
                 m.location_id,
-                MAX(m.item_id) AS item_id,
+                {$itemIdSelect},
                 m.item_code,
-                MAX(m.item_name) AS item_name,
-                MAX(m.uom_code) AS uom_code,
+                {$itemNameSelect},
+                {$uomSelect},
                 SUM(CASE WHEN m.direction = 'in' THEN m.qty ELSE -m.qty END) AS qty_on_hand,
-                SUM(CASE WHEN m.direction = 'in' THEN m.value_amount ELSE -m.value_amount END) AS stock_value,
-                MAX(m.movement_date) AS last_movement_date
+                SUM(CASE WHEN m.direction = 'in' THEN {$valueSql} ELSE -{$valueSql} END) AS stock_value,
+                {$dateSelect}
             FROM inventory_stock_movements m
             WHERE " . implode(' AND ', $where) . "
             GROUP BY m.company_id, m.site_id, m.warehouse_id, m.location_id, m.item_code
@@ -157,6 +164,45 @@ class RebuildStockBalancesCommand extends BaseCommand
         ";
 
         return $db->query($sql, $bindings)->getResultArray();
+    }
+
+    private function movementValueExpression($db): array
+    {
+        $candidates = [
+            'value_amount' => 'value_amount',
+            'stock_value' => 'stock_value',
+            'movement_value' => 'movement_value',
+            'total_cost' => 'total_cost',
+            'line_total' => 'line_total',
+        ];
+
+        foreach ($candidates as $field => $label) {
+            if ($db->fieldExists($field, 'inventory_stock_movements')) {
+                return [
+                    'sql' => 'COALESCE(m.' . $field . ', 0)',
+                    'label' => $field,
+                ];
+            }
+        }
+
+        if ($db->fieldExists('unit_cost', 'inventory_stock_movements')) {
+            return [
+                'sql' => 'COALESCE(m.unit_cost, 0) * COALESCE(m.qty, 0)',
+                'label' => 'unit_cost * qty',
+            ];
+        }
+
+        if ($db->fieldExists('avg_cost', 'inventory_stock_movements')) {
+            return [
+                'sql' => 'COALESCE(m.avg_cost, 0) * COALESCE(m.qty, 0)',
+                'label' => 'avg_cost * qty',
+            ];
+        }
+
+        return [
+            'sql' => '0',
+            'label' => '0 (no movement value column found)',
+        ];
     }
 
     private function filterExistingFields($db, string $table, array $payload): array
