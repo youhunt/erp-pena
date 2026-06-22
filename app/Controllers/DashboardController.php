@@ -39,6 +39,11 @@ class DashboardController extends BaseController
         $pendingWork = [];
         $workflowQueues = [];
         $financialSnapshot = [];
+        $agingShortcuts = [];
+        $topPendingInvoices = [];
+        $topStockAlerts = [];
+        $glUnbalancedEntries = [];
+        $monthlyTrend = [];
 
         if ($hasTenantAccess) {
             $db = Database::connect();
@@ -112,6 +117,37 @@ class DashboardController extends BaseController
                     'money' => false,
                 ],
             ];
+
+            $agingShortcuts = [
+                [
+                    'label' => 'AR Aging',
+                    'description' => 'Open customer receivables ready for collection review',
+                    'amount' => $this->sumOpenAmount('sales_invoices', $tenant),
+                    'count' => $this->countOpenInvoices('sales_invoices', $tenant),
+                    'route' => 'ar/aging',
+                    'icon' => 'bx bx-receipt',
+                    'tone' => 'primary',
+                ],
+                [
+                    'label' => 'AP Aging',
+                    'description' => 'Open vendor payables ready for payment planning',
+                    'amount' => $this->sumOpenAmount('purchase_invoices', $tenant),
+                    'count' => $this->countOpenInvoices('purchase_invoices', $tenant),
+                    'route' => 'ap/aging',
+                    'icon' => 'bx bx-file',
+                    'tone' => 'danger',
+                ],
+            ];
+
+            $topPendingInvoices = array_merge(
+                $this->getTopPendingInvoices('sales_invoices', 'AR', 'ar/sales-invoices', $tenant, 5),
+                $this->getTopPendingInvoices('purchase_invoices', 'AP', 'ap/purchase-invoices', $tenant, 5)
+            );
+            usort($topPendingInvoices, static fn (array $left, array $right): int => ($right['amount'] ?? 0) <=> ($left['amount'] ?? 0));
+            $topPendingInvoices = array_slice($topPendingInvoices, 0, 8);
+            $topStockAlerts = $this->getTopStockAlerts($tenant, 8);
+            $glUnbalancedEntries = $this->getUnbalancedGlEntryDetails($tenant, 8);
+            $monthlyTrend = $this->getMonthlySalesPurchaseTrend($tenant, 6);
 
             $pendingWork = [
                 [
@@ -196,6 +232,11 @@ class DashboardController extends BaseController
             'pendingWork' => $pendingWork,
             'workflowQueues' => $workflowQueues,
             'financialSnapshot' => $financialSnapshot,
+            'agingShortcuts' => $agingShortcuts,
+            'topPendingInvoices' => $topPendingInvoices,
+            'topStockAlerts' => $topStockAlerts,
+            'glUnbalancedEntries' => $glUnbalancedEntries,
+            'monthlyTrend' => $monthlyTrend,
         ]);
     }
 
@@ -313,9 +354,7 @@ class DashboardController extends BaseController
             return 0.0;
         }
 
-        $amountField = $db->fieldExists('outstanding_amount', $table)
-            ? 'outstanding_amount'
-            : ($db->fieldExists('total_amount', $table) ? 'total_amount' : null);
+        $amountField = $this->firstExistingField($table, ['outstanding_amount', 'total_amount', 'grand_total', 'net_amount']);
 
         if ($amountField === null) {
             return 0.0;
@@ -389,6 +428,275 @@ class DashboardController extends BaseController
         }
 
         return $builder->countAllResults();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function getTopPendingInvoices(string $table, string $type, string $route, TenantContext $tenant, int $limit = 5): array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists($table)) {
+            return [];
+        }
+
+        $amountField = $this->firstExistingField($table, ['outstanding_amount', 'total_amount', 'grand_total', 'net_amount']);
+        if ($amountField === null) {
+            return [];
+        }
+
+        $documentField = $this->firstExistingField($table, ['invoice_no', 'invoice_number', 'document_no', 'number', 'code']);
+        $dateField = $this->firstExistingField($table, ['due_date', 'invoice_date', 'document_date', 'date', 'created_at']);
+        $partnerField = $type === 'AR'
+            ? $this->firstExistingField($table, ['customer_name', 'customer_code', 'customer_id'])
+            : $this->firstExistingField($table, ['vendor_name', 'supplier_name', 'vendor_code', 'supplier_code', 'vendor_id', 'supplier_id']);
+
+        $builder = $db->table($table)
+            ->select('id')
+            ->select($amountField . ' AS amount')
+            ->where($amountField . ' >', 0)
+            ->orderBy($amountField, 'DESC')
+            ->limit($limit);
+
+        if ($documentField !== null) {
+            $builder->select($documentField . ' AS document_no');
+        }
+        if ($dateField !== null) {
+            $builder->select($dateField . ' AS due_date');
+        }
+        if ($partnerField !== null) {
+            $builder->select($partnerField . ' AS partner_name');
+        }
+        if ($db->fieldExists('status', $table)) {
+            $builder->select('status')->whereIn('status', ['open', 'partial']);
+        }
+        $this->applyTenantFilters($builder, $table, $tenant);
+        if ($db->fieldExists('deleted_at', $table)) {
+            $builder->where('deleted_at', null);
+        }
+
+        return array_map(static function (array $row) use ($type, $route): array {
+            return [
+                'type' => $type,
+                'document_no' => $row['document_no'] ?? ('#' . ($row['id'] ?? '-')),
+                'partner_name' => $row['partner_name'] ?? '-',
+                'due_date' => $row['due_date'] ?? '-',
+                'amount' => (float) ($row['amount'] ?? 0),
+                'status' => $row['status'] ?? '-',
+                'route' => $route,
+            ];
+        }, $builder->get()->getResultArray());
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function getTopStockAlerts(TenantContext $tenant, int $limit = 8): array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('item_locations')) {
+            return [];
+        }
+
+        $stockSelect = null;
+        if ($db->tableExists('inventory_stock_balances')) {
+            $stockSelect = $db->table('inventory_stock_balances')
+                ->select('company_id, site_id, warehouse_id, location_id, item_id, SUM(qty_available) AS qty_available')
+                ->groupBy('company_id, site_id, warehouse_id, location_id, item_id')
+                ->getCompiledSelect();
+        }
+
+        $builder = $db->table('item_locations il')
+            ->select('il.item_id, il.location_id, il.warehouse_id, il.min_qty, il.reorder_qty')
+            ->where('il.is_active', 1)
+            ->limit($limit);
+
+        if ($db->fieldExists('deleted_at', 'item_locations')) {
+            $builder->where('il.deleted_at', null);
+        }
+
+        if ($stockSelect !== null) {
+            $builder->select('COALESCE(b.qty_available, 0) AS qty_available', false)
+                ->join(
+                    '(' . $stockSelect . ') b',
+                    'b.company_id = il.company_id AND ' .
+                    '(b.site_id <=> il.site_id) AND ' .
+                    '(b.warehouse_id <=> il.warehouse_id) AND ' .
+                    'b.location_id = il.location_id AND b.item_id = il.item_id',
+                    'left',
+                    false
+                );
+        } else {
+            $builder->select('0 AS qty_available', false);
+        }
+
+        if ($db->tableExists('items')) {
+            $itemCode = $this->firstExistingField('items', ['item_code', 'code', 'sku']);
+            $itemName = $this->firstExistingField('items', ['item_name', 'name', 'description']);
+            $itemSelect = [];
+            if ($itemCode !== null) {
+                $itemSelect[] = 'i.' . $itemCode . ' AS item_code';
+            }
+            if ($itemName !== null) {
+                $itemSelect[] = 'i.' . $itemName . ' AS item_name';
+            }
+            if ($itemSelect !== []) {
+                $builder->select(implode(', ', $itemSelect));
+            }
+            $builder->join('items i', 'i.id = il.item_id', 'left');
+        }
+
+        if ($tenant->activeCompanyId() !== null) {
+            $builder->where('il.company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $builder->where('il.site_id', $tenant->activeSiteId());
+        }
+
+        $availableExpression = $stockSelect !== null ? 'COALESCE(b.qty_available, 0)' : '0';
+        $builder->groupStart()
+            ->groupStart()
+            ->where('il.min_qty >', 0)
+            ->where($availableExpression . ' < il.min_qty', null, false)
+            ->groupEnd()
+            ->orGroupStart()
+            ->where('il.reorder_qty >', 0)
+            ->where($availableExpression . ' <= il.reorder_qty', null, false)
+            ->groupEnd()
+            ->groupEnd()
+            ->orderBy($availableExpression, 'ASC', false);
+
+        return array_map(static function (array $row): array {
+            $minQty = (float) ($row['min_qty'] ?? 0);
+            $reorderQty = (float) ($row['reorder_qty'] ?? 0);
+            $qtyAvailable = (float) ($row['qty_available'] ?? 0);
+            $threshold = $minQty > 0 ? $minQty : $reorderQty;
+
+            return [
+                'item_code' => $row['item_code'] ?? ('Item #' . ($row['item_id'] ?? '-')),
+                'item_name' => $row['item_name'] ?? '-',
+                'qty_available' => $qtyAvailable,
+                'threshold' => $threshold,
+                'shortage' => max(0, $threshold - $qtyAvailable),
+                'route' => 'inventory/stock-alerts',
+            ];
+        }, $builder->get()->getResultArray());
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function getUnbalancedGlEntryDetails(TenantContext $tenant, int $limit = 8): array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('gl_entries') || ! $db->fieldExists('total_debit', 'gl_entries') || ! $db->fieldExists('total_credit', 'gl_entries')) {
+            return [];
+        }
+
+        $entryField = $this->firstExistingField('gl_entries', ['entry_no', 'journal_no', 'document_no', 'number', 'code']);
+        $dateField = $this->firstExistingField('gl_entries', ['entry_date', 'journal_date', 'document_date', 'date', 'created_at']);
+
+        $builder = $db->table('gl_entries')
+            ->select('id, total_debit, total_credit, ABS(COALESCE(total_debit, 0) - COALESCE(total_credit, 0)) AS variance', false)
+            ->where('ABS(COALESCE(total_debit, 0) - COALESCE(total_credit, 0)) >', 0.01, false)
+            ->orderBy('variance', 'DESC')
+            ->limit($limit);
+
+        if ($entryField !== null) {
+            $builder->select($entryField . ' AS entry_no');
+        }
+        if ($dateField !== null) {
+            $builder->select($dateField . ' AS entry_date');
+        }
+        if ($db->fieldExists('status', 'gl_entries')) {
+            $builder->select('status')->whereNotIn('status', ['cancelled', 'void']);
+        }
+        $this->applyTenantFilters($builder, 'gl_entries', $tenant);
+        if ($db->fieldExists('deleted_at', 'gl_entries')) {
+            $builder->where('deleted_at', null);
+        }
+
+        return array_map(static function (array $row): array {
+            return [
+                'entry_no' => $row['entry_no'] ?? ('#' . ($row['id'] ?? '-')),
+                'entry_date' => $row['entry_date'] ?? '-',
+                'debit' => (float) ($row['total_debit'] ?? 0),
+                'credit' => (float) ($row['total_credit'] ?? 0),
+                'variance' => (float) ($row['variance'] ?? 0),
+                'status' => $row['status'] ?? '-',
+                'route' => 'gl/entries',
+            ];
+        }, $builder->get()->getResultArray());
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function getMonthlySalesPurchaseTrend(TenantContext $tenant, int $months = 6): array
+    {
+        $labels = [];
+        $current = new \DateTimeImmutable('first day of this month 00:00:00');
+        for ($index = $months - 1; $index >= 0; $index--) {
+            $labels[] = $current->modify('-' . $index . ' months')->format('Y-m');
+        }
+
+        $sales = $this->sumMonthlyAmount('sales_invoices', $tenant, $labels);
+        $purchase = $this->sumMonthlyAmount('purchase_invoices', $tenant, $labels);
+
+        return array_map(static function (string $month) use ($sales, $purchase): array {
+            return [
+                'month' => $month,
+                'sales' => $sales[$month] ?? 0.0,
+                'purchase' => $purchase[$month] ?? 0.0,
+                'net' => ($sales[$month] ?? 0.0) - ($purchase[$month] ?? 0.0),
+            ];
+        }, $labels);
+    }
+
+    /**
+     * @param list<string> $months
+     * @return array<string, float>
+     */
+    private function sumMonthlyAmount(string $table, TenantContext $tenant, array $months): array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists($table) || $months === []) {
+            return [];
+        }
+
+        $dateField = $this->firstExistingField($table, ['invoice_date', 'document_date', 'date', 'created_at']);
+        $amountField = $this->firstExistingField($table, ['total_amount', 'grand_total', 'net_amount', 'outstanding_amount']);
+        if ($dateField === null || $amountField === null) {
+            return [];
+        }
+
+        $startDate = $months[0] . '-01';
+        $endDate = (new \DateTimeImmutable(end($months) . '-01'))->modify('first day of next month')->format('Y-m-d');
+
+        $builder = $db->table($table)
+            ->select("DATE_FORMAT({$dateField}, '%Y-%m') AS period", false)
+            ->selectSum($amountField, 'amount')
+            ->where($dateField . ' >=', $startDate)
+            ->where($dateField . ' <', $endDate)
+            ->groupBy('period')
+            ->orderBy('period', 'ASC');
+
+        $this->applyTenantFilters($builder, $table, $tenant);
+        if ($db->fieldExists('deleted_at', $table)) {
+            $builder->where('deleted_at', null);
+        }
+        if ($db->fieldExists('status', $table)) {
+            $builder->whereNotIn('status', ['cancelled', 'void']);
+        }
+
+        $result = array_fill_keys($months, 0.0);
+        foreach ($builder->get()->getResultArray() as $row) {
+            if (isset($row['period'], $result[$row['period']])) {
+                $result[$row['period']] = (float) ($row['amount'] ?? 0);
+            }
+        }
+
+        return $result;
     }
 
     private function countStockAlerts(TenantContext $tenant): int
@@ -466,6 +774,21 @@ class DashboardController extends BaseController
         }
 
         return $this->countTenantRows('document_uploads', $tenant, ['status' => 'uploaded']);
+    }
+
+    /**
+     * @param list<string> $candidates
+     */
+    private function firstExistingField(string $table, array $candidates): ?string
+    {
+        $db = Database::connect();
+        foreach ($candidates as $field) {
+            if ($db->fieldExists($field, $table)) {
+                return $field;
+            }
+        }
+
+        return null;
     }
 
     private function applyTenantFilters(object $builder, string $table, TenantContext $tenant): void
