@@ -6,7 +6,7 @@
         <div class="card">
             <div class="card-body">
                 <h4 class="card-title mb-1">Stock Adjustment</h4>
-                <p class="text-muted mb-3">Koreksi stok manual. Pilih warehouse dulu, location akan otomatis terfilter.</p>
+                <p class="text-muted mb-3">Koreksi stok manual. Pilih warehouse, lalu pilih location/item.</p>
 
                 <div class="alert alert-info py-2">
                     <strong>Prosedur:</strong> pilih Warehouse → pilih Location → pilih Item → isi Qty dan Unit Cost → Post Adjustment.
@@ -51,7 +51,7 @@
                         <div class="col-md-6">
                             <label class="form-label">Location <span class="text-danger">*</span></label>
                             <select name="location_id" id="locationSelect" class="form-select" required>
-                                <option value="">Pilih warehouse dulu</option>
+                                <option value="__auto__" data-warehouse-id="">Auto Location by Warehouse</option>
                                 <?php foreach ($locations as $location): ?>
                                     <?php $locationId = (int) $location['id']; ?>
                                     <option value="<?= $locationId ?>" data-warehouse-id="<?= esc((string) ($location['warehouse_id'] ?? ''), 'attr') ?>" <?= (string) old('location_id') === (string) $locationId ? 'selected' : '' ?>>
@@ -59,7 +59,7 @@
                                     </option>
                                 <?php endforeach ?>
                             </select>
-                            <div class="form-text" id="locationHelp">Location otomatis hanya muncul sesuai warehouse.</div>
+                            <div class="form-text" id="locationHelp">Pilih Auto Location jika ragu; sistem mengambil location pertama sesuai warehouse.</div>
                         </div>
                     </div>
 
@@ -179,11 +179,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const itemName = document.getElementById('itemName');
     const uomCode = document.getElementById('uomCode');
     const unitCost = document.getElementById('unitCost');
-    const oldLocationValue = '<?= esc((string) old('location_id'), 'js') ?>';
-
-    const allLocationOptions = Array.from(locationSelect.querySelectorAll('option[data-warehouse-id]')).map(function (option) {
-        return option.cloneNode(true);
-    });
 
     function refreshSelect2(select) {
         if (window.jQuery && window.jQuery.fn && window.jQuery.fn.select2 && window.jQuery(select).data('select2')) {
@@ -191,45 +186,34 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    function refreshLocations() {
-        const warehouseId = warehouseSelect.value;
-        locationSelect.innerHTML = '';
-
-        const placeholder = document.createElement('option');
-        placeholder.value = '';
-        placeholder.textContent = warehouseId ? 'Pilih / cari Location' : 'Pilih warehouse dulu';
-        locationSelect.appendChild(placeholder);
-
+    function autoSelectLocation() {
+        const warehouseId = String(warehouseSelect.value || '');
         if (!warehouseId) {
-            locationHelp.textContent = 'Pilih warehouse dulu agar location terfilter.';
+            locationSelect.value = '__auto__';
+            locationHelp.textContent = 'Pilih warehouse dulu agar location bisa dipastikan.';
             refreshSelect2(locationSelect);
             return;
         }
 
-        let matchCount = 0;
-        allLocationOptions.forEach(function (option) {
-            if (String(option.dataset.warehouseId || '') === String(warehouseId)) {
-                matchCount++;
-                const cloned = option.cloneNode(true);
-                if (oldLocationValue && cloned.value === oldLocationValue) {
-                    cloned.selected = true;
-                }
-                locationSelect.appendChild(cloned);
+        const current = locationSelect.options[locationSelect.selectedIndex];
+        if (current && current.value && current.value !== '__auto__' && String(current.dataset.warehouseId || '') === warehouseId) {
+            locationHelp.textContent = 'Location valid untuk warehouse yang dipilih.';
+            return;
+        }
+
+        let firstMatchValue = '';
+        Array.from(locationSelect.options).forEach(function (option) {
+            if (!firstMatchValue && option.value && option.value !== '__auto__' && String(option.dataset.warehouseId || '') === warehouseId) {
+                firstMatchValue = option.value;
             }
         });
 
-        if (matchCount === 0) {
-            const autoOption = document.createElement('option');
-            autoOption.value = '__auto__';
-            autoOption.textContent = 'Auto-create MAIN Location untuk warehouse ini';
-            autoOption.selected = true;
-            locationSelect.appendChild(autoOption);
-            locationHelp.textContent = 'Belum ada location untuk warehouse ini. Sistem akan membuat MAIN Location saat posting.';
+        if (firstMatchValue) {
+            locationSelect.value = firstMatchValue;
+            locationHelp.textContent = 'Location otomatis dipilih sesuai warehouse. Bisa diganti jika perlu.';
         } else {
-            locationHelp.textContent = 'Location otomatis hanya muncul sesuai warehouse.';
-            if (locationSelect.options.length === 2 && !oldLocationValue) {
-                locationSelect.selectedIndex = 1;
-            }
+            locationSelect.value = '__auto__';
+            locationHelp.textContent = 'Belum ada location untuk warehouse ini. Sistem akan mengambil/membuat MAIN Location saat posting.';
         }
 
         refreshSelect2(locationSelect);
@@ -247,10 +231,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    warehouseSelect.addEventListener('change', refreshLocations);
+    warehouseSelect.addEventListener('change', autoSelectLocation);
     itemSelect.addEventListener('change', fillItemFields);
 
-    refreshLocations();
+    autoSelectLocation();
     fillItemFields();
 });
 </script>
