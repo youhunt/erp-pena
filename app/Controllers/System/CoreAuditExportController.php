@@ -15,12 +15,15 @@ class CoreAuditExportController extends BaseController
         $filters = $this->stockCardFilters();
         $opening = $this->stockOpeningBalance($tenant, $filters);
         $movements = $this->stockMovements($tenant, $filters);
-        $rows = $this->stockCardRows($this->withStockRunningBalance($movements, $opening), $opening, $filters);
+        $runningMovements = $this->withStockRunningBalance($movements, $opening);
+        $summary = $this->stockSummary($runningMovements, $opening);
 
-        return $this->xlsxResponse(
+        return $this->xlsxWorkbookResponse(
             'stock-card-' . $filters['date_from'] . '-to-' . $filters['date_to'] . '.xlsx',
-            $rows,
-            'Stock Card'
+            [
+                'Summary' => $this->stockCardSummaryRows($summary, $filters, count($runningMovements)),
+                'Stock Card Detail' => $this->stockCardRows($runningMovements, $opening, $filters),
+            ]
         );
     }
 
@@ -140,6 +143,54 @@ class CoreAuditExportController extends BaseController
         }
 
         return $movements;
+    }
+
+    private function stockSummary(array $movements, array $opening): array
+    {
+        $summary = [
+            'opening_qty' => (float) $opening['qty'],
+            'opening_value' => (float) $opening['stock_value'],
+            'qty_in' => 0.0,
+            'qty_out' => 0.0,
+            'value_in' => 0.0,
+            'value_out' => 0.0,
+        ];
+
+        foreach ($movements as $movement) {
+            $summary['qty_in'] += (float) ($movement['qty_in'] ?? 0);
+            $summary['qty_out'] += (float) ($movement['qty_out'] ?? 0);
+            $summary['value_in'] += (float) ($movement['value_in'] ?? 0);
+            $summary['value_out'] += (float) ($movement['value_out'] ?? 0);
+        }
+
+        $summary['ending_qty'] = $summary['opening_qty'] + $summary['qty_in'] - $summary['qty_out'];
+        $summary['ending_value'] = $summary['opening_value'] + $summary['value_in'] - $summary['value_out'];
+
+        return $summary;
+    }
+
+    private function stockCardSummaryRows(array $summary, array $filters, int $movementCount): array
+    {
+        return [
+            ['Metric', 'Value'],
+            ['Report', 'Stock Card'],
+            ['Period From', $filters['date_from']],
+            ['Period To', $filters['date_to']],
+            ['Item Code', $filters['item_code'] !== '' ? $filters['item_code'] : 'ALL'],
+            ['Batch No', $filters['batch_no'] !== '' ? $filters['batch_no'] : 'ALL'],
+            ['Warehouse ID', $filters['warehouse_id'] !== null ? (string) $filters['warehouse_id'] : 'ALL'],
+            ['Location ID', $filters['location_id'] !== null ? (string) $filters['location_id'] : 'ALL'],
+            ['Movement Rows', $movementCount],
+            ['Opening Qty', (float) ($summary['opening_qty'] ?? 0)],
+            ['Qty In', (float) ($summary['qty_in'] ?? 0)],
+            ['Qty Out', (float) ($summary['qty_out'] ?? 0)],
+            ['Ending Qty', (float) ($summary['ending_qty'] ?? 0)],
+            ['Opening Value', (float) ($summary['opening_value'] ?? 0)],
+            ['Value In', (float) ($summary['value_in'] ?? 0)],
+            ['Value Out', (float) ($summary['value_out'] ?? 0)],
+            ['Ending Value', (float) ($summary['ending_value'] ?? 0)],
+            ['Generated At', date('Y-m-d H:i:s')],
+        ];
     }
 
     private function stockCardRows(array $movements, array $opening, array $filters): array
@@ -321,21 +372,40 @@ class CoreAuditExportController extends BaseController
 
     private function xlsxResponse(string $filename, array $rows, string $sheetTitle)
     {
+        return $this->xlsxWorkbookResponse($filename, [$sheetTitle => $rows]);
+    }
+
+    /**
+     * @param array<string, array<int, array<int, mixed>>> $sheets
+     */
+    private function xlsxWorkbookResponse(string $filename, array $sheets)
+    {
         if (! class_exists(\PhpOffice\PhpSpreadsheet\Spreadsheet::class)) {
             throw new RuntimeException('PhpSpreadsheet is required to generate Excel files. Run composer install.');
         }
 
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle(substr($sheetTitle, 0, 31));
-        $sheet->fromArray($rows, null, 'A1');
-        $highestColumn = $sheet->getHighestColumn();
-        $highestRow = $sheet->getHighestRow();
-        $sheet->getStyle('A1:' . $highestColumn . '1')->getFont()->setBold(true);
-        $sheet->setAutoFilter('A1:' . $highestColumn . max(1, $highestRow));
-        foreach (range('A', $highestColumn) as $column) {
-            $sheet->getColumnDimension($column)->setAutoSize(true);
+        $sheetIndex = 0;
+
+        foreach ($sheets as $sheetTitle => $rows) {
+            $sheet = $sheetIndex === 0 ? $spreadsheet->getActiveSheet() : $spreadsheet->createSheet();
+            $sheet->setTitle(substr((string) $sheetTitle, 0, 31));
+            $sheet->fromArray($rows, null, 'A1');
+
+            $highestColumn = $sheet->getHighestColumn();
+            $highestRow = $sheet->getHighestRow();
+            if ($highestRow >= 1) {
+                $sheet->getStyle('A1:' . $highestColumn . '1')->getFont()->setBold(true);
+                $sheet->setAutoFilter('A1:' . $highestColumn . max(1, $highestRow));
+            }
+            foreach (range('A', $highestColumn) as $column) {
+                $sheet->getColumnDimension($column)->setAutoSize(true);
+            }
+
+            $sheetIndex++;
         }
+
+        $spreadsheet->setActiveSheetIndex(0);
 
         $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
         ob_start();
