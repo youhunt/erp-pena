@@ -32,17 +32,17 @@ class StockAdjustmentController extends BaseController
 
         if (! $this->validate([
             'warehouse_id' => 'required|is_natural_no_zero',
-            'location_id' => 'required|is_natural_no_zero',
             'qty' => 'required|decimal',
         ])) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
 
         $warehouseId = $this->nullableInt($this->request->getPost('warehouse_id'));
-        $locationId = $this->nullableInt($this->request->getPost('location_id'));
-        if ($warehouseId === null || $locationId === null) {
-            return redirect()->back()->withInput()->with('error', 'Warehouse and location are required for stock adjustment.');
+        if ($warehouseId === null) {
+            return redirect()->back()->withInput()->with('error', 'Warehouse is required for stock adjustment.');
         }
+
+        $locationId = $this->resolveLocationId($warehouseId, $this->request->getPost('location_id'), $tenant);
 
         $qty = $this->toNumber($this->request->getPost('qty'));
         if ($qty === 0.0) {
@@ -59,7 +59,6 @@ class StockAdjustmentController extends BaseController
             return redirect()->back()->withInput()->with('error', 'Unit cost must be greater than zero when adding stock so stock value and GL can be calculated.');
         }
 
-        $db = Database::connect();
         $item = $this->findItem($itemCode, $tenant);
         $itemName = trim((string) ($item['name'] ?? $this->request->getPost('item_name')));
 
@@ -121,6 +120,68 @@ class StockAdjustmentController extends BaseController
         return $builder->orderBy('id', 'DESC')->get(1)->getRowArray() ?: null;
     }
 
+    private function resolveLocationId(int $warehouseId, mixed $postedLocationId, TenantContext $tenant): int
+    {
+        $posted = trim((string) $postedLocationId);
+        if ($posted !== '' && $posted !== '__auto__' && (int) $posted > 0) {
+            return (int) $posted;
+        }
+
+        $db = Database::connect();
+        if (! $db->tableExists('locations')) {
+            throw new RuntimeException('Location master table is not available.');
+        }
+
+        $location = $db->table('locations')->where('warehouse_id', $warehouseId);
+        if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', 'locations')) {
+            $location->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', 'locations')) {
+            $location->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->groupEnd();
+        }
+        if ($db->fieldExists('deleted_at', 'locations')) {
+            $location->where('deleted_at', null);
+        }
+        if ($db->fieldExists('is_active', 'locations')) {
+            $location->where('is_active', 1);
+        }
+
+        $existing = $location->orderBy('id', 'ASC')->get(1)->getRowArray();
+        if ($existing !== null) {
+            return (int) $existing['id'];
+        }
+
+        $warehouse = $db->table('warehouses')->where('id', $warehouseId)->get(1)->getRowArray();
+        if ($warehouse === null) {
+            throw new RuntimeException('Selected warehouse is not valid.');
+        }
+
+        $payload = [
+            'company_id' => $tenant->activeCompanyId(),
+            'site_id' => $tenant->activeSiteId(),
+            'warehouse_id' => $warehouseId,
+            'code' => 'MAIN',
+            'name' => 'Main Location',
+            'is_active' => 1,
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+
+        foreach (array_keys($payload) as $field) {
+            if (! $db->fieldExists($field, 'locations')) {
+                unset($payload[$field]);
+            }
+        }
+
+        $db->table('locations')->insert($payload);
+        $locationId = (int) $db->insertID();
+        if ($locationId < 1) {
+            throw new RuntimeException('Failed to auto-create default location for selected warehouse.');
+        }
+
+        return $locationId;
+    }
+
     private function assertWarehouseLocation(int $warehouseId, int $locationId, TenantContext $tenant): void
     {
         $db = Database::connect();
@@ -151,7 +212,7 @@ class StockAdjustmentController extends BaseController
             $location->where('company_id', $tenant->activeCompanyId());
         }
         if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', 'locations')) {
-            $location->where('site_id', $tenant->activeSiteId());
+            $location->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->groupEnd();
         }
         if ($db->fieldExists('deleted_at', 'locations')) {
             $location->where('deleted_at', null);
