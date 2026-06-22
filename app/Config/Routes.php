@@ -201,10 +201,12 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->group('cash-bank', static function (RouteCollection $routes): void {
         $routes->get('accounts', 'Finance\CashBankController::accounts');
         $routes->get('cash-entries', 'Finance\CashBankController::entries/cash');
+        $routes->get('cash-entries/export', 'System\CashBankAuditExportController::entries/cash');
         $routes->get('cash-entries/new', 'Finance\CashBankController::newEntry/cash');
         $routes->post('cash-entries', 'Finance\CashBankController::storeEntry/cash');
         $routes->get('cash-entries/(:num)', 'Finance\CashBankController::showEntry/cash/$1');
         $routes->get('bank-entries', 'Finance\CashBankController::entries/bank');
+        $routes->get('bank-entries/export', 'System\CashBankAuditExportController::entries/bank');
         $routes->get('bank-entries/new', 'Finance\CashBankController::newEntry/bank');
         $routes->post('bank-entries', 'Finance\CashBankController::storeEntry/bank');
         $routes->get('bank-entries/(:num)', 'Finance\CashBankController::showEntry/bank/$1');
@@ -218,6 +220,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('reconciliations', 'Finance\CashBankController::reconciliations');
         $routes->get('reconciliations/new', 'Finance\CashBankController::newReconciliation');
         $routes->post('reconciliations', 'Finance\CashBankController::storeReconciliation');
+        $routes->get('reconciliations/(:num)/export', 'System\CashBankAuditExportController::reconciliation/$1');
         $routes->get('reconciliations/(:num)', 'Finance\CashBankController::showReconciliation/$1');
     });
 
