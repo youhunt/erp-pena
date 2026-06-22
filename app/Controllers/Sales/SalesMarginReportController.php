@@ -4,12 +4,12 @@ namespace App\Controllers\Sales;
 
 use App\Controllers\BaseController;
 use App\Services\TenantContext;
+use CodeIgniter\HTTP\ResponseInterface;
 use Config\Database;
-use DateTimeImmutable;
 
 class SalesMarginReportController extends BaseController
 {
-    public function index(): string
+    public function index(): string|ResponseInterface
     {
         $dateFrom = trim((string) $this->request->getGet('date_from')) ?: date('Y-m-01');
         $dateTo = trim((string) $this->request->getGet('date_to')) ?: date('Y-m-t');
@@ -19,6 +19,10 @@ class SalesMarginReportController extends BaseController
 
         if ($status !== '') {
             $rows = array_values(array_filter($rows, static fn (array $row): bool => ($row['margin_status'] ?? '') === $status));
+        }
+
+        if ((string) $this->request->getGet('export') === 'csv') {
+            return $this->csvResponse($rows, $dateFrom, $dateTo, $status);
         }
 
         return view('sales/reports/margins', [
@@ -113,5 +117,59 @@ class SalesMarginReportController extends BaseController
 
         ksort($summary['by_status']);
         return $summary;
+    }
+
+    private function csvResponse(array $rows, string $dateFrom, string $dateTo, string $status): ResponseInterface
+    {
+        $handle = fopen('php://temp', 'rb+');
+        fputcsv($handle, [
+            'Invoice Date',
+            'Invoice No',
+            'Invoice Status',
+            'Customer Code',
+            'Customer Name',
+            'SO No',
+            'Delivery No',
+            'Delivery Status',
+            'Invoice Amount',
+            'COGS Amount',
+            'Gross Profit/Loss',
+            'Gross Margin %',
+            'Margin Status',
+            'Invoice GL Entry ID',
+            'COGS GL Entry ID',
+        ]);
+
+        foreach ($rows as $row) {
+            fputcsv($handle, [
+                $row['invoice_date'] ?? '',
+                $row['invoice_no'] ?? '',
+                $row['invoice_status'] ?? '',
+                $row['customer_code'] ?? '',
+                $row['customer_name'] ?? '',
+                $row['so_no'] ?? '',
+                $row['linked_delivery_no'] ?? $row['delivery_no'] ?? '',
+                $row['delivery_status'] ?? '',
+                number_format((float) ($row['invoice_amount'] ?? 0), 2, '.', ''),
+                number_format((float) ($row['cogs_amount'] ?? 0), 2, '.', ''),
+                number_format((float) ($row['gross_profit_loss'] ?? 0), 2, '.', ''),
+                $row['gross_margin_pct'] !== null ? number_format((float) $row['gross_margin_pct'], 2, '.', '') : '',
+                $row['margin_status'] ?? '',
+                $row['invoice_gl_entry_id'] ?? '',
+                $row['cogs_gl_entry_id'] ?? '',
+            ]);
+        }
+
+        rewind($handle);
+        $csv = stream_get_contents($handle) ?: '';
+        fclose($handle);
+
+        $safeStatus = $status !== '' ? '_' . preg_replace('/[^A-Za-z0-9_-]+/', '_', $status) : '';
+        $filename = 'sales_margin_report_' . $dateFrom . '_to_' . $dateTo . $safeStatus . '.csv';
+
+        return $this->response
+            ->setHeader('Content-Type', 'text/csv; charset=UTF-8')
+            ->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
+            ->setBody($csv);
     }
 }
