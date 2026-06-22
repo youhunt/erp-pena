@@ -19,6 +19,24 @@ foreach ($lines as $auditLine) {
         break;
     }
 }
+
+$invoiceAmount = $hasInvoice ? (float) ($existingInvoice['total_amount'] ?? $existingInvoice['grand_total'] ?? 0) : 0.0;
+$cogsAmount = 0.0;
+if ($hasCogsGl) {
+    try {
+        $db = \Config\Database::connect();
+        if ($db->tableExists('gl_entries')) {
+            $gl = $db->table('gl_entries')->where('id', (int) $delivery['gl_entry_id'])->get(1)->getRowArray();
+            $cogsAmount = (float) ($gl['total_debit'] ?? 0);
+        }
+    } catch (\Throwable) {
+        $cogsAmount = 0.0;
+    }
+}
+$grossProfit = ($hasInvoice && $hasCogsGl) ? $invoiceAmount - $cogsAmount : null;
+$grossMargin = ($grossProfit !== null && $invoiceAmount > 0) ? ($grossProfit / $invoiceAmount) * 100 : null;
+$marginBadge = $grossProfit === null ? 'bg-secondary' : ($grossProfit >= 0 ? 'bg-success' : 'bg-danger');
+$marginLabel = $grossProfit === null ? 'not calculated' : ($grossProfit >= 0 ? 'profit' : 'loss');
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -79,6 +97,30 @@ foreach ($lines as $auditLine) {
                 </div>
             </div>
         </div>
+        <?php if ($hasInvoice && $hasCogsGl): ?>
+            <div class="card border-<?= $grossProfit >= 0 ? 'success' : 'danger' ?>">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <h5 class="card-title mb-1">Margin Audit</h5>
+                            <p class="text-muted small mb-0">Invoice revenue vs delivery COGS.</p>
+                        </div>
+                        <span class="badge <?= esc($marginBadge) ?>"><?= esc($marginLabel) ?></span>
+                    </div>
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            <tr><th>Invoice Amount</th><td class="text-end"><?= esc(number_format($invoiceAmount, 2)) ?></td></tr>
+                            <tr><th>COGS Amount</th><td class="text-end"><?= esc(number_format($cogsAmount, 2)) ?></td></tr>
+                            <tr><th>Gross Profit/Loss</th><td class="text-end fw-semibold <?= $grossProfit >= 0 ? 'text-success' : 'text-danger' ?>"><?= esc(number_format((float) $grossProfit, 2)) ?></td></tr>
+                            <tr><th>Gross Margin</th><td class="text-end fw-semibold <?= $grossProfit >= 0 ? 'text-success' : 'text-danger' ?>"><?= esc($grossMargin !== null ? number_format($grossMargin, 2) . '%' : '-') ?></td></tr>
+                        </tbody>
+                    </table>
+                    <?php if ($grossProfit < 0): ?>
+                        <div class="alert alert-danger py-2 small mt-3 mb-0">COGS is higher than invoice value. Review item cost / sales price before production use.</div>
+                    <?php endif ?>
+                </div>
+            </div>
+        <?php endif ?>
         <?php if ($hasInvoice): ?>
             <div class="card border-info">
                 <div class="card-body py-3">
