@@ -28,7 +28,8 @@
                     <tr><th>Entries</th><td class="text-end"><?= esc($reconciliation['entry_count'] ?? 0) ?></td></tr>
                     <tr><th>Posted At</th><td><?= esc($reconciliation['posted_at'] ?? '-') ?></td></tr>
                 </table>
-                <div class="mt-3">
+                <div class="mt-3 d-flex flex-wrap gap-2">
+                    <a href="<?= site_url('cash-bank/reconciliations/' . $reconciliation['id'] . '/export') ?>" class="btn btn-outline-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
                     <a href="<?= site_url('cash-bank/reconciliations') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back</a>
                 </div>
             </div>
@@ -40,7 +41,10 @@
     <div class="col-xl-8">
         <div class="card">
             <div class="card-body">
-                <h4 class="card-title mb-3">Matched Entries</h4>
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <h4 class="card-title mb-0">Matched Entries</h4>
+                    <a href="<?= site_url('cash-bank/reconciliations/' . $reconciliation['id'] . '/export') ?>" class="btn btn-sm btn-outline-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-nowrap align-middle mb-0">
                         <thead class="table-light"><tr><th>Date</th><th>Entry No</th><th>Type</th><th>Reference</th><th class="text-end">Amount</th><th>GL</th></tr></thead>
