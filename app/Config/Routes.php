@@ -251,10 +251,12 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('routings/(:num)', 'Production\ProductionEditController::updateRouting/$1');
         $routes->get('routings/(:num)', 'Production\ProductionMasterController::showRouting/$1');
         $routes->get('work-orders', 'Production\WorkOrderController::index');
+        $routes->get('work-orders/export', 'System\ProductionAuditExportController::workOrders');
         $routes->get('work-orders/new', 'Production\WorkOrderController::create');
         $routes->post('work-orders', 'Production\WorkOrderController::store');
         $routes->get('work-orders/(:num)/edit', 'Production\ProductionEditController::editWorkOrder/$1');
         $routes->post('work-orders/(:num)', 'Production\ProductionEditController::updateWorkOrder/$1');
+        $routes->get('work-orders/(:num)/export', 'System\ProductionAuditExportController::workOrder/$1');
         $routes->get('work-orders/(:num)', 'Production\WorkOrderController::show/$1');
         $routes->post('work-orders/(:num)/allocate', 'Production\WorkOrderController::allocate/$1');
         $routes->post('work-orders/(:num)/issue-materials', 'Production\WorkOrderController::issueMaterials/$1');
