@@ -316,3 +316,19 @@ PENA ERP can be considered production candidate only when:
 - Reversal dokumen lama tanpa `gl_entry_id` tetap didukung; dokumen yang menunjuk GL entry tanpa detail ditolak agar tidak menghasilkan reversal parsial.
 - Tidak ada perubahan database pada patch ini.
 - Detail tersedia di `docs/31-atomic-inventory-gl-posting.md`.
+
+---
+
+## 15. Update 2026-06-22 - Cash/Bank Integrity Hardening
+
+- Cash/Bank entry bernilai wajib memiliki counter GL account dan jurnal GL yang berhasil.
+- Saldo account dikunci saat posting untuk mencegah lost update dari request paralel.
+- Nomor Cash/Bank Entry dan Bank Reconciliation duplikat ditolak dengan pesan service yang jelas.
+- Currency transaksi harus sesuai dengan currency account.
+- Adjustment entry dari bank statement sekarang membuat entry, mencocokkan line, dan memperbarui status import dalam satu transaksi.
+- Statement berstatus reconciled tidak dapat di-match atau diproses ulang.
+- Reconciliation hanya menerima bank entry posted yang belum direconcile dan masih berada pada company/site aktif.
+- Tanggal, saldo akhir, dan referensi reconciliation yang berasal dari statement import diambil dari source record, bukan payload browser.
+- Reconciliation dengan difference nonzero ditolak.
+- Tidak ada perubahan database pada patch ini.
+- Detail tersedia di `docs/32-cash-bank-integrity-hardening.md`.

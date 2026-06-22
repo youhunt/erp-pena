@@ -274,3 +274,30 @@ Gunakan bagian ini untuk mencatat hasil test per tanggal.
 | Date | Bug / Feedback | Severity | Status | Fix Commit / Notes |
 |---|---|---|---|---|
 | 2026-06-22 | Receipt/Delivery tetap commit stock ketika posting GL gagal | Critical | Patched | GL failure now propagates to the outer database transaction; needs UAT |
+
+---
+
+## 16. Cash/Bank Integrity Hardening
+
+| No | Test Case | Expected Result | Result | Notes |
+|---:|---|---|---|---|
+| 1 | Post manual Cash/Bank Entry tanpa counter GL account | Ditolak tanpa perubahan saldo atau entry | NOT TESTED |  |
+| 2 | Post entry dengan currency berbeda dari account | Ditolak tanpa perubahan saldo atau GL | NOT TESTED |  |
+| 3 | Post nomor Cash/Bank Entry yang sama pada company yang sama | Ditolak dengan pesan nomor sudah ada | NOT TESTED |  |
+| 4 | Kirim dua posting keluar paralel pada saldo terbatas | Account row lock mencegah saldo salah atau negatif | NOT TESTED |  |
+| 5 | Buat adjustment dari statement line | Entry, GL, line match, dan import status tersimpan bersama | NOT TESTED |  |
+| 6 | Paksa kegagalan GL saat membuat statement adjustment | Entry, saldo, line match, dan import status seluruhnya rollback | NOT TESTED |  |
+| 7 | Auto-match statement berstatus reconciled | Ditolak tanpa mengubah status atau line | NOT TESTED |  |
+| 8 | Reconcile memakai entry site lain melalui request langsung | Ditolak tanpa membuat reconciliation | NOT TESTED |  |
+| 9 | Reconcile entry cancelled/non-bank/sudah reconciled | Ditolak sebagai entry tidak tersedia | NOT TESTED |  |
+| 10 | Reconcile dari statement sambil memanipulasi date/balance payload | Source statement tetap menjadi nilai authoritative | NOT TESTED |  |
+| 11 | Post reconciliation dengan difference nonzero | Ditolak dan diminta menyelesaikan selisih | NOT TESTED |  |
+| 12 | Post reconciliation yang sama atau entry yang sama dua kali | Request kedua ditolak tanpa perubahan data | NOT TESTED |  |
+
+### Bug Fix Log Cash/Bank
+
+| Date | Bug / Feedback | Severity | Status | Fix Commit / Notes |
+|---|---|---|---|---|
+| 2026-06-22 | Statement adjustment entry dan line match tidak berada dalam satu transaksi | Critical | Patched | Atomic service boundary; needs UAT |
+| 2026-06-22 | Manual Cash/Bank Entry dapat mengubah saldo tanpa jurnal GL | Critical | Patched | Counter account and GL entry are mandatory; needs UAT |
+| 2026-06-22 | Reconciliation dapat diposting dengan selisih dan entry lintas site/status | High | Patched | Strict reconciliation source and zero-difference guard; needs UAT |

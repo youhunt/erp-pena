@@ -87,6 +87,7 @@ class CashBankController extends BaseController
             'direction' => 'required|in_list[in,out]',
             'cash_bank_code' => 'required|max_length[60]',
             'amount' => 'required|numeric|greater_than[0]',
+            'counter_account_no' => 'required|max_length[60]',
         ])) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
@@ -109,18 +110,9 @@ class CashBankController extends BaseController
                 'description' => trim((string) $this->request->getPost('description')),
             ];
             $statementLineId = (int) $this->request->getPost('statement_line_id');
-            $statementImportId = $type === 'bank' && $statementLineId > 0
-                ? $this->validateStatementLineEntrySource($statementLineId, $entryData)
-                : null;
-
-            $entryId = (new CashBankService())->post($entryData, auth()->id());
-            if ($statementImportId !== null) {
-                (new BankStatementLineModel())->update($statementLineId, [
-                    'match_status' => 'matched',
-                    'cash_bank_entry_id' => $entryId,
-                ]);
-                $this->refreshStatementImportStatus($statementImportId);
-            }
+            $entryId = $type === 'bank' && $statementLineId > 0
+                ? (new BankStatementImportService())->postAdjustmentEntry($statementLineId, $entryData, auth()->id())
+                : (new CashBankService())->post($entryData, auth()->id());
         } catch (RuntimeException $exception) {
             return redirect()->back()->withInput()->with('error', $exception->getMessage());
         }
@@ -412,44 +404,6 @@ class CashBankController extends BaseController
             'reference_no' => (string) ($line['reference_no'] ?? ''),
             'description' => (string) ($line['description'] ?? ''),
         ];
-    }
-
-    private function validateStatementLineEntrySource(int $statementLineId, array $entryData): int
-    {
-        $line = (new BankStatementLineModel())
-            ->where('id', $statementLineId)
-            ->where('company_id', (int) $entryData['company_id'])
-            ->where('match_status !=', 'matched')
-            ->first();
-        if ($line === null) {
-            throw new RuntimeException('Bank statement line is not available for adjustment entry.');
-        }
-
-        $signed = round((float) ($line['signed_amount'] ?? 0), 2);
-        $expectedDirection = $signed >= 0 ? 'in' : 'out';
-        $actualDirection = str_ends_with((string) $entryData['entry_type'], '_in') ? 'in' : 'out';
-
-        if ((string) $line['cash_bank_code'] !== (string) $entryData['cash_bank_code']
-            || (string) $line['statement_date'] !== (string) $entryData['entry_date']
-            || $expectedDirection !== $actualDirection
-            || round(abs($signed), 2) !== round((float) $entryData['amount'], 2)) {
-            throw new RuntimeException('Bank entry must keep the same bank, date, direction, and amount as the source statement line.');
-        }
-
-        return (int) $line['bank_statement_import_id'];
-    }
-
-    private function refreshStatementImportStatus(int $statementImportId): void
-    {
-        $lineModel = new BankStatementLineModel();
-        $total = $lineModel->where('bank_statement_import_id', $statementImportId)->countAllResults();
-        $matched = $lineModel->where('bank_statement_import_id', $statementImportId)->where('match_status', 'matched')->countAllResults();
-        $status = $matched < 1 ? 'imported' : ($matched >= $total ? 'matched' : 'partial_matched');
-
-        (new BankStatementImportModel())->update($statementImportId, [
-            'matched_count' => $matched,
-            'status' => $status,
-        ]);
     }
 
     private function statementReconciliationContext(TenantContext $tenant): ?array

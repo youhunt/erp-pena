@@ -5,6 +5,8 @@ namespace App\Services\Finance;
 use App\Models\CashBankAccountModel;
 use App\Models\CashBankEntryModel;
 use App\Services\AuditLogService;
+use App\Services\Support\CashBankIntegrityGuard;
+use App\Services\Support\PostingIntegrityGuard;
 use Config\Database;
 use RuntimeException;
 use Throwable;
@@ -19,50 +21,48 @@ class CashBankService
         $companyId = (int) ($data['company_id'] ?? 0);
         $amount = round((float) ($data['amount'] ?? 0), 2);
         $entryType = (string) ($data['entry_type'] ?? '');
+        $entryNo = trim((string) ($data['entry_no'] ?? ''));
+        $counterAccountNo = trim((string) ($data['counter_account_no'] ?? ''));
 
         if ($companyId < 1) {
             throw new RuntimeException('Company is required.');
         }
-        if (! in_array($entryType, ['cash_in', 'cash_out', 'bank_in', 'bank_out'], true)) {
-            throw new RuntimeException('Invalid cash/bank entry type.');
-        }
-        if ($amount <= 0) {
-            throw new RuntimeException('Amount must be greater than zero.');
-        }
-        (new PeriodCloseService())->assertOpen('cashbank', $companyId, (string) ($data['entry_date'] ?? date('Y-m-d')), ! empty($data['site_id']) ? (int) $data['site_id'] : null);
-
-        $accountModel = new CashBankAccountModel();
-        $accountQuery = $accountModel
-            ->where('company_id', $companyId)
-            ->where('cash_bank_code', (string) ($data['cash_bank_code'] ?? ''))
-            ->where('is_active', 1);
-
-        if (! empty($data['site_id'])) {
-            $accountQuery->groupStart()
-                ->where('site_id', (int) $data['site_id'])
-                ->orWhere('site_id', null)
-                ->groupEnd()
-                ->orderBy('site_id', 'DESC');
-        } else {
-            $accountQuery->where('site_id', null);
-        }
-
-        $account = $accountQuery->first();
-
-        if ($account === null) {
-            throw new RuntimeException('Cash/Bank account not found or inactive.');
-        }
+        $entryDate = (string) ($data['entry_date'] ?? date('Y-m-d'));
+        $cashBankCode = trim((string) ($data['cash_bank_code'] ?? ''));
+        $integrityGuard = new CashBankIntegrityGuard();
+        $integrityGuard->assertEntryPayload($entryNo, $entryType, $amount, $counterAccountNo);
+        $integrityGuard->assertEntryContext($cashBankCode, $entryDate);
+        (new PeriodCloseService())->assertOpen('cashbank', $companyId, $entryDate, ! empty($data['site_id']) ? (int) $data['site_id'] : null);
 
         $db = Database::connect();
         $db->transBegin();
 
         try {
+            $account = $this->lockedAccount(
+                $companyId,
+                ! empty($data['site_id']) ? (int) $data['site_id'] : null,
+                $cashBankCode
+            );
+            if ($account === null) {
+                throw new RuntimeException('Cash/Bank account not found or inactive.');
+            }
+
+            $expectedAccountType = str_starts_with($entryType, 'cash_') ? 'cash' : 'bank';
+            if ((string) ($account['account_type'] ?? '') !== $expectedAccountType) {
+                throw new RuntimeException('Cash/Bank entry type does not match the selected account type.');
+            }
+
+            $currencyCode = strtoupper(trim((string) ($account['currency_code'] ?? 'IDR')));
+            (new CashBankIntegrityGuard())->assertCurrency($currencyCode, (string) ($data['currency_code'] ?? ''));
+            $this->assertUniqueEntryNo($companyId, $entryNo);
+
             $isIn = str_ends_with($entryType, '_in');
             $newBalance = (float) $account['current_balance'] + ($isIn ? $amount : -$amount);
             if ($newBalance < 0) {
                 throw new RuntimeException('Insufficient cash/bank balance.');
             }
 
+            $accountModel = new CashBankAccountModel();
             $accountModel->update((int) $account['id'], ['current_balance' => $newBalance]);
 
             $entryModel = new CashBankEntryModel();
@@ -70,13 +70,13 @@ class CashBankService
                 'company_id' => $companyId,
                 'site_id' => $data['site_id'] ?? null,
                 'cash_bank_account_id' => (int) $account['id'],
-                'entry_no' => trim((string) ($data['entry_no'] ?? 'CB-' . date('Ymd-His'))),
-                'entry_date' => $data['entry_date'] ?? date('Y-m-d'),
+                'entry_no' => $entryNo,
+                'entry_date' => $entryDate,
                 'entry_type' => $entryType,
                 'cash_bank_code' => $account['cash_bank_code'],
-                'currency_code' => $data['currency_code'] ?? $account['currency_code'] ?? 'IDR',
+                'currency_code' => $currencyCode,
                 'amount' => $amount,
-                'counter_account_no' => $data['counter_account_no'] ?? null,
+                'counter_account_no' => $counterAccountNo,
                 'reference_no' => $data['reference_no'] ?? null,
                 'description' => $data['description'] ?? null,
                 'status' => 'posted',
@@ -95,13 +95,14 @@ class CashBankService
                 'company_id' => $companyId,
                 'site_id' => $data['site_id'] ?? null,
                 'entry_no' => $data['entry_no'] ?? null,
-                'entry_date' => $data['entry_date'] ?? date('Y-m-d'),
+                'entry_date' => $entryDate,
                 'entry_type' => $entryType,
                 'amount' => $amount,
                 'cash_bank_gl_account_no' => $cashBankGlAccount !== '' ? $cashBankGlAccount : (new PostingProfileService())->account($companyId, 'cashbank', 'cash_bank', '1100'),
                 'cash_bank_name' => $account['cash_bank_name'] ?? $account['cash_bank_code'],
-                'currency_code' => $data['currency_code'] ?? $account['currency_code'] ?? 'IDR',
+                'currency_code' => $currencyCode,
             ], $entryId, $userId);
+            (new PostingIntegrityGuard())->assertGlEntryForAmount($amount, $glEntryId, 'Cash/Bank entry');
 
             if ($glEntryId !== null) {
                 $entryModel->update($entryId, ['gl_entry_id' => $glEntryId]);
@@ -119,7 +120,7 @@ class CashBankService
                 'user_id' => $userId,
                 'table_name' => 'cash_bank_entries',
                 'record_id' => $entryId,
-                'record_code' => $data['entry_no'] ?? null,
+                'record_code' => $entryNo,
                 'description' => 'Cash/Bank entry posted.',
                 'new_values' => ['entry' => $data, 'new_balance' => $newBalance, 'gl_entry_id' => $glEntryId],
             ]);
@@ -131,14 +132,45 @@ class CashBankService
         }
     }
 
+    private function lockedAccount(int $companyId, ?int $siteId, string $cashBankCode): ?array
+    {
+        $db = Database::connect();
+        $builder = $db->table('cash_bank_accounts')
+            ->where('company_id', $companyId)
+            ->where('cash_bank_code', $cashBankCode)
+            ->where('is_active', 1);
+
+        if ($siteId !== null) {
+            $builder->groupStart()
+                ->where('site_id', $siteId)
+                ->orWhere('site_id', null)
+                ->groupEnd()
+                ->orderBy('site_id', 'DESC');
+        } else {
+            $builder->where('site_id', null);
+        }
+
+        $sql = $builder->limit(1)->getCompiledSelect();
+
+        return $db->query($sql . ' FOR UPDATE')->getRowArray();
+    }
+
+    private function assertUniqueEntryNo(int $companyId, string $entryNo): void
+    {
+        $exists = Database::connect()->table('cash_bank_entries')
+            ->where('company_id', $companyId)
+            ->where('entry_no', $entryNo)
+            ->countAllResults() > 0;
+
+        if ($exists) {
+            throw new RuntimeException('Cash/Bank entry number already exists: ' . $entryNo . '.');
+        }
+    }
+
     private function postGl(array $data, int $entryId, ?int $userId): ?int
     {
         $cashBankAccount = trim((string) ($data['cash_bank_gl_account_no'] ?? ''));
         $counterAccount = trim((string) ($data['counter_account_no'] ?? ''));
-        if ($cashBankAccount === '' || $counterAccount === '') {
-            return null;
-        }
-
         $amount = round((float) $data['amount'], 2);
         $isIn = str_ends_with((string) $data['entry_type'], '_in');
 

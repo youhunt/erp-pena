@@ -129,33 +129,35 @@ class BankStatementImportService
     public function autoMatch(int $importId, int $companyId, ?int $siteId = null, ?int $userId = null): array
     {
         $db = Database::connect();
-        $import = $db->table('bank_statement_imports')
-            ->where('id', $importId)
-            ->where('company_id', $companyId)
-            ->get(1)
-            ->getRowArray();
-
-        if ($import === null) {
-            throw new RuntimeException('Bank statement import was not found.');
-        }
-
-        if ($siteId !== null && ! empty($import['site_id']) && (int) $import['site_id'] !== $siteId) {
-            throw new RuntimeException('Bank statement import does not belong to the active site.');
-        }
-
-        $lines = $db->table('bank_statement_lines')
-            ->where('bank_statement_import_id', $importId)
-            ->where('match_status', 'unmatched')
-            ->orderBy('line_no', 'ASC')
-            ->get()
-            ->getResultArray();
-
         $matched = 0;
         $skipped = 0;
         $now = date('Y-m-d H:i:s');
         $db->transBegin();
 
         try {
+            $importBuilder = $db->table('bank_statement_imports')
+                ->where('id', $importId)
+                ->where('company_id', $companyId)
+                ->where('deleted_at', null);
+            if ($siteId !== null) {
+                $importBuilder->groupStart()->where('site_id', $siteId)->orWhere('site_id', null)->groupEnd();
+            }
+            $importSql = $importBuilder->limit(1)->getCompiledSelect();
+            $import = $db->query($importSql . ' FOR UPDATE')->getRowArray();
+            if ($import === null) {
+                throw new RuntimeException('Bank statement import was not found in the active company/site.');
+            }
+            if (($import['status'] ?? '') === 'reconciled') {
+                throw new RuntimeException('A reconciled bank statement cannot be matched again.');
+            }
+
+            $lineBuilder = $db->table('bank_statement_lines')
+                ->where('bank_statement_import_id', $importId)
+                ->where('match_status', 'unmatched')
+                ->where('deleted_at', null)
+                ->orderBy('line_no', 'ASC');
+            $lines = $db->query($lineBuilder->getCompiledSelect() . ' FOR UPDATE')->getResultArray();
+
             foreach ($lines as $line) {
                 $entry = $this->matchEntry($line, $companyId, $siteId);
                 if ($entry === null) {
@@ -184,17 +186,14 @@ class BankStatementImportService
                 'updated_by' => $userId,
                 'updated_at' => $now,
             ]);
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Bank statement matching transaction failed.');
+            }
+            $db->transCommit();
         } catch (\Throwable $exception) {
             $db->transRollback();
-            throw $exception;
+            throw new RuntimeException($exception->getMessage());
         }
-
-        if ($db->transStatus() === false) {
-            $db->transRollback();
-            throw new RuntimeException('Bank statement matching transaction failed.');
-        }
-
-        $db->transCommit();
 
         (new AuditLogService())->log('cash_bank.bank_statement', 'bank_statement.auto_match', [
             'company_id' => $companyId,
@@ -207,6 +206,135 @@ class BankStatementImportService
         ]);
 
         return ['matched' => $matched, 'skipped' => $skipped];
+    }
+
+    /**
+     * @param array<string, mixed> $entryData
+     */
+    public function postAdjustmentEntry(int $statementLineId, array $entryData, ?int $userId = null): int
+    {
+        $companyId = (int) ($entryData['company_id'] ?? 0);
+        $requestedSiteId = ! empty($entryData['site_id']) ? (int) $entryData['site_id'] : null;
+        if ($companyId < 1 || $statementLineId < 1) {
+            throw new RuntimeException('Company and bank statement line are required.');
+        }
+
+        $db = Database::connect();
+        $db->transBegin();
+
+        try {
+            $line = $this->lockedAdjustmentLine($statementLineId, $companyId, $requestedSiteId);
+            $signed = round((float) ($line['signed_amount'] ?? 0), 2);
+            if ($signed == 0.0) {
+                throw new RuntimeException('A zero-value bank statement line cannot create an adjustment entry.');
+            }
+
+            $expectedDirection = $signed > 0 ? 'in' : 'out';
+            $actualDirection = str_ends_with((string) ($entryData['entry_type'] ?? ''), '_in') ? 'in' : 'out';
+            if ((string) $line['cash_bank_code'] !== trim((string) ($entryData['cash_bank_code'] ?? ''))
+                || (string) $line['statement_date'] !== (string) ($entryData['entry_date'] ?? '')
+                || $expectedDirection !== $actualDirection
+                || round(abs($signed), 2) !== round((float) ($entryData['amount'] ?? 0), 2)) {
+                throw new RuntimeException('Bank entry must keep the same bank, date, direction, and amount as the source statement line.');
+            }
+
+            $entryId = (new CashBankService())->post(array_replace($entryData, [
+                'company_id' => (int) $line['company_id'],
+                'site_id' => ! empty($line['site_id']) ? (int) $line['site_id'] : null,
+                'entry_type' => $signed > 0 ? 'bank_in' : 'bank_out',
+                'cash_bank_code' => (string) $line['cash_bank_code'],
+                'entry_date' => (string) $line['statement_date'],
+                'currency_code' => (string) ($line['currency_code'] ?? 'IDR'),
+                'amount' => abs($signed),
+                'reference_no' => $line['reference_no'] ?? ($entryData['reference_no'] ?? null),
+            ]), $userId);
+
+            $db->table('bank_statement_lines')
+                ->where('id', $statementLineId)
+                ->where('match_status !=', 'matched')
+                ->where('cash_bank_entry_id', null)
+                ->update([
+                    'match_status' => 'matched',
+                    'cash_bank_entry_id' => $entryId,
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+            if ($db->affectedRows() !== 1) {
+                throw new RuntimeException('Bank statement line was matched by another process. Adjustment entry was rolled back.');
+            }
+
+            $importId = (int) $line['bank_statement_import_id'];
+            $this->refreshImportStatus($importId, $userId);
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Bank statement adjustment transaction failed.');
+            }
+            $db->transCommit();
+        } catch (\Throwable $exception) {
+            $db->transRollback();
+            throw new RuntimeException($exception->getMessage());
+        }
+
+        (new AuditLogService())->log('cash_bank.bank_statement', 'bank_statement.adjustment_post', [
+            'company_id' => $line['company_id'] ?? $companyId,
+            'site_id' => $line['site_id'] ?? null,
+            'user_id' => $userId,
+            'table_name' => 'bank_statement_lines',
+            'record_id' => $statementLineId,
+            'record_code' => $line['reference_no'] ?? null,
+            'description' => 'Bank adjustment entry posted and statement line matched atomically.',
+            'new_values' => ['cash_bank_entry_id' => $entryId, 'bank_statement_import_id' => $line['bank_statement_import_id'] ?? null],
+        ]);
+
+        return $entryId;
+    }
+
+    private function lockedAdjustmentLine(int $statementLineId, int $companyId, ?int $siteId): array
+    {
+        $builder = Database::connect()->table('bank_statement_lines l')
+            ->select('l.*, i.status AS import_status')
+            ->join('bank_statement_imports i', 'i.id = l.bank_statement_import_id', 'inner')
+            ->where('l.id', $statementLineId)
+            ->where('l.company_id', $companyId)
+            ->where('l.match_status !=', 'matched')
+            ->where('l.cash_bank_entry_id', null)
+            ->where('l.deleted_at', null)
+            ->where('i.deleted_at', null);
+        if ($siteId !== null) {
+            $builder->groupStart()->where('l.site_id', $siteId)->orWhere('l.site_id', null)->groupEnd();
+        }
+
+        $sql = $builder->limit(1)->getCompiledSelect();
+        $line = Database::connect()->query($sql . ' FOR UPDATE')->getRowArray();
+        if ($line === null) {
+            throw new RuntimeException('Bank statement line is not available for adjustment entry in the active company/site.');
+        }
+        if (($line['import_status'] ?? '') === 'reconciled') {
+            throw new RuntimeException('A reconciled bank statement cannot receive a new adjustment entry.');
+        }
+
+        return $line;
+    }
+
+    private function refreshImportStatus(int $importId, ?int $userId): void
+    {
+        $db = Database::connect();
+        $total = (int) $db->table('bank_statement_lines')
+            ->where('bank_statement_import_id', $importId)
+            ->where('deleted_at', null)
+            ->countAllResults();
+        $matched = (int) $db->table('bank_statement_lines')
+            ->where('bank_statement_import_id', $importId)
+            ->where('match_status', 'matched')
+            ->where('deleted_at', null)
+            ->countAllResults();
+        $status = $matched < 1 ? 'imported' : ($matched >= $total ? 'matched' : 'partial_matched');
+
+        $db->table('bank_statement_imports')->where('id', $importId)->update([
+            'matched_count' => $matched,
+            'status' => $status,
+            'updated_by' => $userId,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
     }
 
     private function bankAccount(int $companyId, ?int $siteId, string $cashBankCode): ?array
@@ -260,14 +388,32 @@ class BankStatementImportService
         $referenceNo = trim((string) ($line['reference_no'] ?? ''));
         if ($referenceNo !== '') {
             $withReference = clone $base;
-            $referenceMatches = $withReference->where('reference_no', $referenceNo)->get()->getResultArray();
-            if (count($referenceMatches) === 1) {
-                return $referenceMatches[0];
+            $referenceMatch = $this->singleUnusedEntry($withReference->where('reference_no', $referenceNo));
+            if ($referenceMatch !== null) {
+                return $referenceMatch;
             }
         }
 
-        $matches = $base->get()->getResultArray();
-        return count($matches) === 1 ? $matches[0] : null;
+        return $this->singleUnusedEntry($base);
+    }
+
+    private function singleUnusedEntry($builder): ?array
+    {
+        $db = Database::connect();
+        $matches = $db->query($builder->getCompiledSelect() . ' FOR UPDATE')->getResultArray();
+        if (count($matches) !== 1) {
+            return null;
+        }
+
+        $entry = $matches[0];
+        $usedBuilder = $db->table('bank_statement_lines')
+            ->select('id')
+            ->where('cash_bank_entry_id', (int) $entry['id'])
+            ->where('match_status', 'matched')
+            ->where('deleted_at', null);
+        $usedRows = $db->query($usedBuilder->getCompiledSelect() . ' FOR UPDATE')->getResultArray();
+
+        return $usedRows === [] ? $entry : null;
     }
 
     /**

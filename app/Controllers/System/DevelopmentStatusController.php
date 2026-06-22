@@ -22,9 +22,9 @@ class DevelopmentStatusController extends BaseController
         $nextCoreBacklog = $this->nextCoreBacklog();
         $uatFocus = $this->uatFocus();
         $overall = [
-            'internal_development' => 70,
+            'internal_development' => 72,
             'internal_demo' => 65,
-            'uat_readiness' => 68,
+            'uat_readiness' => 70,
             'production_readiness' => 45,
         ];
 
@@ -57,6 +57,7 @@ class DevelopmentStatusController extends BaseController
             ['area' => 'Sales Delivery', 'status' => 'UAT Ready', 'readiness' => 75, 'notes' => 'Stock-out, reversal guard, and SO delivered/outstanding recalculation.'],
             ['area' => 'AR Invoice', 'status' => 'Core Flow Ready', 'readiness' => 65, 'notes' => 'Delivery to invoice and receivable open; cancellation UAT required.'],
             ['area' => 'AR Receipt', 'status' => 'Core Flow Ready', 'readiness' => 60, 'notes' => 'Receipt posting with auto ARR number, cash/bank entry, and balance update.'],
+            ['area' => 'Cash / Bank', 'status' => 'UAT Ready', 'readiness' => 70, 'notes' => 'Atomic GL posting, statement adjustment, matching, and zero-difference reconciliation guards.'],
             ['area' => 'Inventory Audit', 'status' => 'Core Flow Ready', 'readiness' => 70, 'notes' => 'Stock card qty/value in-out and running value.'],
             ['area' => 'GL Validation', 'status' => 'Core Flow Ready', 'readiness' => 65, 'notes' => 'Debit/credit validation and trial balance summary.'],
             ['area' => 'Production Core', 'status' => 'UAT Ready', 'readiness' => 65, 'notes' => 'BOM, Work Center, Routing, Work Order import/edit and WO posting guard.'],
@@ -72,7 +73,7 @@ class DevelopmentStatusController extends BaseController
             ['flow' => 'Purchasing E2E', 'steps' => 'PO → Receipt → Stock Card → AP Invoice → AP Payment → GL', 'entry' => site_url('purchase/orders'), 'audit' => site_url('gl/entries'), 'status' => 'Primary UAT'],
             ['flow' => 'Sales E2E', 'steps' => 'SO → Delivery → Stock Card → AR Invoice → AR Receipt → GL', 'entry' => site_url('sales/orders'), 'audit' => site_url('inventory/stock-card'), 'status' => 'Primary UAT'],
             ['flow' => 'Inventory Control', 'steps' => 'Stock Adjustment → Stock Card → Stock Balance → GL', 'entry' => site_url('inventory/stock-adjustment'), 'audit' => site_url('inventory/stock-card'), 'status' => 'Secondary UAT'],
-            ['flow' => 'Cash / Bank', 'steps' => 'Cash/Bank Entry → GL → Bank Statement → Reconciliation', 'entry' => site_url('cash-bank/accounts'), 'audit' => site_url('cash-bank/reconciliations'), 'status' => 'Next Hardening'],
+            ['flow' => 'Cash / Bank', 'steps' => 'Cash/Bank Entry → GL → Bank Statement → Reconciliation', 'entry' => site_url('cash-bank/accounts'), 'audit' => site_url('cash-bank/reconciliations'), 'status' => 'UAT Ready'],
             ['flow' => 'Production Core', 'steps' => 'BOM → Routing → Work Order → Issue Material → Receive Finished Good → Stock Card', 'entry' => site_url('production/work-orders'), 'audit' => site_url('inventory/stock-card'), 'status' => 'UAT Ready'],
         ];
     }
@@ -93,9 +94,9 @@ class DevelopmentStatusController extends BaseController
         return [
             ['priority' => 1, 'item' => 'Run Purchasing E2E UAT', 'target' => 'Verify PO receipt stock-in, AP payable, payment, cash/bank, and GL.'],
             ['priority' => 2, 'item' => 'Run Sales E2E UAT', 'target' => 'Verify SO delivery stock-out, AR receivable, receipt, cash/bank, and GL.'],
-            ['priority' => 3, 'item' => 'Harden Cash/Bank audit', 'target' => 'Improve reconciliation and cash/bank reporting after E2E flow passes.'],
-            ['priority' => 4, 'item' => 'Export audit reports', 'target' => 'Add export for Stock Card and GL validation when UAT data is stable.'],
-            ['priority' => 5, 'item' => 'Non-admin permission UAT', 'target' => 'Verify finance, sales, purchase, inventory, and production role restrictions.'],
+            ['priority' => 3, 'item' => 'Run Cash/Bank UAT', 'target' => 'Verify entry, GL, statement adjustment, auto-match, and zero-difference reconciliation.'],
+            ['priority' => 4, 'item' => 'Non-admin permission UAT', 'target' => 'Verify finance, sales, purchase, inventory, and production role restrictions.'],
+            ['priority' => 5, 'item' => 'Expand integration tests', 'target' => 'Cover transaction rollback and concurrent posting against a test database.'],
         ];
     }
 
