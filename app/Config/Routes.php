@@ -181,6 +181,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('recurring', 'Finance\GeneralLedgerController::recurring');
         $routes->get('entries', 'Finance\GeneralLedgerController::entries');
         $routes->get('entries/export', 'System\CoreAuditExportController::glEntries');
+        $routes->get('entries/unbalanced-export', 'System\GlExceptionExportController::unbalanced');
         $routes->get('entries/new', 'Finance\GeneralLedgerController::newEntry');
         $routes->post('entries', 'Finance\GeneralLedgerController::storeEntry');
         $routes->get('entries/(:num)', 'Finance\GeneralLedgerController::showEntry/$1');
@@ -191,9 +192,12 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     });
 
     $routes->get('period-close', 'Finance\PeriodCloseController::index');
+    $routes->get('period-close/export', 'System\PeriodCloseAuditExportController::index');
+    $routes->get('period-close/export/(:segment)', 'System\PeriodCloseAuditExportController::index/$1');
     $routes->get('period-close/new', 'Finance\PeriodCloseController::create');
     $routes->get('period-close/new/(:segment)', 'Finance\PeriodCloseController::create/$1');
     $routes->post('period-close', 'Finance\PeriodCloseController::store');
+    $routes->get('period-close/(:num)/export', 'System\PeriodCloseAuditExportController::show/$1');
     $routes->get('period-close/(:num)', 'Finance\PeriodCloseController::show/$1');
     $routes->post('period-close/(:num)/reopen', 'Finance\PeriodCloseController::reopen/$1');
     $routes->get('period-close/(:segment)', 'Finance\PeriodCloseController::index/$1');
