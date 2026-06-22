@@ -1,6 +1,7 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php $exportUrl = site_url('period-close/export' . ($module ? '/' . $module : '')); ?>
 <div class="card">
     <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
@@ -8,9 +9,12 @@
                 <h4 class="card-title mb-1"><?= esc($module ? ($modules[$module] ?? $module) . ' Period Close' : 'Period Close') ?></h4>
                 <p class="text-muted mb-0">Closed periods prevent new postings in the selected module.</p>
             </div>
-            <a href="<?= site_url('period-close/new' . ($module ? '/' . $module : '')) ?>" class="btn btn-primary">
-                <i class="bx bx-lock me-1"></i> Close Period
-            </a>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="<?= esc($exportUrl) ?>" class="btn btn-outline-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
+                <a href="<?= site_url('period-close/new' . ($module ? '/' . $module : '')) ?>" class="btn btn-primary">
+                    <i class="bx bx-lock me-1"></i> Close Period
+                </a>
+            </div>
         </div>
 
         <div class="table-responsive">
