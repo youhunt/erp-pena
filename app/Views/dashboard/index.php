@@ -12,25 +12,45 @@
     .erp-quick-audit-card,
     .dashboard-metric-card,
     .dashboard-queue-card,
-    .dashboard-financial-card {
+    .dashboard-financial-card,
+    .dashboard-core-card {
         border: 0;
         box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
     }
     .dashboard-section-title,
     .dashboard-metric-value,
     .dashboard-financial-value,
-    .erp-quick-audit-title {
+    .erp-quick-audit-title,
+    .dashboard-core-title {
         color: #172033 !important;
         font-weight: 700;
     }
     .dashboard-metric-label,
-    .dashboard-financial-label {
+    .dashboard-financial-label,
+    .dashboard-core-label {
         color: #5f6c80 !important;
         letter-spacing: .01em;
     }
     .erp-quick-audit-card .btn {
         border-width: 1.5px;
         font-weight: 600;
+    }
+    .dashboard-table-sm td,
+    .dashboard-table-sm th {
+        padding: .65rem .75rem;
+        vertical-align: middle;
+    }
+    .dashboard-trend-bar {
+        min-width: 64px;
+        height: 7px;
+        background: #edf1f7;
+        border-radius: 999px;
+        overflow: hidden;
+    }
+    .dashboard-trend-fill {
+        height: 7px;
+        border-radius: 999px;
+        background: currentColor;
     }
 </style>
 
@@ -169,6 +189,227 @@
             </div>
         </section>
     <?php endif ?>
+
+    <?php if (! empty($agingShortcuts)): ?>
+        <section class="dashboard-section dashboard-section-aging mt-3">
+            <div class="dashboard-section-header">
+                <div>
+                    <h5 class="dashboard-section-title mb-1">Aging Shortcuts</h5>
+                    <p class="dashboard-section-subtitle text-muted mb-0">Shortcut AR/AP aging dengan nilai outstanding dan jumlah invoice open.</p>
+                </div>
+            </div>
+            <div class="row g-3">
+                <?php foreach ($agingShortcuts as $shortcut): ?>
+                    <?php $tone = $shortcut['tone'] ?? 'primary'; ?>
+                    <div class="col-xl-6">
+                        <a href="<?= site_url($shortcut['route'] ?? 'dashboard') ?>" class="text-reset">
+                            <div class="card dashboard-core-card h-100">
+                                <div class="card-body p-4">
+                                    <div class="d-flex align-items-start justify-content-between gap-3">
+                                        <div>
+                                            <p class="dashboard-core-label small mb-1"><?= esc($shortcut['description'] ?? '-') ?></p>
+                                            <h5 class="dashboard-core-title mb-2"><?= esc($shortcut['label'] ?? '-') ?></h5>
+                                            <h4 class="mb-0 text-<?= esc($tone) ?>">Rp <?= esc(number_format((float) ($shortcut['amount'] ?? 0), 0, ',', '.')) ?></h4>
+                                        </div>
+                                        <div class="text-end">
+                                            <span class="avatar-title rounded bg-<?= esc($tone) ?> bg-soft text-<?= esc($tone) ?> font-size-24 mb-2">
+                                                <i class="<?= esc($shortcut['icon'] ?? 'bx bx-file') ?>"></i>
+                                            </span>
+                                            <span class="badge bg-<?= esc($tone) ?>"><?= esc(number_format((float) ($shortcut['count'] ?? 0), 0, ',', '.')) ?> invoice</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                <?php endforeach ?>
+            </div>
+        </section>
+    <?php endif ?>
+
+    <section class="dashboard-section dashboard-section-core-detail mt-3">
+        <div class="dashboard-section-header">
+            <div>
+                <h5 class="dashboard-section-title mb-1">ERP Core Exception Monitor</h5>
+                <p class="dashboard-section-subtitle text-muted mb-0">Invoice tertinggi yang pending, stock alert prioritas, dan jurnal tidak balance.</p>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-xl-6">
+                <div class="card dashboard-core-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="card-title mb-0 fw-bold text-dark">Top Pending Invoices</h4>
+                            <a href="<?= site_url('ar/aging') ?>" class="btn btn-sm btn-outline-primary">AR/AP Aging</a>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table dashboard-table-sm table-nowrap align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>Invoice</th>
+                                        <th>Partner</th>
+                                        <th class="text-end">Outstanding</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($topPendingInvoices ?? [] as $invoice): ?>
+                                        <tr>
+                                            <td><span class="badge bg-<?= ($invoice['type'] ?? '') === 'AR' ? 'primary' : 'danger' ?>"><?= esc($invoice['type'] ?? '-') ?></span></td>
+                                            <td>
+                                                <a href="<?= site_url($invoice['route'] ?? 'dashboard') ?>" class="fw-semibold text-reset"><?= esc($invoice['document_no'] ?? '-') ?></a>
+                                                <div class="text-muted small">Due: <?= esc($invoice['due_date'] ?? '-') ?></div>
+                                            </td>
+                                            <td><?= esc($invoice['partner_name'] ?? '-') ?></td>
+                                            <td class="text-end fw-semibold">Rp <?= esc(number_format((float) ($invoice['amount'] ?? 0), 0, ',', '.')) ?></td>
+                                        </tr>
+                                    <?php endforeach ?>
+                                    <?php if (empty($topPendingInvoices)): ?>
+                                        <tr><td colspan="4" class="text-center text-muted py-4">No pending invoice found.</td></tr>
+                                    <?php endif ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-6">
+                <div class="card dashboard-core-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="card-title mb-0 fw-bold text-dark">Top Stock Alerts</h4>
+                            <a href="<?= site_url('inventory/stock-alerts') ?>" class="btn btn-sm btn-outline-danger">Open Alert</a>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table dashboard-table-sm table-nowrap align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Item</th>
+                                        <th class="text-end">Available</th>
+                                        <th class="text-end">Threshold</th>
+                                        <th class="text-end">Shortage</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($topStockAlerts ?? [] as $stock): ?>
+                                        <tr>
+                                            <td>
+                                                <a href="<?= site_url($stock['route'] ?? 'dashboard') ?>" class="fw-semibold text-reset"><?= esc($stock['item_code'] ?? '-') ?></a>
+                                                <div class="text-muted small"><?= esc($stock['item_name'] ?? '-') ?></div>
+                                            </td>
+                                            <td class="text-end"><?= esc(number_format((float) ($stock['qty_available'] ?? 0), 2, ',', '.')) ?></td>
+                                            <td class="text-end"><?= esc(number_format((float) ($stock['threshold'] ?? 0), 2, ',', '.')) ?></td>
+                                            <td class="text-end text-danger fw-semibold"><?= esc(number_format((float) ($stock['shortage'] ?? 0), 2, ',', '.')) ?></td>
+                                        </tr>
+                                    <?php endforeach ?>
+                                    <?php if (empty($topStockAlerts)): ?>
+                                        <tr><td colspan="4" class="text-center text-muted py-4">No stock alert found.</td></tr>
+                                    <?php endif ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-7">
+                <div class="card dashboard-core-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="card-title mb-0 fw-bold text-dark">Monthly Sales/Purchase Trend</h4>
+                            <span class="badge bg-info bg-soft text-info">Last 6 months</span>
+                        </div>
+                        <?php
+                        $trendMax = 0.0;
+                        foreach ($monthlyTrend ?? [] as $trend) {
+                            $trendMax = max($trendMax, (float) ($trend['sales'] ?? 0), (float) ($trend['purchase'] ?? 0));
+                        }
+                        ?>
+                        <div class="table-responsive">
+                            <table class="table dashboard-table-sm table-nowrap align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Month</th>
+                                        <th>Sales</th>
+                                        <th>Purchase</th>
+                                        <th class="text-end">Net</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($monthlyTrend ?? [] as $trend): ?>
+                                        <?php
+                                        $sales = (float) ($trend['sales'] ?? 0);
+                                        $purchase = (float) ($trend['purchase'] ?? 0);
+                                        $salesPct = $trendMax > 0 ? max(4, min(100, ($sales / $trendMax) * 100)) : 0;
+                                        $purchasePct = $trendMax > 0 ? max(4, min(100, ($purchase / $trendMax) * 100)) : 0;
+                                        ?>
+                                        <tr>
+                                            <td class="fw-semibold"><?= esc($trend['month'] ?? '-') ?></td>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <span class="text-primary fw-semibold">Rp <?= esc(number_format($sales, 0, ',', '.')) ?></span>
+                                                    <div class="dashboard-trend-bar flex-grow-1 text-primary"><div class="dashboard-trend-fill" style="width: <?= esc((string) $salesPct) ?>%"></div></div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <span class="text-danger fw-semibold">Rp <?= esc(number_format($purchase, 0, ',', '.')) ?></span>
+                                                    <div class="dashboard-trend-bar flex-grow-1 text-danger"><div class="dashboard-trend-fill" style="width: <?= esc((string) $purchasePct) ?>%"></div></div>
+                                                </div>
+                                            </td>
+                                            <td class="text-end fw-semibold <?= ((float) ($trend['net'] ?? 0)) < 0 ? 'text-danger' : 'text-success' ?>">Rp <?= esc(number_format((float) ($trend['net'] ?? 0), 0, ',', '.')) ?></td>
+                                        </tr>
+                                    <?php endforeach ?>
+                                    <?php if (empty($monthlyTrend)): ?>
+                                        <tr><td colspan="4" class="text-center text-muted py-4">No trend data found.</td></tr>
+                                    <?php endif ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-xl-5">
+                <div class="card dashboard-core-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="card-title mb-0 fw-bold text-dark">GL Unbalanced Detail</h4>
+                            <a href="<?= site_url('gl/entries') ?>" class="btn btn-sm btn-outline-warning">Open GL</a>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table dashboard-table-sm table-nowrap align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Entry</th>
+                                        <th>Date</th>
+                                        <th class="text-end">Variance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($glUnbalancedEntries ?? [] as $entry): ?>
+                                        <tr>
+                                            <td>
+                                                <a href="<?= site_url($entry['route'] ?? 'dashboard') ?>" class="fw-semibold text-reset"><?= esc($entry['entry_no'] ?? '-') ?></a>
+                                                <div class="text-muted small">D <?= esc(number_format((float) ($entry['debit'] ?? 0), 0, ',', '.')) ?> / C <?= esc(number_format((float) ($entry['credit'] ?? 0), 0, ',', '.')) ?></div>
+                                            </td>
+                                            <td><?= esc($entry['entry_date'] ?? '-') ?></td>
+                                            <td class="text-end text-warning fw-semibold">Rp <?= esc(number_format((float) ($entry['variance'] ?? 0), 0, ',', '.')) ?></td>
+                                        </tr>
+                                    <?php endforeach ?>
+                                    <?php if (empty($glUnbalancedEntries)): ?>
+                                        <tr><td colspan="3" class="text-center text-muted py-4">No unbalanced GL entry found.</td></tr>
+                                    <?php endif ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <?php if (! empty($workflowQueues)): ?>
         <section class="dashboard-section dashboard-section-workflow mt-3">
