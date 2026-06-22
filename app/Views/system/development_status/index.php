@@ -16,6 +16,7 @@
                 <p class="text-muted mb-0">Latest development journey, module readiness, and UAT focus.</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
+                <a href="<?= site_url('system/development-status?export=xlsx') ?>" class="btn btn-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
                 <a href="<?= site_url('purchase/orders') ?>" class="btn btn-outline-primary">Purchase Flow</a>
                 <a href="<?= site_url('sales/orders') ?>" class="btn btn-outline-primary">Sales Flow</a>
                 <a href="<?= site_url('gl/entries') ?>" class="btn btn-outline-primary">GL Validation</a>
