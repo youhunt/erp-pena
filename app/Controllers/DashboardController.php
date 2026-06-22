@@ -38,6 +38,7 @@ class DashboardController extends BaseController
         $metricMoney = ['Total Sales', 'Total Purchase', 'Total Invoice'];
         $pendingWork = [];
         $workflowQueues = [];
+        $financialSnapshot = [];
 
         if ($hasTenantAccess) {
             $db = Database::connect();
@@ -68,6 +69,49 @@ class DashboardController extends BaseController
                 + $this->countTenantRows('purchase_orders', $tenant, ['document_status' => 'submitted']);
             $metrics['Pending OCR Review'] = $this->countOcrPendingReview($tenant);
             $metrics['Stock Alert'] = $this->countStockAlerts($tenant);
+
+            $financialSnapshot = [
+                [
+                    'label' => 'AR Outstanding',
+                    'value' => $this->sumOpenAmount('sales_invoices', $tenant),
+                    'route' => 'ar/aging',
+                    'icon' => 'bx bx-trending-up',
+                    'tone' => 'primary',
+                    'money' => true,
+                ],
+                [
+                    'label' => 'AP Outstanding',
+                    'value' => $this->sumOpenAmount('purchase_invoices', $tenant),
+                    'route' => 'ap/aging',
+                    'icon' => 'bx bx-trending-down',
+                    'tone' => 'danger',
+                    'money' => true,
+                ],
+                [
+                    'label' => 'Cash/Bank Balance',
+                    'value' => $this->sumCashBankBalance($tenant),
+                    'route' => 'cash-bank/accounts',
+                    'icon' => 'bx bx-wallet',
+                    'tone' => 'success',
+                    'money' => true,
+                ],
+                [
+                    'label' => 'Inventory Value',
+                    'value' => $this->sumInventoryValue($tenant),
+                    'route' => 'inventory/stock-balances',
+                    'icon' => 'bx bx-package',
+                    'tone' => 'info',
+                    'money' => true,
+                ],
+                [
+                    'label' => 'Unbalanced GL',
+                    'value' => $this->countUnbalancedGlEntries($tenant),
+                    'route' => 'gl/entries',
+                    'icon' => 'bx bx-error-circle',
+                    'tone' => 'warning',
+                    'money' => false,
+                ],
+            ];
 
             $pendingWork = [
                 [
@@ -151,6 +195,7 @@ class DashboardController extends BaseController
             'metricMoney' => $metricMoney,
             'pendingWork' => $pendingWork,
             'workflowQueues' => $workflowQueues,
+            'financialSnapshot' => $financialSnapshot,
         ]);
     }
 
@@ -160,7 +205,7 @@ class DashboardController extends BaseController
     private function sumTenantAmount(string $table, string $field, TenantContext $tenant, array $excludedStatuses = []): float
     {
         $db = Database::connect();
-        if (! $db->tableExists($table)) {
+        if (! $db->tableExists($table) || ! $db->fieldExists($field, $table)) {
             return 0.0;
         }
 
@@ -214,19 +259,22 @@ class DashboardController extends BaseController
         if (! $db->tableExists($headerTable) || ! $db->tableExists($lineTable)) {
             return 0;
         }
+        if (! $db->fieldExists('qty_outstanding', $lineTable) || ! $db->fieldExists($lineForeignKey, $lineTable)) {
+            return 0;
+        }
 
         $builder = $db->table($headerTable . ' h')
             ->select('COUNT(DISTINCT h.id) AS total')
             ->join($lineTable . ' l', 'l.' . $lineForeignKey . ' = h.id', 'inner')
             ->where('l.qty_outstanding >', 0);
 
-        if ($statuses !== []) {
+        if ($statuses !== [] && $db->fieldExists('document_status', $headerTable)) {
             $builder->whereIn('h.document_status', $statuses);
         }
-        if ($tenant->activeCompanyId() !== null) {
+        if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', $headerTable)) {
             $builder->where('h.company_id', $tenant->activeCompanyId());
         }
-        if ($tenant->activeSiteId() !== null) {
+        if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', $headerTable)) {
             $builder->where('h.site_id', $tenant->activeSiteId());
         }
         if ($db->fieldExists('deleted_at', $headerTable)) {
@@ -243,14 +291,101 @@ class DashboardController extends BaseController
             return 0;
         }
 
-        $builder = $db->table($table)
-            ->where('outstanding_amount >', 0);
+        $builder = $db->table($table);
+        if ($db->fieldExists('outstanding_amount', $table)) {
+            $builder->where('outstanding_amount >', 0);
+        }
         $this->applyTenantFilters($builder, $table, $tenant);
         if ($db->fieldExists('deleted_at', $table)) {
             $builder->where('deleted_at', null);
         }
         if ($db->fieldExists('status', $table)) {
             $builder->whereIn('status', ['open', 'partial']);
+        }
+
+        return $builder->countAllResults();
+    }
+
+    private function sumOpenAmount(string $table, TenantContext $tenant): float
+    {
+        $db = Database::connect();
+        if (! $db->tableExists($table)) {
+            return 0.0;
+        }
+
+        $amountField = $db->fieldExists('outstanding_amount', $table)
+            ? 'outstanding_amount'
+            : ($db->fieldExists('total_amount', $table) ? 'total_amount' : null);
+
+        if ($amountField === null) {
+            return 0.0;
+        }
+
+        $builder = $db->table($table)->selectSum($amountField, 'amount');
+        if ($amountField === 'outstanding_amount') {
+            $builder->where('outstanding_amount >', 0);
+        }
+        if ($db->fieldExists('status', $table)) {
+            $builder->whereIn('status', ['open', 'partial']);
+        }
+        $this->applyTenantFilters($builder, $table, $tenant);
+        if ($db->fieldExists('deleted_at', $table)) {
+            $builder->where('deleted_at', null);
+        }
+
+        return (float) ($builder->get()->getRowArray()['amount'] ?? 0);
+    }
+
+    private function sumCashBankBalance(TenantContext $tenant): float
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('cash_bank_accounts') || ! $db->fieldExists('current_balance', 'cash_bank_accounts')) {
+            return 0.0;
+        }
+
+        $builder = $db->table('cash_bank_accounts')->selectSum('current_balance', 'amount');
+        $this->applyTenantFilters($builder, 'cash_bank_accounts', $tenant);
+        if ($db->fieldExists('deleted_at', 'cash_bank_accounts')) {
+            $builder->where('deleted_at', null);
+        }
+        if ($db->fieldExists('is_active', 'cash_bank_accounts')) {
+            $builder->where('is_active', 1);
+        }
+
+        return (float) ($builder->get()->getRowArray()['amount'] ?? 0);
+    }
+
+    private function sumInventoryValue(TenantContext $tenant): float
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('inventory_stock_balances') || ! $db->fieldExists('stock_value', 'inventory_stock_balances')) {
+            return 0.0;
+        }
+
+        $builder = $db->table('inventory_stock_balances')->selectSum('stock_value', 'amount');
+        $this->applyTenantFilters($builder, 'inventory_stock_balances', $tenant);
+
+        return (float) ($builder->get()->getRowArray()['amount'] ?? 0);
+    }
+
+    private function countUnbalancedGlEntries(TenantContext $tenant): int
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('gl_entries')) {
+            return 0;
+        }
+        if (! $db->fieldExists('total_debit', 'gl_entries') || ! $db->fieldExists('total_credit', 'gl_entries')) {
+            return 0;
+        }
+
+        $builder = $db->table('gl_entries')
+            ->where('ABS(COALESCE(total_debit, 0) - COALESCE(total_credit, 0)) >', 0.01, false);
+        $this->applyTenantFilters($builder, 'gl_entries', $tenant);
+        if ($db->fieldExists('deleted_at', 'gl_entries')) {
+            $builder->where('deleted_at', null);
+        }
+        if ($db->fieldExists('status', 'gl_entries')) {
+            $builder->whereNotIn('status', ['cancelled', 'void']);
         }
 
         return $builder->countAllResults();
