@@ -1,6 +1,7 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php $exportUrl = current_url() . '?' . http_build_query(['as_of' => $asOf, 'export' => 'xlsx']); ?>
 <div class="card">
     <div class="card-body">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
@@ -14,6 +15,7 @@
                     <input type="date" name="as_of" value="<?= esc($asOf) ?>" class="form-control">
                 </div>
                 <button type="submit" class="btn btn-primary"><i class="bx bx-refresh me-1"></i> Refresh</button>
+                <a href="<?= esc($exportUrl) ?>" class="btn btn-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
             </form>
         </div>
 
