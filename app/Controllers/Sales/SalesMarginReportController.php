@@ -6,6 +6,13 @@ use App\Controllers\BaseController;
 use App\Services\TenantContext;
 use CodeIgniter\HTTP\ResponseInterface;
 use Config\Database;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class SalesMarginReportController extends BaseController
 {
@@ -21,8 +28,8 @@ class SalesMarginReportController extends BaseController
             $rows = array_values(array_filter($rows, static fn (array $row): bool => ($row['margin_status'] ?? '') === $status));
         }
 
-        if ((string) $this->request->getGet('export') === 'csv') {
-            return $this->csvResponse($rows, $dateFrom, $dateTo, $status);
+        if (in_array((string) $this->request->getGet('export'), ['xlsx', 'excel'], true)) {
+            return $this->xlsxResponse($rows, $dateFrom, $dateTo, $status);
         }
 
         return view('sales/reports/margins', [
@@ -119,10 +126,13 @@ class SalesMarginReportController extends BaseController
         return $summary;
     }
 
-    private function csvResponse(array $rows, string $dateFrom, string $dateTo, string $status): ResponseInterface
+    private function xlsxResponse(array $rows, string $dateFrom, string $dateTo, string $status): ResponseInterface
     {
-        $handle = fopen('php://temp', 'rb+');
-        fputcsv($handle, [
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Sales Margin');
+
+        $headers = [
             'Invoice Date',
             'Invoice No',
             'Invoice Status',
@@ -138,38 +148,70 @@ class SalesMarginReportController extends BaseController
             'Margin Status',
             'Invoice GL Entry ID',
             'COGS GL Entry ID',
-        ]);
+        ];
 
-        foreach ($rows as $row) {
-            fputcsv($handle, [
-                $row['invoice_date'] ?? '',
-                $row['invoice_no'] ?? '',
-                $row['invoice_status'] ?? '',
-                $row['customer_code'] ?? '',
-                $row['customer_name'] ?? '',
-                $row['so_no'] ?? '',
-                $row['linked_delivery_no'] ?? $row['delivery_no'] ?? '',
-                $row['delivery_status'] ?? '',
-                number_format((float) ($row['invoice_amount'] ?? 0), 2, '.', ''),
-                number_format((float) ($row['cogs_amount'] ?? 0), 2, '.', ''),
-                number_format((float) ($row['gross_profit_loss'] ?? 0), 2, '.', ''),
-                $row['gross_margin_pct'] !== null ? number_format((float) $row['gross_margin_pct'], 2, '.', '') : '',
-                $row['margin_status'] ?? '',
-                $row['invoice_gl_entry_id'] ?? '',
-                $row['cogs_gl_entry_id'] ?? '',
-            ]);
+        $sheet->setCellValue('A1', 'Sales Margin Report');
+        $sheet->setCellValue('A2', 'Period');
+        $sheet->setCellValue('B2', $dateFrom . ' to ' . $dateTo);
+        $sheet->setCellValue('A3', 'Filter');
+        $sheet->setCellValue('B3', $status !== '' ? $status : 'All');
+
+        foreach ($headers as $index => $header) {
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($index + 1) . '5', $header);
         }
 
-        rewind($handle);
-        $csv = stream_get_contents($handle) ?: '';
-        fclose($handle);
+        $rowNumber = 6;
+        foreach ($rows as $row) {
+            $sheet->setCellValue('A' . $rowNumber, $row['invoice_date'] ?? '');
+            $sheet->setCellValue('B' . $rowNumber, $row['invoice_no'] ?? '');
+            $sheet->setCellValue('C' . $rowNumber, $row['invoice_status'] ?? '');
+            $sheet->setCellValue('D' . $rowNumber, $row['customer_code'] ?? '');
+            $sheet->setCellValue('E' . $rowNumber, $row['customer_name'] ?? '');
+            $sheet->setCellValue('F' . $rowNumber, $row['so_no'] ?? '');
+            $sheet->setCellValue('G' . $rowNumber, $row['linked_delivery_no'] ?? $row['delivery_no'] ?? '');
+            $sheet->setCellValue('H' . $rowNumber, $row['delivery_status'] ?? '');
+            $sheet->setCellValue('I' . $rowNumber, (float) ($row['invoice_amount'] ?? 0));
+            $sheet->setCellValue('J' . $rowNumber, (float) ($row['cogs_amount'] ?? 0));
+            $sheet->setCellValue('K' . $rowNumber, (float) ($row['gross_profit_loss'] ?? 0));
+            $sheet->setCellValue('L' . $rowNumber, $row['gross_margin_pct'] !== null ? ((float) $row['gross_margin_pct']) / 100 : null);
+            $sheet->setCellValue('M' . $rowNumber, $row['margin_status'] ?? '');
+            $sheet->setCellValue('N' . $rowNumber, $row['invoice_gl_entry_id'] ?? '');
+            $sheet->setCellValue('O' . $rowNumber, $row['cogs_gl_entry_id'] ?? '');
+            $rowNumber++;
+        }
+
+        $lastRow = max(5, $rowNumber - 1);
+        $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
+
+        $sheet->mergeCells('A1:O1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        $sheet->getStyle('A5:' . $lastColumn . '5')->getFont()->setBold(true);
+        $sheet->getStyle('A5:' . $lastColumn . '5')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFEFEFEF');
+        $sheet->getStyle('A5:' . $lastColumn . $lastRow)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('FFD9D9D9');
+        $sheet->getStyle('I6:K' . $lastRow)->getNumberFormat()->setFormatCode('#,##0.00');
+        $sheet->getStyle('L6:L' . $lastRow)->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_PERCENTAGE_00);
+        $sheet->getStyle('I6:L' . $lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        $sheet->freezePane('A6');
+        $sheet->setAutoFilter('A5:' . $lastColumn . $lastRow);
+
+        for ($col = 1; $col <= count($headers); $col++) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($col))->setAutoSize(true);
+        }
 
         $safeStatus = $status !== '' ? '_' . preg_replace('/[^A-Za-z0-9_-]+/', '_', $status) : '';
-        $filename = 'sales_margin_report_' . $dateFrom . '_to_' . $dateTo . $safeStatus . '.csv';
+        $filename = 'sales_margin_report_' . $dateFrom . '_to_' . $dateTo . $safeStatus . '.xlsx';
+        $path = tempnam(sys_get_temp_dir(), 'sales_margin_');
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($path);
+        $body = file_get_contents($path) ?: '';
+        @unlink($path);
+        $spreadsheet->disconnectWorksheets();
 
         return $this->response
-            ->setHeader('Content-Type', 'text/csv; charset=UTF-8')
+            ->setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             ->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
-            ->setBody($csv);
+            ->setHeader('Cache-Control', 'max-age=0')
+            ->setBody($body);
     }
 }
