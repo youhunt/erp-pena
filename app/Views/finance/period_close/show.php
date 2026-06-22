@@ -24,6 +24,7 @@
         <table class="table table-bordered mb-4">
             <tbody>
                 <tr><th style="width:220px;">Status</th><td><?= esc($period['status']) ?></td></tr>
+                <tr><th>Scope</th><td><?= empty($period['site_id']) ? 'All Sites' : 'Site #' . esc($period['site_id']) ?></td></tr>
                 <tr><th>Closed At</th><td><?= esc($period['closed_at'] ?? '-') ?></td></tr>
                 <tr><th>Reopened At</th><td><?= esc($period['reopened_at'] ?? '-') ?></td></tr>
                 <tr><th>Notes</th><td><?= esc($period['notes'] ?: '-') ?></td></tr>
@@ -31,7 +32,7 @@
         </table>
 
         <div class="d-flex flex-wrap gap-2">
-            <?php if (($period['status'] ?? '') === 'closed'): ?>
+            <?php if (($period['status'] ?? '') === 'closed' && ($canReopen ?? false)): ?>
                 <form method="post" action="<?= site_url('period-close/' . $period['id'] . '/reopen') ?>">
                     <?= csrf_field() ?>
                     <button type="submit" class="btn btn-warning" onclick="return confirm('Reopen this period?')"><i class="bx bx-lock-open me-1"></i> Reopen Period</button>

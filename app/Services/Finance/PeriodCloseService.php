@@ -4,8 +4,11 @@ namespace App\Services\Finance;
 
 use App\Models\PeriodCloseModel;
 use App\Services\AuditLogService;
+use App\Services\Support\PeriodCloseIntegrityGuard;
+use Config\Database;
 use DateTimeImmutable;
 use RuntimeException;
+use Throwable;
 
 class PeriodCloseService
 {
@@ -27,25 +30,24 @@ class PeriodCloseService
     public function close(array $data, ?int $userId = null): int
     {
         $companyId = (int) ($data['company_id'] ?? 0);
-        $module = $this->normalizeModule((string) ($data['module_code'] ?? ''));
-        $period = $this->normalizePeriod((string) ($data['period'] ?? ''));
+        $module = strtolower(trim((string) ($data['module_code'] ?? '')));
+        $period = trim((string) ($data['period'] ?? ''));
+        $siteId = ! empty($data['site_id']) ? (int) $data['site_id'] : null;
+        $guard = new PeriodCloseIntegrityGuard();
+        $guard->assertCloseContext($companyId, $module, $period, array_keys(self::modules()));
+        $siteScopeId = $guard->siteScopeId($siteId);
 
-        if ($companyId < 1 || $module === '' || $period === '') {
-            throw new RuntimeException('Company, module, and period are required.');
+        $db = Database::connect();
+        if (! $db->fieldExists('site_scope_id', 'period_closes')) {
+            throw new RuntimeException('Period close site-scope upgrade is required. Run the latest database migration first.');
         }
 
         [$start, $end] = $this->periodRange($period);
         $model = new PeriodCloseModel();
-        $existing = $model
-            ->where('company_id', $companyId)
-            ->where('module_code', $module)
-            ->where('period', $period)
-            ->where('deleted_at', null)
-            ->first();
-
         $payload = [
             'company_id' => $companyId,
-            'site_id' => $data['site_id'] ?? null,
+            'site_id' => $siteId,
+            'site_scope_id' => $siteScopeId,
             'module_code' => $module,
             'period' => $period,
             'period_start' => $start,
@@ -53,19 +55,40 @@ class PeriodCloseService
             'status' => 'closed',
             'closed_at' => date('Y-m-d H:i:s'),
             'closed_by' => $userId,
+            'reopened_at' => null,
+            'reopened_by' => null,
             'notes' => $data['notes'] ?? null,
             'updated_by' => $userId,
         ];
 
-        if ($existing !== null) {
-            $model->update((int) $existing['id'], $payload);
-            $periodCloseId = (int) $existing['id'];
-        } else {
-            $model->insert($payload + ['created_by' => $userId]);
-            $periodCloseId = (int) $model->getInsertID();
-            if ($periodCloseId < 1) {
-                throw new RuntimeException('Failed to create period close record.');
+        $db->transBegin();
+        try {
+            $existing = $db->query(
+                'SELECT * FROM period_closes '
+                . 'WHERE company_id = ? AND site_scope_id = ? AND module_code = ? AND period = ? '
+                . 'AND deleted_at IS NULL LIMIT 1 FOR UPDATE',
+                [$companyId, $siteScopeId, $module, $period]
+            )->getRowArray();
+
+            if ($existing !== null) {
+                $guard->assertCanClose($existing['status'] ?? null);
+                $model->update((int) $existing['id'], $payload);
+                $periodCloseId = (int) $existing['id'];
+            } else {
+                $model->insert($payload + ['created_by' => $userId]);
+                $periodCloseId = (int) $model->getInsertID();
+                if ($periodCloseId < 1) {
+                    throw new RuntimeException('Failed to create period close record.');
+                }
             }
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to close period.');
+            }
+            $db->transCommit();
+        } catch (Throwable $exception) {
+            $db->transRollback();
+            throw new RuntimeException($exception->getMessage());
         }
 
         $this->audit('period.close', $periodCloseId, $payload, $userId);
@@ -73,37 +96,62 @@ class PeriodCloseService
         return $periodCloseId;
     }
 
-    public function reopen(int $id, ?int $userId = null): void
+    public function reopen(int $id, int $companyId, ?int $siteId = null, ?int $userId = null): void
     {
-        $model = new PeriodCloseModel();
-        $row = $model->find($id);
-        if ($row === null) {
-            throw new RuntimeException('Period close record not found.');
+        $guard = new PeriodCloseIntegrityGuard();
+        $siteScopeId = $guard->siteScopeId($siteId);
+        if ($companyId < 1) {
+            throw new RuntimeException('Company is required to reopen a period.');
         }
 
-        $payload = [
-            'status' => 'open',
-            'reopened_at' => date('Y-m-d H:i:s'),
-            'reopened_by' => $userId,
-            'updated_by' => $userId,
-        ];
-        $model->update($id, $payload);
-        $this->audit('period.reopen', $id, $row + $payload, $userId);
+        $db = Database::connect();
+        if (! $db->fieldExists('site_scope_id', 'period_closes')) {
+            throw new RuntimeException('Period close site-scope upgrade is required. Run the latest database migration first.');
+        }
+
+        $db->transBegin();
+        try {
+            $row = $db->query(
+                'SELECT * FROM period_closes WHERE id = ? AND company_id = ? AND site_scope_id = ? '
+                . 'AND deleted_at IS NULL LIMIT 1 FOR UPDATE',
+                [$id, $companyId, $siteScopeId]
+            )->getRowArray();
+            if ($row === null) {
+                throw new RuntimeException('Period close record not found in the active company/site.');
+            }
+            $guard->assertCanReopen($row['status'] ?? null);
+
+            $payload = [
+                'status' => 'open',
+                'reopened_at' => date('Y-m-d H:i:s'),
+                'reopened_by' => $userId,
+                'updated_by' => $userId,
+            ];
+            (new PeriodCloseModel())->update($id, $payload);
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to reopen period.');
+            }
+            $db->transCommit();
+        } catch (Throwable $exception) {
+            $db->transRollback();
+            throw new RuntimeException($exception->getMessage());
+        }
+
+        $this->audit('period.reopen', $id, array_replace($row, $payload), $userId);
     }
 
     public function assertOpen(string $module, int $companyId, ?string $date, ?int $siteId = null): void
     {
-        if ($companyId < 1 || empty($date)) {
-            return;
-        }
+        $module = strtolower(trim($module));
+        $period = (new PeriodCloseIntegrityGuard())->postingPeriod(
+            $module,
+            $companyId,
+            $date,
+            array_keys(self::modules())
+        );
 
-        $module = $this->normalizeModule($module);
-        $period = substr((string) $date, 0, 7);
-        if (! preg_match('/^\d{4}-\d{2}$/', $period)) {
-            return;
-        }
-
-        $query = (new PeriodCloseModel())
+        $model = new PeriodCloseModel();
+        $query = $model
             ->where('company_id', $companyId)
             ->where('module_code', $module)
             ->where('period', $period)
@@ -117,17 +165,6 @@ class PeriodCloseService
         if ($query->first() !== null) {
             throw new RuntimeException(strtoupper($module) . ' period ' . $period . ' is closed.');
         }
-    }
-
-    private function normalizeModule(string $module): string
-    {
-        $module = strtolower(trim($module));
-        return array_key_exists($module, self::modules()) ? $module : '';
-    }
-
-    private function normalizePeriod(string $period): string
-    {
-        return preg_match('/^\d{4}-\d{2}$/', $period) ? $period : '';
     }
 
     /** @return array{0: string, 1: string} */

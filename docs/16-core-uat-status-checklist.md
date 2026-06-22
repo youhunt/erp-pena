@@ -325,3 +325,27 @@ Gunakan bagian ini untuk mencatat hasil test per tanggal.
 |---|---|---|---|---|
 | 2026-06-22 | Source transaction dapat diposting ulang dengan mengganti nomor jurnal | Critical | Patched | Service precheck plus database unique source key; needs UAT |
 | 2026-06-22 | Detail GL hanya dicek company dan dapat dibuka lintas site melalui URL | High | Patched | Active company/site query guard; needs UAT |
+
+---
+
+## 18. Period Close Site Scope Hardening
+
+| No | Test Case | Expected Result | Result | Notes |
+|---:|---|---|---|---|
+| 1 | Close Inventory periode yang sama untuk Site A dan Site B | Dua record scope berbeda berhasil dibuat | NOT TESTED |  |
+| 2 | Replay close pada record Site A yang sudah closed | Ditolak dengan pesan period sudah closed | NOT TESTED |  |
+| 3 | Posting transaksi Inventory Site A saat periode Site A closed | Ditolak tanpa perubahan stock/dokumen | NOT TESTED |  |
+| 4 | Posting transaksi Inventory Site B saat hanya Site A closed | Berhasil jika tidak ada company-wide close | NOT TESTED |  |
+| 5 | Posting transaksi site mana pun saat company-wide period closed | Ditolak | NOT TESTED |  |
+| 6 | Reopen period Site A ketika Site B aktif | Ditolak/404 | NOT TESTED |  |
+| 7 | Reopen company-wide period ketika site tertentu aktif | Tombol tidak tampil dan direct POST ditolak | NOT TESTED |  |
+| 8 | Reopen company-wide period dari All Sites | Berhasil dan audit log tercatat | NOT TESTED |  |
+| 9 | Replay reopen pada record yang sudah open | Ditolak dengan pesan status | NOT TESTED |  |
+| 10 | Close dengan month 13 atau module invalid | Ditolak sebelum record dibuat | NOT TESTED |  |
+
+### Bug Fix Log Period Close Scope
+
+| Date | Bug / Feedback | Severity | Status | Fix Commit / Notes |
+|---|---|---|---|---|
+| 2026-06-22 | Close site kedua dapat menimpa record close site pertama | Critical | Patched | Explicit site scope column and unique key; needs UAT |
+| 2026-06-22 | Reopen period belum tenant-scoped di service | Critical | Patched | Company/site row lock and controller source lookup; needs UAT |

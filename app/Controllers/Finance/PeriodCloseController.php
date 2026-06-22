@@ -84,13 +84,36 @@ class PeriodCloseController extends BaseController
             'title' => 'Period Close Detail',
             'period' => $period,
             'modules' => PeriodCloseService::modules(),
+            'canReopen' => $tenant->activeSiteId() === null
+                || (int) ($period['site_id'] ?? 0) === (int) $tenant->activeSiteId(),
         ]);
     }
 
     public function reopen(int $id)
     {
+        $tenant = new TenantContext(session());
+        $companyId = $tenant->activeCompanyId();
+        if ($companyId === null || $companyId < 1) {
+            return redirect()->back()->with('error', 'Active company is required.');
+        }
+
+        $model = new PeriodCloseModel();
+        $this->scope($model, $tenant);
+        $period = $model->find($id);
+        if ($period === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+        if ($tenant->activeSiteId() !== null && empty($period['site_id'])) {
+            return redirect()->back()->with('error', 'Switch to All Sites before reopening a company-wide period.');
+        }
+
         try {
-            (new PeriodCloseService())->reopen($id, auth()->id());
+            (new PeriodCloseService())->reopen(
+                $id,
+                $companyId,
+                ! empty($period['site_id']) ? (int) $period['site_id'] : null,
+                auth()->id()
+            );
         } catch (RuntimeException $exception) {
             return redirect()->back()->with('error', $exception->getMessage());
         }

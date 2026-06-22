@@ -60,6 +60,7 @@ class DevelopmentStatusController extends BaseController
             ['area' => 'Cash / Bank', 'status' => 'UAT Ready', 'readiness' => 70, 'notes' => 'Atomic GL posting, statement adjustment, matching, and zero-difference reconciliation guards.'],
             ['area' => 'Inventory Audit', 'status' => 'Core Flow Ready', 'readiness' => 70, 'notes' => 'Stock card qty/value in-out and running value.'],
             ['area' => 'GL Validation', 'status' => 'UAT Ready', 'readiness' => 75, 'notes' => 'Balanced posting, period guard, source idempotency, tenant-scoped detail, and trial balance summary.'],
+            ['area' => 'Period Close', 'status' => 'UAT Ready', 'readiness' => 75, 'notes' => 'Company-wide/site-specific close, status replay guard, scoped reopen, and transaction-date validation.'],
             ['area' => 'Production Core', 'status' => 'UAT Ready', 'readiness' => 65, 'notes' => 'BOM, Work Center, Routing, Work Order import/edit and WO posting guard.'],
             ['area' => 'Permission / Status Guard', 'status' => 'Hardened', 'readiness' => 75, 'notes' => 'Route permission and service-layer status guard are in place; non-admin UAT required.'],
             ['area' => 'AI/OCR', 'status' => 'Foundation', 'readiness' => 45, 'notes' => 'Upload/review/convert foundation exists; full UAT pending.'],
@@ -96,8 +97,9 @@ class DevelopmentStatusController extends BaseController
             ['priority' => 2, 'item' => 'Run Sales E2E UAT', 'target' => 'Verify SO delivery stock-out, AR receivable, receipt, cash/bank, and GL.'],
             ['priority' => 3, 'item' => 'Run Cash/Bank UAT', 'target' => 'Verify entry, GL, statement adjustment, auto-match, and zero-difference reconciliation.'],
             ['priority' => 4, 'item' => 'Run GL idempotency UAT', 'target' => 'Replay one transaction source with the same and different journal numbers; only one GL entry may exist.'],
-            ['priority' => 5, 'item' => 'Non-admin permission UAT', 'target' => 'Verify finance, sales, purchase, inventory, and production role restrictions.'],
-            ['priority' => 6, 'item' => 'Expand integration tests', 'target' => 'Cover transaction rollback and concurrent posting against a test database.'],
+            ['priority' => 5, 'item' => 'Run period-close scope UAT', 'target' => 'Verify Site A, Site B, and All Sites close/reopen behavior across posting services.'],
+            ['priority' => 6, 'item' => 'Non-admin permission UAT', 'target' => 'Verify finance, sales, purchase, inventory, and production role restrictions.'],
+            ['priority' => 7, 'item' => 'Expand integration tests', 'target' => 'Cover transaction rollback and concurrent posting against a test database.'],
         ];
     }
 

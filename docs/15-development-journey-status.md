@@ -345,3 +345,18 @@ PENA ERP can be considered production candidate only when:
 - Detail/list GL mengikuti company dan site aktif; jurnal site lain tidak dapat dibaca melalui URL langsung.
 - Migration dan SQL phpMyAdmin tersedia untuk deployment.
 - Detail tersedia di `docs/33-gl-posting-idempotency.md`.
+
+---
+
+## 17. Update 2026-06-22 - Period Close Site Scope Hardening
+
+- Period close sekarang unik per company, site scope, module, dan period.
+- Close Site B tidak lagi menimpa close Site A.
+- Scope `All Sites` disimpan eksplisit sebagai `site_scope_id = 0`.
+- Replay close dan reopen ditolak berdasarkan status record.
+- Reopen divalidasi terhadap company/site aktif di controller dan service.
+- Company-wide period hanya dapat di-reopen dari konteks All Sites.
+- Module, period, dan transaction date invalid tidak lagi melewati guard secara diam-diam.
+- Close/reopen memakai transaction dan row lock.
+- Migration dan SQL phpMyAdmin tersedia untuk deployment.
+- Detail tersedia di `docs/34-period-close-site-scope-hardening.md`.
