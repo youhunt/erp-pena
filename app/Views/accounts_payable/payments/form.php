@@ -61,15 +61,13 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Cash/Bank Code</label>
-                            <select name="cash_bank_code" class="form-select" required>
-                                <option value="">Choose cash/bank</option>
+                            <input list="cash-bank-options" name="cash_bank_code" class="form-control" required value="<?= esc(old('cash_bank_code', $cashBankAccounts[0]['cash_bank_code'] ?? 'BNK-HO')) ?>" placeholder="Ketik kode, contoh BNK-HO / KAS-HO">
+                            <datalist id="cash-bank-options">
                                 <?php foreach ($cashBankAccounts ?? [] as $account): ?>
-                                    <?php $selected = old('cash_bank_code', $cashBankAccounts[0]['cash_bank_code'] ?? '') === $account['cash_bank_code']; ?>
-                                    <option value="<?= esc($account['cash_bank_code']) ?>" <?= $selected ? 'selected' : '' ?>>
-                                        <?= esc($account['cash_bank_code'] . ' - ' . $account['cash_bank_name'] . ' (' . number_format((float) $account['current_balance'], 2) . ')') ?>
-                                    </option>
+                                    <option value="<?= esc($account['cash_bank_code']) ?>"><?= esc($account['cash_bank_name'] . ' (' . number_format((float) $account['current_balance'], 2) . ')') ?></option>
                                 <?php endforeach ?>
-                            </select>
+                            </datalist>
+                            <small class="text-muted">Jika kode belum ada, sistem otomatis membuat master cash/bank untuk UAT.</small>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Reference No</label>
