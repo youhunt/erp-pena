@@ -6,6 +6,7 @@ use App\Models\ChartAccountModel;
 use App\Models\GlEntryLineModel;
 use App\Models\GlEntryModel;
 use App\Services\AuditLogService;
+use App\Services\Support\GlPostingIntegrityGuard;
 use Config\Database;
 use RuntimeException;
 use Throwable;
@@ -19,10 +20,26 @@ class GeneralLedgerService
     public function post(array $header, array $lines, ?int $userId = null): int
     {
         $companyId = (int) ($header['company_id'] ?? 0);
-        if ($companyId < 1) {
-            throw new RuntimeException('Company is required for GL entry.');
-        }
-        (new PeriodCloseService())->assertOpen('gl', $companyId, (string) ($header['journal_date'] ?? date('Y-m-d')), ! empty($header['site_id']) ? (int) $header['site_id'] : null);
+        $journalNo = trim((string) ($header['journal_no'] ?? 'JE-' . date('Ymd-His')));
+        $journalDate = trim((string) ($header['journal_date'] ?? date('Y-m-d')));
+        $sourceModule = trim((string) ($header['source_module'] ?? 'manual'));
+        $sourceType = trim((string) ($header['source_type'] ?? 'manual_journal'));
+        $sourceId = isset($header['source_id']) && $header['source_id'] !== '' ? (int) $header['source_id'] : null;
+        $currencyCode = strtoupper(trim((string) ($header['currency_code'] ?? 'IDR')));
+        $exchangeRate = (float) ($header['exchange_rate'] ?? 1);
+        $integrityGuard = new GlPostingIntegrityGuard();
+        $integrityGuard->assertHeader(
+            $companyId,
+            $journalNo,
+            $journalDate,
+            $currencyCode,
+            $exchangeRate,
+            $sourceModule,
+            $sourceType,
+            $sourceId
+        );
+
+        (new PeriodCloseService())->assertOpen('gl', $companyId, $journalDate, ! empty($header['site_id']) ? (int) $header['site_id'] : null);
 
         $lines = $this->normalizeLines($companyId, $lines);
         if (count($lines) < 2) {
@@ -41,21 +58,43 @@ class GeneralLedgerService
         try {
             $entryModel = new GlEntryModel();
             $lineModel = new GlEntryLineModel();
-            $journalDate = (string) ($header['journal_date'] ?? date('Y-m-d'));
+            $existingJournal = $db->query(
+                'SELECT id FROM gl_entries WHERE company_id = ? AND journal_no = ? LIMIT 1 FOR UPDATE',
+                [$companyId, $journalNo]
+            )->getRowArray();
+            if ($existingJournal !== null) {
+                throw new RuntimeException('GL journal number already exists for this company: ' . $journalNo . '.');
+            }
+
+            $sourceKey = $integrityGuard->sourceKey($sourceModule, $sourceType, $sourceId);
+            if ($sourceKey !== null) {
+                $existingSource = $db->query(
+                    'SELECT id, journal_no FROM gl_entries '
+                    . 'WHERE company_id = ? AND source_module = ? AND source_type = ? AND source_id = ? '
+                    . 'LIMIT 1 FOR UPDATE',
+                    [$companyId, $sourceKey['module'], $sourceKey['type'], $sourceKey['id']]
+                )->getRowArray();
+                if ($existingSource !== null) {
+                    throw new RuntimeException(
+                        'GL source has already been posted as journal ' . ($existingSource['journal_no'] ?? $existingSource['id']) . '.'
+                    );
+                }
+            }
+
             $entryModel->insert([
                 'company_id' => $companyId,
                 'site_id' => $header['site_id'] ?? null,
                 'gl_book_id' => $header['gl_book_id'] ?? null,
-                'journal_no' => trim((string) ($header['journal_no'] ?? 'JE-' . date('Ymd-His'))),
+                'journal_no' => $journalNo,
                 'journal_date' => $journalDate,
                 'period' => substr($journalDate, 0, 7),
-                'source_module' => $header['source_module'] ?? 'manual',
-                'source_type' => $header['source_type'] ?? 'manual_journal',
-                'source_id' => $header['source_id'] ?? null,
+                'source_module' => $sourceModule,
+                'source_type' => $sourceType,
+                'source_id' => $sourceId,
                 'source_no' => $header['source_no'] ?? null,
                 'description' => $header['description'] ?? null,
-                'currency_code' => $header['currency_code'] ?? 'IDR',
-                'exchange_rate' => $header['exchange_rate'] ?? 1,
+                'currency_code' => $currencyCode,
+                'exchange_rate' => $exchangeRate,
                 'total_debit' => $totalDebit,
                 'total_credit' => $totalCredit,
                 'status' => 'posted',
@@ -93,7 +132,7 @@ class GeneralLedgerService
                 'user_id' => $userId,
                 'table_name' => 'gl_entries',
                 'record_id' => $entryId,
-                'record_code' => $header['journal_no'] ?? null,
+                'record_code' => $journalNo,
                 'description' => 'GL journal posted.',
                 'new_values' => ['header' => $header, 'lines' => $lines, 'total_debit' => $totalDebit, 'total_credit' => $totalCredit],
             ]);
@@ -101,6 +140,9 @@ class GeneralLedgerService
             return $entryId;
         } catch (Throwable $exception) {
             $db->transRollback();
+            if (str_contains(strtolower($exception->getMessage()), 'duplicate entry')) {
+                throw new RuntimeException('GL journal or transaction source has already been posted.');
+            }
             throw new RuntimeException($exception->getMessage());
         }
     }

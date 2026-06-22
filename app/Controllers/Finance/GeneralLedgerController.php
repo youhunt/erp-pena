@@ -127,7 +127,10 @@ class GeneralLedgerController extends BaseController
             $entries->where('company_id', $tenant->activeCompanyId());
         }
         if ($tenant->activeSiteId() !== null) {
-            $entries->where('site_id', $tenant->activeSiteId());
+            $entries->groupStart()
+                ->where('site_id', $tenant->activeSiteId())
+                ->orWhere('site_id', null)
+                ->groupEnd();
         }
         if ($filters['date_from'] !== '') {
             $entries->where('journal_date >=', $filters['date_from']);
@@ -233,8 +236,15 @@ class GeneralLedgerController extends BaseController
     public function showEntry(int $id): string
     {
         $tenant = new TenantContext(session());
-        $entry = (new GlEntryModel())->find($id);
-        if ($entry === null || (int) $entry['company_id'] !== (int) $tenant->activeCompanyId()) {
+        $entryQuery = (new GlEntryModel())->where('company_id', (int) $tenant->activeCompanyId());
+        if ($tenant->activeSiteId() !== null) {
+            $entryQuery->groupStart()
+                ->where('site_id', $tenant->activeSiteId())
+                ->orWhere('site_id', null)
+                ->groupEnd();
+        }
+        $entry = $entryQuery->find($id);
+        if ($entry === null) {
             throw PageNotFoundException::forPageNotFound();
         }
 
@@ -315,7 +325,10 @@ class GeneralLedgerController extends BaseController
             $builder->where('ge.company_id', $tenant->activeCompanyId());
         }
         if ($tenant->activeSiteId() !== null) {
-            $builder->where('ge.site_id', $tenant->activeSiteId());
+            $builder->groupStart()
+                ->where('ge.site_id', $tenant->activeSiteId())
+                ->orWhere('ge.site_id', null)
+                ->groupEnd();
         }
         if ($filters['date_from'] !== '') {
             $builder->where('ge.journal_date >=', $filters['date_from']);
@@ -363,7 +376,10 @@ class GeneralLedgerController extends BaseController
             $unbalancedRows->where('ge.company_id', $tenant->activeCompanyId());
         }
         if ($tenant->activeSiteId() !== null) {
-            $unbalancedRows->where('ge.site_id', $tenant->activeSiteId());
+            $unbalancedRows->groupStart()
+                ->where('ge.site_id', $tenant->activeSiteId())
+                ->orWhere('ge.site_id', null)
+                ->groupEnd();
         }
         if ($filters['date_from'] !== '') {
             $unbalancedRows->where('ge.journal_date >=', $filters['date_from']);
@@ -426,7 +442,10 @@ class GeneralLedgerController extends BaseController
             $builder->where('company_id', $tenant->activeCompanyId());
         }
         if ($tenant->activeSiteId() !== null) {
-            $builder->where('site_id', $tenant->activeSiteId());
+            $builder->groupStart()
+                ->where('site_id', $tenant->activeSiteId())
+                ->orWhere('site_id', null)
+                ->groupEnd();
         }
         if ($db->fieldExists('deleted_at', 'gl_entries')) {
             $builder->where('deleted_at', null);

@@ -301,3 +301,27 @@ Gunakan bagian ini untuk mencatat hasil test per tanggal.
 | 2026-06-22 | Statement adjustment entry dan line match tidak berada dalam satu transaksi | Critical | Patched | Atomic service boundary; needs UAT |
 | 2026-06-22 | Manual Cash/Bank Entry dapat mengubah saldo tanpa jurnal GL | Critical | Patched | Counter account and GL entry are mandatory; needs UAT |
 | 2026-06-22 | Reconciliation dapat diposting dengan selisih dan entry lintas site/status | High | Patched | Strict reconciliation source and zero-difference guard; needs UAT |
+
+---
+
+## 17. GL Posting Idempotency
+
+| No | Test Case | Expected Result | Result | Notes |
+|---:|---|---|---|---|
+| 1 | Post transaksi sumber normal | Satu jurnal posted dan balanced terbentuk | NOT TESTED |  |
+| 2 | Replay transaksi sumber dengan nomor jurnal yang sama | Ditolak; jumlah header/detail GL tidak berubah | NOT TESTED |  |
+| 3 | Replay transaksi sumber dengan nomor jurnal berbeda | Ditolak berdasarkan source key | NOT TESTED |  |
+| 4 | Dua request paralel memposting source transaction yang sama | Unique index hanya mengizinkan satu jurnal | NOT TESTED |  |
+| 5 | Buat dua manual journal tanpa source ID dengan nomor berbeda | Keduanya berhasil | NOT TESTED |  |
+| 6 | Buat manual journal dengan nomor yang sudah ada pada company yang sama | Ditolak dengan pesan nomor jurnal sudah ada | NOT TESTED |  |
+| 7 | Post reversal resmi setelah posting normal | Berhasil karena source type reversal berbeda | NOT TESTED |  |
+| 8 | Post jurnal dengan tanggal invalid atau exchange rate nol | Ditolak sebelum header GL dibuat | NOT TESTED |  |
+| 9 | Pilih site A lalu buka URL detail jurnal site B | 404 dan data tidak tampil | NOT TESTED |  |
+| 10 | Pilih site A lalu buka jurnal company-wide | Jurnal tetap dapat dilihat | NOT TESTED |  |
+
+### Bug Fix Log GL Idempotency
+
+| Date | Bug / Feedback | Severity | Status | Fix Commit / Notes |
+|---|---|---|---|---|
+| 2026-06-22 | Source transaction dapat diposting ulang dengan mengganti nomor jurnal | Critical | Patched | Service precheck plus database unique source key; needs UAT |
+| 2026-06-22 | Detail GL hanya dicek company dan dapat dibuka lintas site melalui URL | High | Patched | Active company/site query guard; needs UAT |

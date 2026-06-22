@@ -332,3 +332,16 @@ PENA ERP can be considered production candidate only when:
 - Reconciliation dengan difference nonzero ditolak.
 - Tidak ada perubahan database pada patch ini.
 - Detail tersedia di `docs/32-cash-bank-integrity-hardening.md`.
+
+---
+
+## 16. Update 2026-06-22 - GL Posting Idempotency
+
+- Nomor jurnal duplikat sekarang ditolak lebih awal dengan pesan service yang jelas.
+- Kombinasi company, source module, source type, dan source ID dilindungi unique index agar transaksi sumber tidak dapat membuat jurnal ganda.
+- Replay posting dengan nomor jurnal berbeda tetap ditolak berdasarkan identitas source transaction.
+- Manual journal tanpa source ID tetap didukung dan dibatasi oleh nomor jurnal.
+- Tanggal jurnal, currency, exchange rate, dan kelengkapan source divalidasi sebelum posting.
+- Detail/list GL mengikuti company dan site aktif; jurnal site lain tidak dapat dibaca melalui URL langsung.
+- Migration dan SQL phpMyAdmin tersedia untuk deployment.
+- Detail tersedia di `docs/33-gl-posting-idempotency.md`.
