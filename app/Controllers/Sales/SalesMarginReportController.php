@@ -128,9 +128,68 @@ class SalesMarginReportController extends BaseController
 
     private function xlsxResponse(array $rows, string $dateFrom, string $dateTo, string $status): ResponseInterface
     {
+        $summary = $this->summary($rows);
         $spreadsheet = new Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle('Sales Margin');
+
+        $summarySheet = $spreadsheet->getActiveSheet();
+        $summarySheet->setTitle('Summary');
+        $summarySheet->setCellValue('A1', 'Sales Margin Summary');
+        $summarySheet->setCellValue('A2', 'Period');
+        $summarySheet->setCellValue('B2', $dateFrom . ' to ' . $dateTo);
+        $summarySheet->setCellValue('A3', 'Filter');
+        $summarySheet->setCellValue('B3', $status !== '' ? $status : 'All');
+        $summarySheet->setCellValue('A5', 'Metric');
+        $summarySheet->setCellValue('B5', 'Value');
+        $summarySheet->setCellValue('A6', 'Invoice Count');
+        $summarySheet->setCellValue('B6', (float) ($summary['invoice_count'] ?? 0));
+        $summarySheet->setCellValue('A7', 'Total Invoice Amount');
+        $summarySheet->setCellValue('B7', (float) ($summary['invoice_amount'] ?? 0));
+        $summarySheet->setCellValue('A8', 'Total COGS Amount');
+        $summarySheet->setCellValue('B8', (float) ($summary['cogs_amount'] ?? 0));
+        $summarySheet->setCellValue('A9', 'Gross Profit/Loss');
+        $summarySheet->setCellValue('B9', (float) ($summary['gross_profit_loss'] ?? 0));
+        $summarySheet->setCellValue('A10', 'Gross Margin %');
+        $summarySheet->setCellValue('B10', $summary['gross_margin_pct'] !== null ? ((float) $summary['gross_margin_pct']) / 100 : null);
+        $summarySheet->setCellValue('A12', 'Margin Status');
+        $summarySheet->setCellValue('B12', 'Count');
+        $summarySheet->setCellValue('C12', 'Invoice Amount');
+        $summarySheet->setCellValue('D12', 'COGS Amount');
+        $summarySheet->setCellValue('E12', 'Gross Profit/Loss');
+        $summarySheet->setCellValue('F12', 'Gross Margin %');
+
+        $summaryRow = 13;
+        foreach ($summary['by_status'] ?? [] as $marginStatus => $data) {
+            $invoiceAmount = (float) ($data['invoice_amount'] ?? 0);
+            $grossProfit = (float) ($data['gross_profit_loss'] ?? 0);
+            $summarySheet->setCellValue('A' . $summaryRow, (string) $marginStatus);
+            $summarySheet->setCellValue('B' . $summaryRow, (float) ($data['count'] ?? 0));
+            $summarySheet->setCellValue('C' . $summaryRow, $invoiceAmount);
+            $summarySheet->setCellValue('D' . $summaryRow, (float) ($data['cogs_amount'] ?? 0));
+            $summarySheet->setCellValue('E' . $summaryRow, $grossProfit);
+            $summarySheet->setCellValue('F' . $summaryRow, $invoiceAmount > 0 ? $grossProfit / $invoiceAmount : null);
+            $summaryRow++;
+        }
+
+        $summaryLastRow = max(12, $summaryRow - 1);
+        $summarySheet->mergeCells('A1:F1');
+        $summarySheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        $summarySheet->getStyle('A5:B5')->getFont()->setBold(true);
+        $summarySheet->getStyle('A12:F12')->getFont()->setBold(true);
+        $summarySheet->getStyle('A5:B10')->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('FFD9D9D9');
+        $summarySheet->getStyle('A12:F' . $summaryLastRow)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN)->getColor()->setARGB('FFD9D9D9');
+        $summarySheet->getStyle('A5:B5')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFEFEFEF');
+        $summarySheet->getStyle('A12:F12')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFEFEFEF');
+        $summarySheet->getStyle('B7:B9')->getNumberFormat()->setFormatCode('#,##0.00');
+        $summarySheet->getStyle('B10')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_PERCENTAGE_00);
+        $summarySheet->getStyle('C13:E' . $summaryLastRow)->getNumberFormat()->setFormatCode('#,##0.00');
+        $summarySheet->getStyle('F13:F' . $summaryLastRow)->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_PERCENTAGE_00);
+        $summarySheet->getStyle('B6:F' . $summaryLastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        foreach (range('A', 'F') as $column) {
+            $summarySheet->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('Sales Margin Detail');
 
         $headers = [
             'Invoice Date',
@@ -197,6 +256,8 @@ class SalesMarginReportController extends BaseController
         for ($col = 1; $col <= count($headers); $col++) {
             $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($col))->setAutoSize(true);
         }
+
+        $spreadsheet->setActiveSheetIndex(0);
 
         $safeStatus = $status !== '' ? '_' . preg_replace('/[^A-Za-z0-9_-]+/', '_', $status) : '';
         $filename = 'sales_margin_report_' . $dateFrom . '_to_' . $dateTo . $safeStatus . '.xlsx';
