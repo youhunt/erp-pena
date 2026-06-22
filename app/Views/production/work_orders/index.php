@@ -5,6 +5,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div><h4 class="card-title mb-1">Work Order</h4><p class="text-muted mb-0">Production orders generated from BOM and Routing.</p></div>
         <div class="d-flex gap-2">
+            <a href="<?= site_url('production/work-orders/export') ?>" class="btn btn-outline-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
             <a href="<?= site_url('production/imports/work-orders') ?>" class="btn btn-outline-primary"><i class="bx bx-upload me-1"></i> Import</a>
             <a href="<?= site_url('production/work-orders/new') ?>" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New Work Order</a>
         </div>
