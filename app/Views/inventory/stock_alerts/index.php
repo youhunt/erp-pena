@@ -1,6 +1,7 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php $exportUrl = site_url('inventory/stock-alerts') . '?' . http_build_query(['q' => $filters['q'] ?? '', 'status' => $filters['status'] ?? '', 'export' => 'xlsx']); ?>
 <div class="row">
     <?php foreach ([
         'total' => ['label' => 'Total Setup', 'class' => 'primary'],
@@ -33,6 +34,7 @@
                 <p class="text-muted mb-0">Min/max/reorder monitoring by item location.</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
+                <a href="<?= esc($exportUrl) ?>" class="btn btn-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
                 <a href="<?= site_url('setup/item-locations') ?>" class="btn btn-outline-primary"><i class="bx bx-map me-1"></i> Item Locations</a>
                 <a href="<?= site_url('inventory/stock-balances') ?>" class="btn btn-outline-primary"><i class="bx bx-layer me-1"></i> Stock Balance</a>
             </div>
