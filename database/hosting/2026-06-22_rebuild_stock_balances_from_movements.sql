@@ -8,10 +8,11 @@
 -- 1) Backup database before running.
 -- 2) Run diagnostic SELECT first.
 -- 3) Run rebuild only after confirming movements are correct.
--- 4) This script rebuilds qty/value by company/site/warehouse/location/item.
+-- 4) This compatible version does not require inventory_stock_movements.value_amount.
+-- 5) If movement value column is unavailable, stock_value is rebuilt as 0 while qty remains correct.
 
 /* =========================================================
-   A. DIAGNOSTIC - compare balance vs movement ledger
+   A. DIAGNOSTIC - compare balance vs movement ledger by quantity
    ========================================================= */
 
 SELECT
@@ -23,10 +24,7 @@ SELECT
     COALESCE(b.qty_on_hand, 0) AS balance_qty_on_hand,
     COALESCE(b.qty_available, 0) AS balance_qty_available,
     COALESCE(mv.qty_on_hand, 0) AS movement_qty_on_hand,
-    COALESCE(b.qty_on_hand, 0) - COALESCE(mv.qty_on_hand, 0) AS qty_difference,
-    COALESCE(b.stock_value, 0) AS balance_stock_value,
-    COALESCE(mv.stock_value, 0) AS movement_stock_value,
-    COALESCE(b.stock_value, 0) - COALESCE(mv.stock_value, 0) AS value_difference
+    COALESCE(b.qty_on_hand, 0) - COALESCE(mv.qty_on_hand, 0) AS qty_difference
 FROM inventory_stock_balances b
 LEFT JOIN warehouses wb ON wb.id = b.warehouse_id
 LEFT JOIN locations lb ON lb.id = b.location_id
@@ -37,10 +35,7 @@ LEFT JOIN (
         warehouse_id,
         location_id,
         item_code,
-        MAX(item_name) AS item_name,
-        MAX(uom_code) AS uom_code,
-        SUM(CASE WHEN direction = 'in' THEN qty ELSE -qty END) AS qty_on_hand,
-        SUM(CASE WHEN direction = 'in' THEN value_amount ELSE -value_amount END) AS stock_value
+        SUM(CASE WHEN direction = 'in' THEN qty ELSE -qty END) AS qty_on_hand
     FROM inventory_stock_movements
     WHERE warehouse_id IS NOT NULL
       AND location_id IS NOT NULL
@@ -55,7 +50,6 @@ LEFT JOIN (
 LEFT JOIN warehouses wm ON wm.id = mv.warehouse_id
 LEFT JOIN locations lm ON lm.id = mv.location_id
 WHERE ABS(COALESCE(b.qty_on_hand, 0) - COALESCE(mv.qty_on_hand, 0)) > 0.0001
-   OR ABS(COALESCE(b.stock_value, 0) - COALESCE(mv.stock_value, 0)) > 0.01
 ORDER BY item_code, warehouse_code, location_code;
 
 /* =========================================================
@@ -63,13 +57,14 @@ ORDER BY item_code, warehouse_code, location_code;
    ========================================================= */
 
 -- B1. Optional scoped delete.
--- For safer UAT first run, uncomment WHERE filters as needed.
--- Example filters:
--- WHERE company_id = 1 AND site_id = 1
+-- For safer UAT first run, add filters manually if needed:
+-- DELETE FROM inventory_stock_balances WHERE company_id = 1 AND site_id = 1;
 
 DELETE FROM inventory_stock_balances;
 
 -- B2. Recreate balances from valid movement rows.
+-- This compatible script sets avg_cost and stock_value to 0 because some schemas do not have movement value columns.
+-- Quantity availability remains correct for Delivery Order / Stock Card UAT.
 INSERT INTO inventory_stock_balances (
     company_id,
     site_id,
@@ -100,11 +95,8 @@ SELECT
     SUM(CASE WHEN m.direction = 'in' THEN m.qty ELSE -m.qty END) AS qty_on_hand,
     0 AS qty_reserved,
     SUM(CASE WHEN m.direction = 'in' THEN m.qty ELSE -m.qty END) AS qty_available,
-    CASE
-        WHEN SUM(CASE WHEN m.direction = 'in' THEN m.qty ELSE -m.qty END) = 0 THEN 0
-        ELSE ROUND(SUM(CASE WHEN m.direction = 'in' THEN m.value_amount ELSE -m.value_amount END) / SUM(CASE WHEN m.direction = 'in' THEN m.qty ELSE -m.qty END), 6)
-    END AS avg_cost,
-    SUM(CASE WHEN m.direction = 'in' THEN m.value_amount ELSE -m.value_amount END) AS stock_value,
+    0 AS avg_cost,
+    0 AS stock_value,
     MAX(m.movement_date) AS last_movement_date,
     NOW() AS created_at,
     NOW() AS updated_at
@@ -119,8 +111,7 @@ GROUP BY
     m.warehouse_id,
     m.location_id,
     m.item_code
-HAVING ABS(qty_on_hand) > 0.0001
-    OR ABS(stock_value) > 0.01;
+HAVING ABS(qty_on_hand) > 0.0001;
 
 /* =========================================================
    C. VERIFY - delivery stock candidates after rebuild
