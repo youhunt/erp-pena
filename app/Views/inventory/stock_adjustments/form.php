@@ -50,7 +50,7 @@
 
                         <div class="col-md-6">
                             <label class="form-label">Location <span class="text-danger">*</span></label>
-                            <select name="location_id" id="locationSelect" class="form-select" required disabled>
+                            <select name="location_id" id="locationSelect" class="form-select" required>
                                 <option value="">Pilih warehouse dulu</option>
                                 <?php foreach ($locations as $location): ?>
                                     <?php $locationId = (int) $location['id']; ?>
@@ -59,7 +59,7 @@
                                     </option>
                                 <?php endforeach ?>
                             </select>
-                            <div class="form-text">Location otomatis hanya muncul sesuai warehouse.</div>
+                            <div class="form-text" id="locationHelp">Location otomatis hanya muncul sesuai warehouse.</div>
                         </div>
                     </div>
 
@@ -173,6 +173,7 @@
 document.addEventListener('DOMContentLoaded', function () {
     const warehouseSelect = document.getElementById('warehouseSelect');
     const locationSelect = document.getElementById('locationSelect');
+    const locationHelp = document.getElementById('locationHelp');
     const itemSelect = document.getElementById('itemSelect');
     const manualItemCode = document.getElementById('manualItemCode');
     const itemName = document.getElementById('itemName');
@@ -184,6 +185,12 @@ document.addEventListener('DOMContentLoaded', function () {
         return option.cloneNode(true);
     });
 
+    function refreshSelect2(select) {
+        if (window.jQuery && window.jQuery.fn && window.jQuery.fn.select2 && window.jQuery(select).data('select2')) {
+            window.jQuery(select).trigger('change.select2');
+        }
+    }
+
     function refreshLocations() {
         const warehouseId = warehouseSelect.value;
         locationSelect.innerHTML = '';
@@ -192,14 +199,17 @@ document.addEventListener('DOMContentLoaded', function () {
         placeholder.value = '';
         placeholder.textContent = warehouseId ? 'Pilih / cari Location' : 'Pilih warehouse dulu';
         locationSelect.appendChild(placeholder);
-        locationSelect.disabled = !warehouseId;
 
         if (!warehouseId) {
+            locationHelp.textContent = 'Pilih warehouse dulu agar location terfilter.';
+            refreshSelect2(locationSelect);
             return;
         }
 
+        let matchCount = 0;
         allLocationOptions.forEach(function (option) {
             if (String(option.dataset.warehouseId || '') === String(warehouseId)) {
+                matchCount++;
                 const cloned = option.cloneNode(true);
                 if (oldLocationValue && cloned.value === oldLocationValue) {
                     cloned.selected = true;
@@ -208,9 +218,21 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
-        if (locationSelect.options.length === 2 && !oldLocationValue) {
-            locationSelect.selectedIndex = 1;
+        if (matchCount === 0) {
+            const autoOption = document.createElement('option');
+            autoOption.value = '__auto__';
+            autoOption.textContent = 'Auto-create MAIN Location untuk warehouse ini';
+            autoOption.selected = true;
+            locationSelect.appendChild(autoOption);
+            locationHelp.textContent = 'Belum ada location untuk warehouse ini. Sistem akan membuat MAIN Location saat posting.';
+        } else {
+            locationHelp.textContent = 'Location otomatis hanya muncul sesuai warehouse.';
+            if (locationSelect.options.length === 2 && !oldLocationValue) {
+                locationSelect.selectedIndex = 1;
+            }
         }
+
+        refreshSelect2(locationSelect);
     }
 
     function fillItemFields() {
