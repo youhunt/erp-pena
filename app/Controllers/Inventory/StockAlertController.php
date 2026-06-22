@@ -5,34 +5,38 @@ namespace App\Controllers\Inventory;
 use App\Controllers\BaseController;
 use App\Services\TenantContext;
 use Config\Database;
+use RuntimeException;
 
 class StockAlertController extends BaseController
 {
-    public function index(): string
+    public function index()
     {
         $tenant = new TenantContext(session());
         $status = trim((string) $this->request->getGet('status'));
         $keyword = trim((string) $this->request->getGet('q'));
-        $rows = $this->rows($tenant, $status, $keyword);
+        $rows = $this->rows($tenant, $status, $keyword, $this->request->getGet('export') === 'xlsx' ? 10000 : 500);
+        $summary = $this->summary($rows);
+
+        if ($this->request->getGet('export') === 'xlsx') {
+            return $this->xlsxWorkbookResponse('stock-alerts-' . date('Y-m-d') . '.xlsx', [
+                'Summary' => $this->summaryRows($summary, $status, $keyword, count($rows)),
+                'Stock Alerts Detail' => $this->detailRows($rows),
+            ]);
+        }
 
         return view('inventory/stock_alerts/index', [
             'title' => 'Stock Alerts',
             'rows' => $rows,
-            'summary' => $this->summary($rows),
+            'summary' => $summary,
             'filters' => ['status' => $status, 'q' => $keyword],
-            'statusOptions' => [
-                'below_min' => 'Below Min',
-                'reorder' => 'Reorder',
-                'over_max' => 'Over Max',
-                'ok' => 'OK',
-            ],
+            'statusOptions' => $this->statusOptions(),
         ]);
     }
 
     /**
      * @return list<array<string, mixed>>
      */
-    private function rows(TenantContext $tenant, string $status, string $keyword): array
+    private function rows(TenantContext $tenant, string $status, string $keyword, int $limit): array
     {
         $db = Database::connect();
         if (! $db->tableExists('item_locations')) {
@@ -98,7 +102,7 @@ class StockAlertController extends BaseController
             ->orderBy('w.code', 'ASC')
             ->orderBy('l.code', 'ASC')
             ->orderBy('il.item_code', 'ASC')
-            ->get(500)
+            ->get($limit)
             ->getResultArray();
 
         $rows = array_map([$this, 'decorate'], $rows);
@@ -135,12 +139,7 @@ class StockAlertController extends BaseController
         $suggestedQty = max(0, $targetQty - $available);
 
         $row['alert_status'] = $status;
-        $row['alert_label'] = match ($status) {
-            'below_min' => 'Below Min',
-            'reorder' => 'Reorder',
-            'over_max' => 'Over Max',
-            default => 'OK',
-        };
+        $row['alert_label'] = $this->statusOptions()[$status] ?? 'OK';
         $row['alert_badge'] = match ($status) {
             'below_min' => 'danger',
             'reorder' => 'warning',
@@ -166,5 +165,108 @@ class StockAlertController extends BaseController
         }
 
         return $summary;
+    }
+
+    private function summaryRows(array $summary, string $status, string $keyword, int $rowCount): array
+    {
+        return [
+            ['Metric', 'Value'],
+            ['Report', 'Stock Alerts'],
+            ['Keyword', $keyword !== '' ? $keyword : 'ALL'],
+            ['Status Filter', $status !== '' ? ($this->statusOptions()[$status] ?? $status) : 'ALL'],
+            ['Rows', $rowCount],
+            ['Below Min', (int) ($summary['below_min'] ?? 0)],
+            ['Reorder', (int) ($summary['reorder'] ?? 0)],
+            ['Over Max', (int) ($summary['over_max'] ?? 0)],
+            ['OK', (int) ($summary['ok'] ?? 0)],
+            ['Generated At', date('Y-m-d H:i:s')],
+        ];
+    }
+
+    private function detailRows(array $rows): array
+    {
+        $exportRows = [[
+            'Item Code',
+            'Item Name',
+            'Warehouse Code',
+            'Warehouse Name',
+            'Location Code',
+            'Location Name',
+            'Qty Available',
+            'Min Qty',
+            'Reorder Qty',
+            'Max Qty',
+            'Suggested Qty',
+            'Alert Status',
+        ]];
+
+        foreach ($rows as $row) {
+            $exportRows[] = [
+                $row['item_code'] ?? '',
+                $row['item_name'] ?? '',
+                $row['warehouse_code'] ?? '',
+                $row['warehouse_name'] ?? '',
+                $row['location_code'] ?? '',
+                $row['location_name'] ?? '',
+                (float) ($row['qty_available'] ?? 0),
+                (float) ($row['min_qty'] ?? 0),
+                (float) ($row['reorder_qty'] ?? 0),
+                (float) ($row['max_qty'] ?? 0),
+                (float) ($row['suggested_qty'] ?? 0),
+                $row['alert_label'] ?? '',
+            ];
+        }
+
+        return $exportRows;
+    }
+
+    private function statusOptions(): array
+    {
+        return [
+            'below_min' => 'Below Min',
+            'reorder' => 'Reorder',
+            'over_max' => 'Over Max',
+            'ok' => 'OK',
+        ];
+    }
+
+    /**
+     * @param array<string, array<int, array<int, mixed>>> $sheets
+     */
+    private function xlsxWorkbookResponse(string $filename, array $sheets)
+    {
+        if (! class_exists(\PhpOffice\PhpSpreadsheet\Spreadsheet::class)) {
+            throw new RuntimeException('PhpSpreadsheet is required to generate Excel files. Run composer install.');
+        }
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheetIndex = 0;
+        foreach ($sheets as $sheetTitle => $rows) {
+            $sheet = $sheetIndex === 0 ? $spreadsheet->getActiveSheet() : $spreadsheet->createSheet();
+            $sheet->setTitle(substr((string) $sheetTitle, 0, 31));
+            $sheet->fromArray($rows, null, 'A1');
+            $highestColumn = $sheet->getHighestColumn();
+            $highestRow = $sheet->getHighestRow();
+            if ($highestRow >= 1) {
+                $sheet->getStyle('A1:' . $highestColumn . '1')->getFont()->setBold(true);
+                $sheet->setAutoFilter('A1:' . $highestColumn . max(1, $highestRow));
+            }
+            foreach (range('A', $highestColumn) as $column) {
+                $sheet->getColumnDimension($column)->setAutoSize(true);
+            }
+            $sheetIndex++;
+        }
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        ob_start();
+        $writer->save('php://output');
+        $content = ob_get_clean() ?: '';
+        $spreadsheet->disconnectWorksheets();
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            ->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
+            ->setBody($content);
     }
 }
