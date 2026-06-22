@@ -2,18 +2,18 @@
 
 Tanggal: 2026-06-22
 
-Dokumen ini menjelaskan kapan dan bagaimana menjalankan script rebuild `inventory_stock_balances` dari `inventory_stock_movements`.
+Dokumen ini menjelaskan kapan dan bagaimana menjalankan script/command rebuild `inventory_stock_balances` dari `inventory_stock_movements`.
 
 ## 1. Kapan Dipakai
 
-Gunakan script rebuild jika terjadi kondisi berikut:
+Gunakan rebuild jika terjadi kondisi berikut:
 
 1. Stock Card menunjukkan stok ada, tetapi Delivery Order menunjukkan available `0`.
 2. `inventory_stock_movements` sudah benar, tetapi `inventory_stock_balances` tidak sinkron.
 3. Ada data stok lama hasil import yang warehouse/location-nya belum rapi.
 4. Setelah manual repair warehouse/location stok orphan.
 
-Jangan gunakan script ini kalau movement ledger masih salah, karena balance akan dibangun ulang dari movement.
+Jangan gunakan rebuild kalau movement ledger masih salah, karena balance akan dibangun ulang dari movement.
 
 ## 2. File SQL
 
@@ -21,12 +21,33 @@ Jangan gunakan script ini kalau movement ledger masih salah, karena balance akan
 database/hosting/2026-06-22_rebuild_stock_balances_from_movements.sql
 ```
 
-## 3. Prinsip
+## 3. Spark Command
 
-`inventory_stock_movements` diperlakukan sebagai sumber kebenaran. Script akan:
+Untuk server yang bisa akses terminal, gunakan command resmi:
 
-1. Membandingkan balance dengan movement ledger.
-2. Menghapus isi `inventory_stock_balances`.
+```bash
+php spark inventory:rebuild-balances --dry-run
+```
+
+Scope per company/site:
+
+```bash
+php spark inventory:rebuild-balances --company=1 --site=1 --dry-run
+php spark inventory:rebuild-balances --company=1 --site=1
+```
+
+Command berada di:
+
+```text
+app/Commands/RebuildStockBalancesCommand.php
+```
+
+## 4. Prinsip
+
+`inventory_stock_movements` diperlakukan sebagai sumber kebenaran. Rebuild akan:
+
+1. Membaca movement valid yang sudah punya company, warehouse, location, dan item code.
+2. Menghapus isi `inventory_stock_balances` sesuai scope command/SQL.
 3. Membuat ulang balance berdasarkan movement per company, site, warehouse, location, dan item.
 4. Mengisi:
    - qty_on_hand
@@ -36,22 +57,22 @@ database/hosting/2026-06-22_rebuild_stock_balances_from_movements.sql
    - stock_value
    - last_movement_date
 
-## 4. Langkah Aman
+## 5. Langkah Aman
 
 1. Backup database.
-2. Jalankan bagian diagnostic di script.
-3. Cek baris yang mismatch.
-4. Jika movement sudah benar, baru jalankan bagian rebuild.
+2. Jalankan diagnostic SQL atau command `--dry-run`.
+3. Cek baris yang mismatch / preview output.
+4. Jika movement sudah benar, baru jalankan rebuild tanpa `--dry-run`.
 5. Setelah rebuild, buka Delivery Order dan klik Refresh Stock.
 6. Cek Stock Card dan Stock Balance.
 
-## 5. Catatan Reserved Quantity
+## 6. Catatan Reserved Quantity
 
 Pada rebuild ini `qty_reserved` diset `0` karena belum ada rebuild allocation/reservation detail. Jika modul allocation sudah aktif dan data reservation dianggap final, perlu script khusus untuk menghitung ulang reserved quantity dari allocation order.
 
 Untuk UAT Sales Delivery dasar, nilai ini aman karena Delivery memakai outstanding SO dan available stock.
 
-## 6. Setelah Rebuild
+## 7. Setelah Rebuild
 
 Validasi minimal:
 
