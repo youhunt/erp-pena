@@ -11,17 +11,20 @@
     }
     .erp-quick-audit-card,
     .dashboard-metric-card,
-    .dashboard-queue-card {
+    .dashboard-queue-card,
+    .dashboard-financial-card {
         border: 0;
         box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
     }
     .dashboard-section-title,
     .dashboard-metric-value,
+    .dashboard-financial-value,
     .erp-quick-audit-title {
         color: #172033 !important;
         font-weight: 700;
     }
-    .dashboard-metric-label {
+    .dashboard-metric-label,
+    .dashboard-financial-label {
         color: #5f6c80 !important;
         letter-spacing: .01em;
     }
@@ -131,8 +134,44 @@
         </div>
     </section>
 
+    <?php if (! empty($financialSnapshot)): ?>
+        <section class="dashboard-section dashboard-section-financial mt-3">
+            <div class="dashboard-section-header">
+                <div>
+                    <h5 class="dashboard-section-title mb-1">Financial Snapshot</h5>
+                    <p class="dashboard-section-subtitle text-muted mb-0">Ringkasan posisi AR/AP, kas/bank, inventory value, dan validasi GL aktif.</p>
+                </div>
+            </div>
+            <div class="row g-3">
+                <?php foreach ($financialSnapshot as $snapshot): ?>
+                    <?php
+                    $isMoney = (bool) ($snapshot['money'] ?? false);
+                    $displayValue = number_format((float) ($snapshot['value'] ?? 0), $isMoney ? 0 : 0, ',', '.');
+                    $tone = $snapshot['tone'] ?? 'primary';
+                    ?>
+                    <div class="col-xl-2 col-lg-4 col-md-6">
+                        <a href="<?= site_url($snapshot['route'] ?? 'dashboard') ?>" class="text-reset">
+                            <div class="card dashboard-financial-card h-100">
+                                <div class="card-body p-3">
+                                    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                                        <span class="avatar-title rounded bg-<?= esc($tone) ?> bg-soft text-<?= esc($tone) ?> font-size-20">
+                                            <i class="<?= esc($snapshot['icon'] ?? 'bx bx-bar-chart') ?>"></i>
+                                        </span>
+                                        <span class="badge bg-<?= esc($tone) ?> bg-soft text-<?= esc($tone) ?>">Live</span>
+                                    </div>
+                                    <p class="dashboard-financial-label small mb-1"><?= esc($snapshot['label'] ?? '-') ?></p>
+                                    <h5 class="dashboard-financial-value mb-0"><?= $isMoney ? 'Rp ' : '' ?><?= esc($displayValue) ?></h5>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                <?php endforeach ?>
+            </div>
+        </section>
+    <?php endif ?>
+
     <?php if (! empty($workflowQueues)): ?>
-        <section class="dashboard-section dashboard-section-workflow">
+        <section class="dashboard-section dashboard-section-workflow mt-3">
             <div class="dashboard-section-header">
                 <div>
                     <h5 class="dashboard-section-title mb-1">Workflow Queue</h5>
@@ -164,7 +203,7 @@
         </section>
     <?php endif ?>
 
-    <section class="dashboard-section dashboard-section-activity">
+    <section class="dashboard-section dashboard-section-activity mt-3">
         <div class="dashboard-section-header">
             <div>
                 <h5 class="dashboard-section-title mb-1">Activity & Pending Work</h5>
