@@ -5,6 +5,7 @@
     <div class="d-flex justify-content-between align-items-start mb-4">
         <div><h4 class="card-title mb-1">Work Order</h4><p class="text-muted mb-0"><?= esc($workOrder['wo_no']) ?></p></div>
         <div class="d-flex flex-wrap gap-2 align-items-center">
+            <a href="<?= site_url('production/work-orders/' . $workOrder['id'] . '/export') ?>" class="btn btn-outline-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
             <?php if (($workOrder['status'] ?? 'draft') === 'draft'): ?>
                 <a href="<?= site_url('production/work-orders/' . $workOrder['id'] . '/edit') ?>" class="btn btn-outline-primary"><i class="bx bx-edit me-1"></i> Edit</a>
             <?php endif ?>
