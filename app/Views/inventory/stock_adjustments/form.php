@@ -6,7 +6,18 @@
         <div class="card">
             <div class="card-body">
                 <h4 class="card-title mb-1">Stock Adjustment</h4>
-                <p class="text-muted mb-4">Post stock correction into inventory ledger and balance.</p>
+                <p class="text-muted mb-3">Koreksi stok manual. Pilih warehouse dulu, location akan otomatis terfilter.</p>
+
+                <div class="alert alert-info py-2">
+                    <strong>Prosedur:</strong> pilih Warehouse → pilih Location → pilih Item → isi Qty dan Unit Cost → Post Adjustment.
+                </div>
+
+                <?php if (session('error')): ?>
+                    <div class="alert alert-danger"><?= esc(session('error')) ?></div>
+                <?php endif ?>
+                <?php if (session('message')): ?>
+                    <div class="alert alert-success"><?= esc(session('message')) ?></div>
+                <?php endif ?>
 
                 <?php if ($items === []): ?>
                     <div class="alert alert-warning">
@@ -22,42 +33,58 @@
                         <input type="text" name="reference_no" class="form-control" value="<?= esc(old('reference_no', 'ADJ-' . date('Ymd-His'))) ?>">
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Warehouse</label>
-                        <select name="warehouse_id" class="form-select">
-                            <option value="">No Warehouse</option>
-                            <?php foreach ($warehouses as $warehouse): ?>
-                                <option value="<?= (int) $warehouse['id'] ?>"><?= esc(($warehouse['code'] ?? $warehouse['id']) . ' - ' . ($warehouse['name'] ?? '-')) ?></option>
-                            <?php endforeach ?>
-                        </select>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Warehouse <span class="text-danger">*</span></label>
+                            <select name="warehouse_id" id="warehouseSelect" class="form-select" required>
+                                <option value="">Pilih / cari Warehouse</option>
+                                <?php foreach ($warehouses as $warehouse): ?>
+                                    <?php $warehouseId = (int) $warehouse['id']; ?>
+                                    <option value="<?= $warehouseId ?>" <?= (string) old('warehouse_id') === (string) $warehouseId ? 'selected' : '' ?>>
+                                        <?= esc(($warehouse['code'] ?? $warehouse['id']) . ' - ' . ($warehouse['name'] ?? '-')) ?>
+                                    </option>
+                                <?php endforeach ?>
+                            </select>
+                            <div class="form-text">Warehouse wajib dipilih agar stok masuk ke lokasi yang jelas.</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Location <span class="text-danger">*</span></label>
+                            <select name="location_id" id="locationSelect" class="form-select" required disabled>
+                                <option value="">Pilih warehouse dulu</option>
+                                <?php foreach ($locations as $location): ?>
+                                    <?php $locationId = (int) $location['id']; ?>
+                                    <option value="<?= $locationId ?>" data-warehouse-id="<?= esc((string) ($location['warehouse_id'] ?? ''), 'attr') ?>" <?= (string) old('location_id') === (string) $locationId ? 'selected' : '' ?>>
+                                        <?= esc(($location['code'] ?? $location['id']) . ' - ' . ($location['name'] ?? '-')) ?>
+                                    </option>
+                                <?php endforeach ?>
+                            </select>
+                            <div class="form-text">Location otomatis hanya muncul sesuai warehouse.</div>
+                        </div>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Location</label>
-                        <select name="location_id" class="form-select">
-                            <option value="">No Location</option>
-                            <?php foreach ($locations as $location): ?>
-                                <option value="<?= (int) $location['id'] ?>"><?= esc(($location['code'] ?? $location['id']) . ' - ' . ($location['name'] ?? '-')) ?></option>
-                            <?php endforeach ?>
-                        </select>
-                    </div>
-
-                    <div class="mb-3">
+                    <div class="mb-3 mt-3">
                         <label class="form-label">Select Item</label>
                         <select name="item_code" class="form-select" id="itemSelect">
                             <option value="">Manual Item / Select Item</option>
                             <?php foreach ($items as $item): ?>
-                                <option value="<?= esc($item['code'] ?? '') ?>" data-name="<?= esc($item['name'] ?? '') ?>" data-uom="<?= esc($item['uom_code'] ?? $item['base_uom_code'] ?? 'PCS') ?>">
+                                <?php
+                                    $itemCode = (string) ($item['code'] ?? '');
+                                    $itemUom = (string) ($item['uom_code'] ?? $item['base_uom_code'] ?? 'PCS');
+                                    $itemCost = (string) ($item['purchase_price'] ?? $item['standard_cost'] ?? $item['unit_cost'] ?? $item['avg_cost'] ?? '0');
+                                ?>
+                                <option value="<?= esc($itemCode) ?>" data-name="<?= esc($item['name'] ?? '', 'attr') ?>" data-uom="<?= esc($itemUom, 'attr') ?>" data-cost="<?= esc($itemCost, 'attr') ?>" <?= old('item_code') === $itemCode ? 'selected' : '' ?>>
                                     <?= esc(($item['code'] ?? '-') . ' - ' . ($item['name'] ?? '-')) ?>
                                 </option>
                             <?php endforeach ?>
                         </select>
-                        <div class="form-text">Pilih dari master item, atau kosongkan lalu isi manual item code.</div>
+                        <div class="form-text">Pilih dari master item agar nama, UoM, dan unit cost terisi otomatis.</div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Manual Item Code</label>
                         <input type="text" name="manual_item_code" id="manualItemCode" class="form-control" value="<?= esc(old('manual_item_code')) ?>" placeholder="Contoh: ITEM-001">
+                        <div class="form-text">Isi manual hanya jika item belum ada di master.</div>
                     </div>
 
                     <div class="mb-3">
@@ -67,9 +94,9 @@
 
                     <div class="row">
                         <div class="col-md-4 mb-3">
-                            <label class="form-label">Qty +/-</label>
-                            <input type="number" step="0.0001" name="qty" class="form-control text-end" required value="<?= esc(old('qty', '1')) ?>">
-                            <div class="form-text">Positive adds stock, negative reduces stock.</div>
+                            <label class="form-label">Qty +/- <span class="text-danger">*</span></label>
+                            <input type="number" step="0.0001" name="qty" id="qtyInput" class="form-control text-end" required value="<?= esc(old('qty', '1')) ?>">
+                            <div class="form-text">Positif tambah stok, negatif kurangi stok.</div>
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label">UoM</label>
@@ -77,7 +104,8 @@
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Unit Cost</label>
-                            <input type="number" step="0.000001" name="unit_cost" class="form-control text-end" value="<?= esc(old('unit_cost', '0')) ?>">
+                            <input type="number" step="0.000001" name="unit_cost" id="unitCost" class="form-control text-end" value="<?= esc(old('unit_cost', '0')) ?>">
+                            <div class="form-text">Wajib &gt; 0 untuk tambah stok.</div>
                         </div>
                     </div>
 
@@ -143,19 +171,65 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const warehouseSelect = document.getElementById('warehouseSelect');
+    const locationSelect = document.getElementById('locationSelect');
     const itemSelect = document.getElementById('itemSelect');
     const manualItemCode = document.getElementById('manualItemCode');
     const itemName = document.getElementById('itemName');
     const uomCode = document.getElementById('uomCode');
+    const unitCost = document.getElementById('unitCost');
+    const oldLocationValue = '<?= esc((string) old('location_id'), 'js') ?>';
 
-    itemSelect.addEventListener('change', function () {
+    const allLocationOptions = Array.from(locationSelect.querySelectorAll('option[data-warehouse-id]')).map(function (option) {
+        return option.cloneNode(true);
+    });
+
+    function refreshLocations() {
+        const warehouseId = warehouseSelect.value;
+        locationSelect.innerHTML = '';
+
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = warehouseId ? 'Pilih / cari Location' : 'Pilih warehouse dulu';
+        locationSelect.appendChild(placeholder);
+        locationSelect.disabled = !warehouseId;
+
+        if (!warehouseId) {
+            return;
+        }
+
+        allLocationOptions.forEach(function (option) {
+            if (String(option.dataset.warehouseId || '') === String(warehouseId)) {
+                const cloned = option.cloneNode(true);
+                if (oldLocationValue && cloned.value === oldLocationValue) {
+                    cloned.selected = true;
+                }
+                locationSelect.appendChild(cloned);
+            }
+        });
+
+        if (locationSelect.options.length === 2 && !oldLocationValue) {
+            locationSelect.selectedIndex = 1;
+        }
+    }
+
+    function fillItemFields() {
         const option = itemSelect.options[itemSelect.selectedIndex];
         if (option && option.value) {
-            manualItemCode.value = '';
+            manualItemCode.value = option.value;
             itemName.value = option.dataset.name || '';
             uomCode.value = option.dataset.uom || 'PCS';
+            if (option.dataset.cost && Number(option.dataset.cost) > 0) {
+                unitCost.value = option.dataset.cost;
+            }
         }
-    });
+    }
+
+    warehouseSelect.addEventListener('change', refreshLocations);
+    itemSelect.addEventListener('change', fillItemFields);
+
+    refreshLocations();
+    fillItemFields();
 });
 </script>
 <?= $this->endSection() ?>
