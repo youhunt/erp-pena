@@ -52,6 +52,7 @@ $profitClass = static fn (float $amount): string => $amount >= 0 ? 'text-success
                             <button class="btn btn-sm btn-primary" type="submit">Filter</button>
                         </form>
                         <a href="<?= esc($exportUrl) ?>" class="btn btn-sm btn-outline-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
+                        <a href="<?= site_url('ar/sales-invoices') ?>" class="btn btn-sm btn-outline-secondary"><i class="bx bx-receipt me-1"></i> AR Invoices</a>
                     </div>
                 </div>
 
