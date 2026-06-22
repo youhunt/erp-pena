@@ -213,6 +213,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('statements/import', 'Finance\CashBankController::statementImportForm');
         $routes->post('statements/import', 'Finance\CashBankController::importStatement');
         $routes->post('statements/(:num)/match', 'Finance\CashBankController::matchStatementImport/$1');
+        $routes->get('statements/(:num)/export', 'System\CashBankAuditExportController::statement/$1');
         $routes->get('statements/(:num)', 'Finance\CashBankController::showStatementImport/$1');
         $routes->get('reconciliations', 'Finance\CashBankController::reconciliations');
         $routes->get('reconciliations/new', 'Finance\CashBankController::newReconciliation');
