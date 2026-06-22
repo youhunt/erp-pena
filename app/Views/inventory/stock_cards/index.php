@@ -25,7 +25,7 @@
                 <p class="text-muted mb-0">Audit trail chronological stock movement per item, batch, warehouse, and location.</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
-                <a href="<?= esc($exportUrl) ?>" class="btn btn-success"><i class="bx bx-download me-1"></i> Export Excel</a>
+                <a href="<?= esc($exportUrl) ?>" class="btn btn-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
                 <a href="<?= site_url('inventory/stock-balances') ?>" class="btn btn-outline-primary"><i class="bx bx-layer me-1"></i> Stock Balance</a>
                 <a href="<?= site_url('inventory/stock-adjustment') ?>" class="btn btn-outline-primary"><i class="bx bx-edit-alt me-1"></i> Adjustment</a>
                 <a href="<?= site_url('inventory/transfers') ?>" class="btn btn-outline-primary"><i class="bx bx-transfer me-1"></i> Transfer</a>
