@@ -3,14 +3,37 @@
 namespace App\Controllers\System;
 
 use App\Controllers\BaseController;
+use App\Models\BankReconciliationModel;
 use App\Models\BankStatementImportModel;
 use App\Models\BankStatementLineModel;
+use App\Models\CashBankEntryModel;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use RuntimeException;
 
 class CashBankAuditExportController extends BaseController
 {
+    public function entries(string $type = 'cash')
+    {
+        $type = $type === 'bank' ? 'bank' : 'cash';
+        $tenant = new TenantContext(session());
+        $model = new CashBankEntryModel();
+        $this->scope($model, $tenant);
+        $type === 'cash'
+            ? $model->whereIn('entry_type', ['cash_in', 'cash_out'])
+            : $model->whereIn('entry_type', ['bank_in', 'bank_out']);
+
+        $entries = $model
+            ->orderBy('entry_date', 'DESC')
+            ->orderBy('id', 'DESC')
+            ->findAll(10000);
+
+        return $this->xlsxWorkbookResponse($type . '-entries-' . date('Y-m-d') . '.xlsx', [
+            'Summary' => $this->entrySummaryRows($entries, $type),
+            'Entry Detail' => $this->entryRows($entries),
+        ]);
+    }
+
     public function statement(int $id)
     {
         $tenant = new TenantContext(session());
@@ -32,12 +55,101 @@ class CashBankAuditExportController extends BaseController
             . '.xlsx';
 
         return $this->xlsxWorkbookResponse($filename, [
-            'Summary' => $this->summaryRows($import, $lines),
-            'Statement Lines' => $this->lineRows($lines),
+            'Summary' => $this->statementSummaryRows($import, $lines),
+            'Statement Lines' => $this->statementLineRows($lines),
         ]);
     }
 
-    private function summaryRows(array $import, array $lines): array
+    public function reconciliation(int $id)
+    {
+        $tenant = new TenantContext(session());
+        $model = new BankReconciliationModel();
+        $this->scope($model, $tenant);
+        $reconciliation = $model->find($id);
+        if ($reconciliation === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        $entries = (new CashBankEntryModel())
+            ->where('bank_reconciliation_id', $id)
+            ->orderBy('entry_date', 'ASC')
+            ->orderBy('id', 'ASC')
+            ->findAll(10000);
+
+        $filename = 'bank-reconciliation-'
+            . preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) ($reconciliation['reconcile_no'] ?? $id))
+            . '.xlsx';
+
+        return $this->xlsxWorkbookResponse($filename, [
+            'Summary' => $this->reconciliationSummaryRows($reconciliation, $entries),
+            'Matched Entries' => $this->entryRows($entries),
+        ]);
+    }
+
+    private function entrySummaryRows(array $entries, string $type): array
+    {
+        $cashIn = 0.0;
+        $cashOut = 0.0;
+        $postedGl = 0;
+        $withoutGl = 0;
+
+        foreach ($entries as $entry) {
+            $amount = (float) ($entry['amount'] ?? 0);
+            str_ends_with((string) ($entry['entry_type'] ?? ''), '_in') ? $cashIn += $amount : $cashOut += $amount;
+            ! empty($entry['gl_entry_id']) ? $postedGl++ : $withoutGl++;
+        }
+
+        return [
+            ['Metric', 'Value'],
+            ['Report', ucfirst($type) . ' Entries'],
+            ['Rows', count($entries)],
+            ['Total In', $cashIn],
+            ['Total Out', $cashOut],
+            ['Net Movement', $cashIn - $cashOut],
+            ['Posted GL Rows', $postedGl],
+            ['Without GL Rows', $withoutGl],
+            ['Generated At', date('Y-m-d H:i:s')],
+        ];
+    }
+
+    private function entryRows(array $entries): array
+    {
+        $rows = [[
+            'Entry Date',
+            'Entry No',
+            'Entry Type',
+            'Cash/Bank Code',
+            'Currency',
+            'Amount',
+            'Counter Account No',
+            'Reference No',
+            'Description',
+            'GL Entry ID',
+            'Bank Reconciliation ID',
+            'Created At',
+        ]];
+
+        foreach ($entries as $entry) {
+            $rows[] = [
+                $entry['entry_date'] ?? '',
+                $entry['entry_no'] ?? '',
+                $entry['entry_type'] ?? '',
+                $entry['cash_bank_code'] ?? '',
+                $entry['currency_code'] ?? '',
+                (float) ($entry['amount'] ?? 0),
+                $entry['counter_account_no'] ?? '',
+                $entry['reference_no'] ?? '',
+                $entry['description'] ?? '',
+                $entry['gl_entry_id'] ?? '',
+                $entry['bank_reconciliation_id'] ?? '',
+                $entry['created_at'] ?? '',
+            ];
+        }
+
+        return $rows;
+    }
+
+    private function statementSummaryRows(array $import, array $lines): array
     {
         $matched = 0;
         $unmatched = 0;
@@ -73,7 +185,7 @@ class CashBankAuditExportController extends BaseController
         ];
     }
 
-    private function lineRows(array $lines): array
+    private function statementLineRows(array $lines): array
     {
         $rows = [[
             'Line No',
@@ -108,6 +220,33 @@ class CashBankAuditExportController extends BaseController
         }
 
         return $rows;
+    }
+
+    private function reconciliationSummaryRows(array $reconciliation, array $entries): array
+    {
+        $entryAmount = 0.0;
+        foreach ($entries as $entry) {
+            $entryAmount += (float) ($entry['amount'] ?? 0);
+        }
+
+        return [
+            ['Metric', 'Value'],
+            ['Report', 'Bank Reconciliation'],
+            ['Reconcile No', (string) ($reconciliation['reconcile_no'] ?? '-')],
+            ['Cash/Bank Code', (string) ($reconciliation['cash_bank_code'] ?? '-')],
+            ['Statement Date', (string) ($reconciliation['statement_date'] ?? '-')],
+            ['Statement Ref', (string) ($reconciliation['statement_ref'] ?? '-')],
+            ['Status', (string) ($reconciliation['status'] ?? '-')],
+            ['Bank Statement Import ID', (string) ($reconciliation['bank_statement_import_id'] ?? '')],
+            ['Book Balance', (float) ($reconciliation['book_balance'] ?? 0)],
+            ['Statement Balance', (float) ($reconciliation['statement_balance'] ?? 0)],
+            ['Difference Amount', (float) ($reconciliation['difference_amount'] ?? 0)],
+            ['Reconciled Amount', (float) ($reconciliation['reconciled_amount'] ?? 0)],
+            ['Matched Entry Count', count($entries)],
+            ['Matched Entry Amount', $entryAmount],
+            ['Posted At', (string) ($reconciliation['posted_at'] ?? '')],
+            ['Generated At', date('Y-m-d H:i:s')],
+        ];
     }
 
     private function scope($model, TenantContext $tenant): void
