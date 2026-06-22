@@ -13,20 +13,40 @@ $statusClass = match ($status) {
 $outstandingAmount = (float) ($receivable['outstanding_amount'] ?? $invoice['outstanding_amount'] ?? 0);
 $paidAmount = (float) ($receivable['paid_amount'] ?? $invoice['paid_amount'] ?? 0);
 $receipts = $receipts ?? [];
-if ($receipts === []) {
-    try {
-        $db = \Config\Database::connect();
-        if ($db->tableExists('ar_receipts')) {
-            $receiptBuilder = $db->table('ar_receipts')->where('sales_invoice_id', (int) $invoice['id']);
-            if ($db->fieldExists('deleted_at', 'ar_receipts')) {
-                $receiptBuilder->where('deleted_at', null);
-            }
-            $receipts = $receiptBuilder->orderBy('receipt_date', 'DESC')->orderBy('id', 'DESC')->get()->getResultArray();
+$sourceDelivery = null;
+$cogsGl = null;
+$cogsAmount = 0.0;
+$invoiceAmount = (float) ($invoice['total_amount'] ?? 0);
+
+try {
+    $db = \Config\Database::connect();
+    if ($receipts === [] && $db->tableExists('ar_receipts')) {
+        $receiptBuilder = $db->table('ar_receipts')->where('sales_invoice_id', (int) $invoice['id']);
+        if ($db->fieldExists('deleted_at', 'ar_receipts')) {
+            $receiptBuilder->where('deleted_at', null);
         }
-    } catch (\Throwable) {
-        $receipts = [];
+        $receipts = $receiptBuilder->orderBy('receipt_date', 'DESC')->orderBy('id', 'DESC')->get()->getResultArray();
     }
+
+    if (! empty($invoice['sales_delivery_id']) && $db->tableExists('sales_deliveries')) {
+        $sourceDelivery = $db->table('sales_deliveries')->where('id', (int) $invoice['sales_delivery_id'])->get(1)->getRowArray();
+        if ($sourceDelivery !== null && ! empty($sourceDelivery['gl_entry_id']) && $db->tableExists('gl_entries')) {
+            $cogsGl = $db->table('gl_entries')->where('id', (int) $sourceDelivery['gl_entry_id'])->get(1)->getRowArray();
+            $cogsAmount = (float) ($cogsGl['total_debit'] ?? 0);
+        }
+    }
+} catch (\Throwable) {
+    $receipts = $receipts ?? [];
+    $sourceDelivery = null;
+    $cogsGl = null;
+    $cogsAmount = 0.0;
 }
+
+$hasCogs = $cogsGl !== null;
+$grossProfit = $hasCogs ? $invoiceAmount - $cogsAmount : null;
+$grossMargin = ($grossProfit !== null && $invoiceAmount > 0) ? ($grossProfit / $invoiceAmount) * 100 : null;
+$marginBadge = $grossProfit === null ? 'bg-secondary' : ($grossProfit >= 0 ? 'bg-success' : 'bg-danger');
+$marginLabel = $grossProfit === null ? 'not calculated' : ($grossProfit >= 0 ? 'profit' : 'loss');
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -48,6 +68,7 @@ if ($receipts === []) {
                         <tr><th>SO No</th><td><?= ! empty($invoice['sales_order_id']) ? '<a href="' . site_url('sales/orders/' . $invoice['sales_order_id']) . '">' . esc($invoice['so_no'] ?? '-') . '</a>' : '-' ?></td></tr>
                         <tr><th>DO No</th><td><?= ! empty($invoice['sales_delivery_id']) ? '<a href="' . site_url('sales/deliveries/' . $invoice['sales_delivery_id']) . '">' . esc($invoice['delivery_no'] ?? '-') . '</a>' : '-' ?></td></tr>
                         <tr><th>GL Entry</th><td><?= ! empty($invoice['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $invoice['gl_entry_id']) . '">#' . esc($invoice['gl_entry_id']) . '</a>' : '-' ?></td></tr>
+                        <tr><th>COGS GL</th><td><?= $hasCogs ? '<a href="' . site_url('gl/entries/' . (int) $cogsGl['id']) . '">#' . esc($cogsGl['id']) . '</a>' : '<span class="text-muted">Not linked</span>' ?></td></tr>
                         <tr><th>Reversal GL</th><td><?= ! empty($invoice['reversal_gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $invoice['reversal_gl_entry_id']) . '">#' . esc($invoice['reversal_gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Customer</th><td><?= esc(($invoice['customer_code'] ?? '-') . ' ' . ($invoice['customer_name'] ?? '')) ?></td></tr>
                         <tr><th>Total</th><td class="fw-semibold"><?= esc(number_format((float) ($invoice['total_amount'] ?? 0), 2)) ?></td></tr>
@@ -61,6 +82,9 @@ if ($receipts === []) {
                 </table>
                 <div class="mt-3 d-flex flex-wrap gap-2">
                     <a href="<?= site_url('ar/sales-invoices') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back</a>
+                    <?php if (! empty($invoice['sales_delivery_id'])): ?>
+                        <a href="<?= site_url('sales/deliveries/' . (int) $invoice['sales_delivery_id']) ?>" class="btn btn-outline-info"><i class="bx bx-package me-1"></i> Open DO</a>
+                    <?php endif ?>
                     <a href="<?= site_url('print/sales-invoices/' . (int) $invoice['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
                     <?php if (in_array($status, ['open', 'partial'], true) && $outstandingAmount > 0): ?>
                         <a href="<?= site_url('ar/sales-invoices/' . $invoice['id'] . '/receipt') ?>" class="btn btn-primary"><i class="bx bx-money-withdraw me-1"></i> Post Receipt</a>
@@ -75,6 +99,33 @@ if ($receipts === []) {
                 </div>
             </div>
         </div>
+
+        <?php if ($hasCogs): ?>
+            <div class="card border-<?= $grossProfit >= 0 ? 'success' : 'danger' ?>">
+                <div class="card-body py-3">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <h5 class="card-title mb-1">Margin Audit</h5>
+                            <p class="text-muted small mb-0">Invoice revenue vs delivery COGS.</p>
+                        </div>
+                        <span class="badge <?= esc($marginBadge) ?>"><?= esc($marginLabel) ?></span>
+                    </div>
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            <tr><th>Invoice Amount</th><td class="text-end"><?= esc(number_format($invoiceAmount, 2)) ?></td></tr>
+                            <tr><th>COGS Amount</th><td class="text-end"><?= esc(number_format($cogsAmount, 2)) ?></td></tr>
+                            <tr><th>Gross Profit/Loss</th><td class="text-end fw-semibold <?= $grossProfit >= 0 ? 'text-success' : 'text-danger' ?>"><?= esc(number_format((float) $grossProfit, 2)) ?></td></tr>
+                            <tr><th>Gross Margin</th><td class="text-end fw-semibold <?= $grossProfit >= 0 ? 'text-success' : 'text-danger' ?>"><?= esc($grossMargin !== null ? number_format($grossMargin, 2) . '%' : '-') ?></td></tr>
+                        </tbody>
+                    </table>
+                    <?php if ($grossProfit < 0): ?>
+                        <div class="alert alert-danger py-2 small mt-3 mb-0">COGS is higher than invoice value. Review item cost / sales price before production use.</div>
+                    <?php endif ?>
+                </div>
+            </div>
+        <?php elseif (! empty($invoice['sales_delivery_id'])): ?>
+            <div class="alert alert-warning small">COGS GL is not linked from the source Delivery Order yet.</div>
+        <?php endif ?>
     </div>
     <div class="col-xl-8">
         <div class="card">
