@@ -1,6 +1,7 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php $exportUrl = site_url('inventory/stock-balances') . '?' . http_build_query(['q' => $keyword, 'export' => 'xlsx']); ?>
 <div class="row">
     <div class="col-md-3">
         <div class="card mini-stats-wid"><div class="card-body"><p class="text-muted mb-2">Items</p><h4 class="mb-0"><?= esc(number_format((int) $summary['item_count'])) ?></h4></div></div>
@@ -23,7 +24,8 @@
                 <h4 class="card-title mb-1">Stock Balance</h4>
                 <p class="text-muted mb-0">Current stock on hand, reserved, available, average cost, and stock value.</p>
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-wrap gap-2">
+                <a href="<?= esc($exportUrl) ?>" class="btn btn-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
                 <a href="<?= site_url('inventory/stock-card') ?>" class="btn btn-outline-primary"><i class="bx bx-list-ul me-1"></i> Stock Card</a>
                 <a href="<?= site_url('inventory/in-out') ?>" class="btn btn-outline-primary"><i class="bx bx-log-in-circle me-1"></i> In Out</a>
                 <a href="<?= site_url('inventory/transfers') ?>" class="btn btn-outline-primary"><i class="bx bx-transfer me-1"></i> Transfer</a>
