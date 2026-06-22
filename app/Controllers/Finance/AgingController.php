@@ -6,6 +6,7 @@ use App\Controllers\BaseController;
 use App\Services\TenantContext;
 use Config\Database;
 use DateTimeImmutable;
+use RuntimeException;
 
 class AgingController extends BaseController
 {
@@ -17,6 +18,16 @@ class AgingController extends BaseController
     public function ar(): string
     {
         return $this->report('ar');
+    }
+
+    public function apExport()
+    {
+        return $this->export('ap');
+    }
+
+    public function arExport()
+    {
+        return $this->export('ar');
     }
 
     private function report(string $type): string
@@ -36,6 +47,25 @@ class AgingController extends BaseController
             'rows' => $this->decorateRows($rows, $asOf, $config),
             'totals' => $this->totals($summary),
         ]);
+    }
+
+    private function export(string $type)
+    {
+        $asOf = $this->asOfDate();
+        $tenant = new TenantContext(session());
+        $config = $this->config($type);
+        $rows = $this->decorateRows($this->openRows($config, $tenant), $asOf, $config);
+        $summary = $this->summary($rows, $asOf, $config);
+        $totals = $this->totals($summary);
+        $prefix = strtoupper($type);
+
+        return $this->xlsxWorkbookResponse(
+            strtolower($type) . '-aging-' . $asOf->format('Y-m-d') . '.xlsx',
+            [
+                $prefix . ' Aging Summary' => $this->agingSummaryRows($summary, $totals, $config, $asOf),
+                $prefix . ' Aging Detail' => $this->agingDetailRows($rows, $config),
+            ]
+        );
     }
 
     private function asOfDate(): DateTimeImmutable
@@ -187,6 +217,74 @@ class AgingController extends BaseController
         return $totals;
     }
 
+    private function agingSummaryRows(array $summary, array $totals, array $config, DateTimeImmutable $asOf): array
+    {
+        $rows = [
+            ['Report', $config['title']],
+            ['As Of', $asOf->format('Y-m-d')],
+            ['Generated At', date('Y-m-d H:i:s')],
+            [],
+            [$config['partnerLabel'] . ' Code', $config['partnerLabel'] . ' Name', 'Current', '1-30', '31-60', '61-90', '> 90', 'Total'],
+        ];
+
+        foreach ($summary as $row) {
+            $rows[] = [
+                $row['partner_code'] ?? '-',
+                $row['partner_name'] ?? '-',
+                (float) ($row['current'] ?? 0),
+                (float) ($row['days_1_30'] ?? 0),
+                (float) ($row['days_31_60'] ?? 0),
+                (float) ($row['days_61_90'] ?? 0),
+                (float) ($row['days_over_90'] ?? 0),
+                (float) ($row['total'] ?? 0),
+            ];
+        }
+
+        $rows[] = [
+            'TOTAL',
+            '',
+            (float) ($totals['current'] ?? 0),
+            (float) ($totals['days_1_30'] ?? 0),
+            (float) ($totals['days_31_60'] ?? 0),
+            (float) ($totals['days_61_90'] ?? 0),
+            (float) ($totals['days_over_90'] ?? 0),
+            (float) ($totals['total'] ?? 0),
+        ];
+
+        return $rows;
+    }
+
+    private function agingDetailRows(array $rows, array $config): array
+    {
+        $exportRows = [[
+            'Invoice No',
+            'Invoice Date',
+            'Due Date',
+            $config['partnerLabel'] . ' Code',
+            $config['partnerLabel'] . ' Name',
+            'Bucket',
+            'Age Days',
+            'Outstanding Amount',
+            'Status',
+        ]];
+
+        foreach ($rows as $row) {
+            $exportRows[] = [
+                $row['invoice_no'] ?? '',
+                $row['invoice_date'] ?? '',
+                $row['due_date'] ?? '',
+                $row[$config['partnerCodeField']] ?? '',
+                $row[$config['partnerNameField']] ?? '',
+                $row['bucket'] ?? '',
+                (int) ($row['age_days'] ?? 0),
+                (float) ($row['outstanding_amount'] ?? 0),
+                $row['status'] ?? '',
+            ];
+        }
+
+        return $exportRows;
+    }
+
     /**
      * @return array<string, string>
      */
@@ -213,5 +311,49 @@ class AgingController extends BaseController
             'invoiceRoute' => 'ar/sales-invoices',
             'invoiceIdField' => 'sales_invoice_id',
         ];
+    }
+
+    /**
+     * @param array<string, array<int, array<int, mixed>>> $sheets
+     */
+    private function xlsxWorkbookResponse(string $filename, array $sheets)
+    {
+        if (! class_exists(\PhpOffice\PhpSpreadsheet\Spreadsheet::class)) {
+            throw new RuntimeException('PhpSpreadsheet is required to generate Excel files. Run composer install.');
+        }
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheetIndex = 0;
+
+        foreach ($sheets as $sheetTitle => $rows) {
+            $sheet = $sheetIndex === 0 ? $spreadsheet->getActiveSheet() : $spreadsheet->createSheet();
+            $sheet->setTitle(substr((string) $sheetTitle, 0, 31));
+            $sheet->fromArray($rows, null, 'A1');
+            $highestColumn = $sheet->getHighestColumn();
+            $highestRow = $sheet->getHighestRow();
+            $headerRow = str_contains((string) $sheetTitle, 'Summary') ? 5 : 1;
+            $headerRow = min($headerRow, max(1, $highestRow));
+            $sheet->getStyle('A' . $headerRow . ':' . $highestColumn . $headerRow)->getFont()->setBold(true);
+            if ($highestRow >= $headerRow) {
+                $sheet->setAutoFilter('A' . $headerRow . ':' . $highestColumn . max($headerRow, $highestRow));
+            }
+            foreach (range('A', $highestColumn) as $column) {
+                $sheet->getColumnDimension($column)->setAutoSize(true);
+            }
+            $sheetIndex++;
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        ob_start();
+        $writer->save('php://output');
+        $content = ob_get_clean() ?: '';
+        $spreadsheet->disconnectWorksheets();
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            ->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
+            ->setBody($content);
     }
 }
