@@ -136,8 +136,7 @@ WHERE b.item_code = 'ITEM-0003'
 UPDATE inventory_stock_movements m
 SET
     m.warehouse_id = @warehouse_id,
-    m.location_id = @location_id,
-    m.updated_at = NOW()
+    m.location_id = @location_id
 WHERE m.item_code = 'ITEM-0003'
   AND (m.warehouse_id IS NULL OR m.location_id IS NULL OR m.warehouse_id = 0 OR m.location_id = 0);
 
