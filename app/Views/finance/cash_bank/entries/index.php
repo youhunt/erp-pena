@@ -1,6 +1,11 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php
+$basePath = 'cash-bank/' . ($type === 'cash' ? 'cash-entries' : 'bank-entries');
+$exportUrl = site_url($basePath . '/export');
+$newUrl = site_url($basePath . '/new');
+?>
 <div class="card">
     <div class="card-body">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
@@ -8,9 +13,14 @@
                 <h4 class="card-title mb-1"><?= esc($title) ?></h4>
                 <p class="text-muted mb-0">Posted <?= esc($type) ?> transactions and linked GL posting when available.</p>
             </div>
-            <a href="<?= site_url('cash-bank/' . ($type === 'cash' ? 'cash-entries' : 'bank-entries') . '/new') ?>" class="btn btn-primary">
-                <i class="bx bx-plus me-1"></i> New Entry
-            </a>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="<?= esc($exportUrl) ?>" class="btn btn-outline-success">
+                    <i class="bx bx-download me-1"></i> Export XLSX
+                </a>
+                <a href="<?= esc($newUrl) ?>" class="btn btn-primary">
+                    <i class="bx bx-plus me-1"></i> New Entry
+                </a>
+            </div>
         </div>
 
         <div class="table-responsive">
@@ -37,7 +47,7 @@
                         <td><?= esc($entry['reference_no'] ?? '-') ?></td>
                         <td class="text-end fw-semibold"><?= esc(number_format((float) ($entry['amount'] ?? 0), 2)) ?></td>
                         <td><?= ! empty($entry['gl_entry_id']) ? '<span class="badge bg-success">Posted</span>' : '<span class="badge bg-secondary">No GL</span>' ?></td>
-                        <td class="text-end"><a href="<?= site_url('cash-bank/' . ($type === 'cash' ? 'cash-entries' : 'bank-entries') . '/' . $entry['id']) ?>" class="btn btn-sm btn-outline-primary"><i class="bx bx-show"></i></a></td>
+                        <td class="text-end"><a href="<?= site_url($basePath . '/' . $entry['id']) ?>" class="btn btn-sm btn-outline-primary"><i class="bx bx-show"></i></a></td>
                     </tr>
                 <?php endforeach ?>
                 <?php if ($entries === []): ?>
