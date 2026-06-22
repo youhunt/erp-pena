@@ -30,40 +30,57 @@ class StockAdjustmentController extends BaseController
             return redirect()->back()->withInput()->with('error', 'Active company is required.');
         }
 
-        $qty = (float) $this->request->getPost('qty');
-        if ($qty === 0.0) {
-            return redirect()->back()->withInput()->with('error', 'Adjustment quantity cannot be zero.');
+        if (! $this->validate([
+            'warehouse_id' => 'required|is_natural_no_zero',
+            'location_id' => 'required|is_natural_no_zero',
+            'qty' => 'required|decimal',
+        ])) {
+            return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
 
-        $itemCode = trim((string) ($this->request->getPost('item_code') ?: $this->request->getPost('manual_item_code')));
+        $warehouseId = $this->nullableInt($this->request->getPost('warehouse_id'));
+        $locationId = $this->nullableInt($this->request->getPost('location_id'));
+        if ($warehouseId === null || $locationId === null) {
+            return redirect()->back()->withInput()->with('error', 'Warehouse and location are required for stock adjustment.');
+        }
+
+        $qty = $this->toNumber($this->request->getPost('qty'));
+        if ($qty === 0.0) {
+            return redirect()->back()->withInput()->with('error', 'Adjustment quantity cannot be zero. Use positive qty to add stock or negative qty to reduce stock.');
+        }
+
+        $itemCode = strtoupper(trim((string) ($this->request->getPost('item_code') ?: $this->request->getPost('manual_item_code'))));
         if ($itemCode === '') {
             return redirect()->back()->withInput()->with('error', 'Item code is required. Select item or fill manual item code.');
         }
 
-        if (! $this->validate(['qty' => 'required|decimal'])) {
-            return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
+        $unitCost = $this->toNumber($this->request->getPost('unit_cost'));
+        if ($qty > 0 && $unitCost <= 0) {
+            return redirect()->back()->withInput()->with('error', 'Unit cost must be greater than zero when adding stock so stock value and GL can be calculated.');
         }
 
         $db = Database::connect();
-        $item = $db->table('items')->where('code', $itemCode)->get()->getRowArray();
-        $itemName = $item['name'] ?? trim((string) $this->request->getPost('item_name'));
+        $item = $this->findItem($itemCode, $tenant);
+        $itemName = trim((string) ($item['name'] ?? $this->request->getPost('item_name')));
 
         if ($itemName === '') {
             $itemName = $itemCode;
         }
 
         try {
+            $this->assertWarehouseLocation($warehouseId, $locationId, $tenant);
+
             (new InventoryStockService())->adjust([
                 'company_id' => $companyId,
                 'site_id' => $tenant->activeSiteId(),
-                'warehouse_id' => $this->nullableInt($this->request->getPost('warehouse_id')),
-                'location_id' => $this->nullableInt($this->request->getPost('location_id')),
+                'warehouse_id' => $warehouseId,
+                'location_id' => $locationId,
                 'item_id' => isset($item['id']) ? (int) $item['id'] : null,
                 'item_code' => $itemCode,
                 'item_name' => $itemName,
-                'uom_code' => trim((string) ($this->request->getPost('uom_code') ?: 'PCS')),
+                'uom_code' => trim((string) ($this->request->getPost('uom_code') ?: ($item['uom_code'] ?? $item['base_uom_code'] ?? 'PCS'))),
                 'qty' => $qty,
-                'unit_cost' => (float) ($this->request->getPost('unit_cost') ?: 0),
+                'unit_cost' => $unitCost,
                 'movement_type' => 'stock_adjustment',
                 'movement_date' => date('Y-m-d H:i:s'),
                 'reference_type' => 'stock_adjustment',
@@ -75,6 +92,76 @@ class StockAdjustmentController extends BaseController
         }
 
         return redirect()->to('/inventory/stock-adjustment')->with('message', 'Stock adjustment posted.');
+    }
+
+    private function findItem(string $itemCode, TenantContext $tenant): ?array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('items')) {
+            return null;
+        }
+
+        $builder = $db->table('items')->where('code', $itemCode);
+        if ($db->fieldExists('deleted_at', 'items')) {
+            $builder->where('deleted_at', null);
+        }
+        if ($db->fieldExists('is_active', 'items')) {
+            $builder->where('is_active', 1);
+        }
+        if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', 'items')) {
+            $builder->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', 'items')) {
+            $builder->groupStart()
+                ->where('site_id', $tenant->activeSiteId())
+                ->orWhere('site_id', null)
+                ->groupEnd();
+        }
+
+        return $builder->orderBy('id', 'DESC')->get(1)->getRowArray() ?: null;
+    }
+
+    private function assertWarehouseLocation(int $warehouseId, int $locationId, TenantContext $tenant): void
+    {
+        $db = Database::connect();
+
+        if (! $db->tableExists('warehouses') || ! $db->tableExists('locations')) {
+            throw new RuntimeException('Warehouse/location master table is not available.');
+        }
+
+        $warehouse = $db->table('warehouses')->where('id', $warehouseId);
+        if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', 'warehouses')) {
+            $warehouse->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', 'warehouses')) {
+            $warehouse->where('site_id', $tenant->activeSiteId());
+        }
+        if ($db->fieldExists('deleted_at', 'warehouses')) {
+            $warehouse->where('deleted_at', null);
+        }
+        if ($db->fieldExists('is_active', 'warehouses')) {
+            $warehouse->where('is_active', 1);
+        }
+        if ($warehouse->get(1)->getRowArray() === null) {
+            throw new RuntimeException('Selected warehouse is not valid for active company/site.');
+        }
+
+        $location = $db->table('locations')->where('id', $locationId)->where('warehouse_id', $warehouseId);
+        if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', 'locations')) {
+            $location->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', 'locations')) {
+            $location->where('site_id', $tenant->activeSiteId());
+        }
+        if ($db->fieldExists('deleted_at', 'locations')) {
+            $location->where('deleted_at', null);
+        }
+        if ($db->fieldExists('is_active', 'locations')) {
+            $location->where('is_active', 1);
+        }
+        if ($location->get(1)->getRowArray() === null) {
+            throw new RuntimeException('Selected location does not belong to selected warehouse or active company/site.');
+        }
     }
 
     private function masterRows(string $table): array
@@ -98,7 +185,14 @@ class StockAdjustmentController extends BaseController
             $builder->where('company_id', $tenant->activeCompanyId());
         }
         if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', $table)) {
-            $builder->where('site_id', $tenant->activeSiteId());
+            if ($table === 'items' || $table === 'locations') {
+                $builder->groupStart()
+                    ->where('site_id', $tenant->activeSiteId())
+                    ->orWhere('site_id', null)
+                    ->groupEnd();
+            } else {
+                $builder->where('site_id', $tenant->activeSiteId());
+            }
         }
 
         return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get()->getResultArray();
@@ -129,5 +223,20 @@ class StockAdjustmentController extends BaseController
         $int = (int) $value;
 
         return $int > 0 ? $int : null;
+    }
+
+    private function toNumber(mixed $value): float
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0.0;
+        }
+        if (str_contains($value, ',') && ! str_contains($value, '.')) {
+            $value = str_replace(',', '.', $value);
+        } else {
+            $value = str_replace(',', '', $value);
+        }
+
+        return (float) $value;
     }
 }
