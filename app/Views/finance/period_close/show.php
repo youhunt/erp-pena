@@ -8,7 +8,10 @@
                 <h4 class="card-title mb-1"><?= esc($modules[$period['module_code']] ?? $period['module_code']) ?> Period <?= esc($period['period']) ?></h4>
                 <p class="text-muted mb-0">Status: <?= esc($period['status']) ?></p>
             </div>
-            <a href="<?= site_url('period-close/' . $period['module_code']) ?>" class="btn btn-light">Back</a>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="<?= site_url('period-close/' . $period['id'] . '/export') ?>" class="btn btn-outline-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
+                <a href="<?= site_url('period-close/' . $period['module_code']) ?>" class="btn btn-light">Back</a>
+            </div>
         </div>
 
         <div class="row">
@@ -27,13 +30,14 @@
             </tbody>
         </table>
 
-        <div class="d-flex gap-2">
+        <div class="d-flex flex-wrap gap-2">
             <?php if (($period['status'] ?? '') === 'closed'): ?>
                 <form method="post" action="<?= site_url('period-close/' . $period['id'] . '/reopen') ?>">
                     <?= csrf_field() ?>
                     <button type="submit" class="btn btn-warning" onclick="return confirm('Reopen this period?')"><i class="bx bx-lock-open me-1"></i> Reopen Period</button>
                 </form>
             <?php endif ?>
+            <a href="<?= site_url('period-close/' . $period['id'] . '/export') ?>" class="btn btn-outline-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
             <a href="<?= site_url('period-close/' . $period['module_code']) ?>" class="btn btn-light">Back</a>
         </div>
     </div>
