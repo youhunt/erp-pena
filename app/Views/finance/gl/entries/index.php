@@ -14,6 +14,7 @@ $trialBalanceRows = $trialBalanceRows ?? [];
 $filters = $filters ?? ['date_from' => date('Y-m-01'), 'date_to' => date('Y-m-d'), 'source_module' => ''];
 $exportUrl = site_url('gl/entries/export') . '?' . http_build_query($filters);
 $trialBalanceExportUrl = site_url('gl/entries/export') . '?' . http_build_query(array_merge($filters, ['report' => 'trial-balance']));
+$unbalancedExportUrl = site_url('gl/entries/unbalanced-export') . '?' . http_build_query($filters);
 ?>
 <div class="row">
     <div class="col-md-3">
@@ -43,6 +44,9 @@ $trialBalanceExportUrl = site_url('gl/entries/export') . '?' . http_build_query(
                 </a>
                 <a href="<?= esc($trialBalanceExportUrl) ?>" class="btn btn-outline-success">
                     <i class="bx bx-spreadsheet me-1"></i> Export Trial Balance XLSX
+                </a>
+                <a href="<?= esc($unbalancedExportUrl) ?>" class="btn btn-outline-danger">
+                    <i class="bx bx-error-circle me-1"></i> Export Unbalanced XLSX
                 </a>
                 <a href="<?= site_url('gl/entries/new') ?>" class="btn btn-primary">
                     <i class="bx bx-plus me-1"></i> New GL Entry
@@ -75,8 +79,9 @@ $trialBalanceExportUrl = site_url('gl/entries/export') . '?' . http_build_query(
         </form>
 
         <?php if (abs((float) $validation['difference']) > 0.009 || (int) $validation['unbalanced_count'] > 0): ?>
-            <div class="alert alert-danger">
-                GL tidak balance untuk filter ini. Cek difference dan unbalanced entries sebelum laporan finance dipakai.
+            <div class="alert alert-danger d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div>GL tidak balance untuk filter ini. Cek difference dan unbalanced entries sebelum laporan finance dipakai.</div>
+                <a href="<?= esc($unbalancedExportUrl) ?>" class="btn btn-sm btn-danger">Export Unbalanced</a>
             </div>
         <?php else: ?>
             <div class="alert alert-success">
