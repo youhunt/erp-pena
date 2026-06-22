@@ -10,13 +10,21 @@ use RuntimeException;
 
 class AgingController extends BaseController
 {
-    public function ap(): string
+    public function ap()
     {
+        if ($this->request->getGet('export') === 'xlsx') {
+            return $this->export('ap');
+        }
+
         return $this->report('ap');
     }
 
-    public function ar(): string
+    public function ar()
     {
+        if ($this->request->getGet('export') === 'xlsx') {
+            return $this->export('ar');
+        }
+
         return $this->report('ar');
     }
 
