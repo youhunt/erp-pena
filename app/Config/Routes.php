@@ -104,6 +104,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('deliveries/(:num)/reverse', 'Sales\SalesDeliveryController::reverse/$1');
         $routes->get('deliveries/(:num)/invoice', 'AccountsReceivable\SalesInvoiceController::createFromDelivery/$1');
         $routes->post('deliveries/(:num)/invoice', 'AccountsReceivable\SalesInvoiceController::storeFromDelivery/$1');
+        $routes->get('reports/margins', 'Sales\SalesMarginReportController::index');
     });
 
     $routes->group('ar', static function (RouteCollection $routes): void {
