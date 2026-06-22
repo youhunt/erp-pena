@@ -29,6 +29,10 @@ class CoreAuditExportController extends BaseController
 
     public function glEntries()
     {
+        if ($this->request->getGet('report') === 'trial-balance') {
+            return $this->trialBalance();
+        }
+
         $tenant = new TenantContext(session());
         $filters = $this->glFilters();
         $rows = $this->glEntryRows($tenant, $filters);
@@ -37,6 +41,22 @@ class CoreAuditExportController extends BaseController
             'gl-entries-' . $filters['date_from'] . '-to-' . $filters['date_to'] . '.xlsx',
             $rows,
             'GL Entries'
+        );
+    }
+
+    private function trialBalance()
+    {
+        $tenant = new TenantContext(session());
+        $filters = $this->glFilters();
+        $rows = $this->trialBalanceRows($tenant, $filters);
+        $summary = $this->trialBalanceSummary($rows, $filters);
+
+        return $this->xlsxWorkbookResponse(
+            'trial-balance-' . $filters['date_from'] . '-to-' . $filters['date_to'] . '.xlsx',
+            [
+                'Summary' => $summary,
+                'Trial Balance Detail' => $this->trialBalanceDetailRows($rows),
+            ]
         );
     }
 
@@ -361,6 +381,79 @@ class CoreAuditExportController extends BaseController
         }
 
         return $builder;
+    }
+
+    private function trialBalanceRows(TenantContext $tenant, array $filters): array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('gl_entries') || ! $db->tableExists('gl_entry_lines')) {
+            return [];
+        }
+
+        return $this->glEntryBuilder($tenant, $filters)
+            ->select('gel.account_no')
+            ->select('MAX(gel.account_name) account_name', false)
+            ->select('COALESCE(SUM(gel.debit), 0) debit', false)
+            ->select('COALESCE(SUM(gel.credit), 0) credit', false)
+            ->select('COALESCE(SUM(gel.debit), 0) - COALESCE(SUM(gel.credit), 0) balance', false)
+            ->groupBy('gel.account_no')
+            ->orderBy('gel.account_no', 'ASC')
+            ->get(10000)
+            ->getResultArray();
+    }
+
+    private function trialBalanceSummary(array $trialBalanceRows, array $filters): array
+    {
+        $totalDebit = 0.0;
+        $totalCredit = 0.0;
+        $totalBalance = 0.0;
+
+        foreach ($trialBalanceRows as $row) {
+            $totalDebit += (float) ($row['debit'] ?? 0);
+            $totalCredit += (float) ($row['credit'] ?? 0);
+            $totalBalance += (float) ($row['balance'] ?? 0);
+        }
+
+        return [
+            ['Metric', 'Value'],
+            ['Report', 'Trial Balance'],
+            ['Period From', $filters['date_from']],
+            ['Period To', $filters['date_to']],
+            ['Source Module', $filters['source_module'] !== '' ? $filters['source_module'] : 'ALL'],
+            ['Account Rows', count($trialBalanceRows)],
+            ['Total Debit', $totalDebit],
+            ['Total Credit', $totalCredit],
+            ['Difference', round($totalDebit - $totalCredit, 2)],
+            ['Net Balance', round($totalBalance, 2)],
+            ['Status', abs(round($totalDebit - $totalCredit, 2)) > 0.009 ? 'UNBALANCED' : 'BALANCED'],
+            ['Generated At', date('Y-m-d H:i:s')],
+        ];
+    }
+
+    private function trialBalanceDetailRows(array $trialBalanceRows): array
+    {
+        $rows = [[
+            'Account No',
+            'Account Name',
+            'Debit',
+            'Credit',
+            'Balance',
+            'Balance Type',
+        ]];
+
+        foreach ($trialBalanceRows as $row) {
+            $balance = (float) ($row['balance'] ?? 0);
+            $rows[] = [
+                $row['account_no'] ?? '',
+                $row['account_name'] ?? '',
+                (float) ($row['debit'] ?? 0),
+                (float) ($row['credit'] ?? 0),
+                $balance,
+                $balance >= 0 ? 'DEBIT' : 'CREDIT',
+            ];
+        }
+
+        return $rows;
     }
 
     private function nullableInt(mixed $value): ?int
