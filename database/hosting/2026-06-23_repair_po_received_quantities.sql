@@ -1,6 +1,12 @@
 -- Repair PO received quantities from posted purchase receipts
 -- Jalankan setelah backup database.
--- Tujuan: memperbaiki PO lama yang sudah punya Purchase Receipt tetapi qty_received / qty_outstanding di purchase_order_lines belum ikut terupdate.
+-- Tujuan: memperbaiki PO lama yang sudah punya Purchase Receipt tetapi qty_received / qty_outstanding
+-- di purchase_order_lines belum ikut terupdate.
+--
+-- Catatan:
+-- - Match utama pakai purchase_order_line_id.
+-- - Fallback untuk data lama pakai purchase_order_id + line_no hanya jika purchase_order_line_id NULL/0.
+-- - Reversed qty dikurangi supaya reversal tidak tetap dianggap diterima.
 
 UPDATE purchase_order_lines pol
 LEFT JOIN (
@@ -16,7 +22,7 @@ LEFT JOIN (
     GROUP BY prl.purchase_order_line_id, prl.purchase_order_id, prl.line_no
 ) r ON r.purchase_order_line_id = pol.id
    OR (
-        r.purchase_order_line_id IS NULL
+        (r.purchase_order_line_id IS NULL OR r.purchase_order_line_id = 0)
         AND r.purchase_order_id = pol.purchase_order_id
         AND r.line_no = pol.line_no
    )
