@@ -11,7 +11,7 @@ class ErpFinalHealthCheck extends BaseCommand
 {
     protected $group = 'ERP';
     protected $name = 'erp:final-healthcheck';
-    protected $description = 'Final ERP PENA health check for master hierarchy, PO receipt quantities, inventory stock integrity, and GL setup.';
+    protected $description = 'Final ERP PENA health check for master hierarchy, PO receipt quantities, inventory stock integrity, GL setup, and document numbering.';
 
     public function run(array $params)
     {
@@ -115,6 +115,49 @@ class ErpFinalHealthCheck extends BaseCommand
                    AND gpp.deleted_at IS NULL
                 WHERE COALESCE(c.is_active, 1) = 1
                   AND gpp.id IS NULL
+            ",
+            'DOCUMENT_NUMBERING_REQUIRED_CODES_MISSING_OR_INACTIVE' => "
+                SELECT COUNT(*) AS total
+                FROM companies c
+                JOIN (
+                    SELECT 'PO' code UNION ALL SELECT 'PR' UNION ALL SELECT 'SO'
+                    UNION ALL SELECT 'SD' UNION ALL SELECT 'SI' UNION ALL SELECT 'PI'
+                    UNION ALL SELECT 'JV'
+                ) req
+                LEFT JOIN transaction_codes tc
+                    ON tc.company_id = c.id
+                   AND tc.code = req.code
+                   AND COALESCE(tc.is_active, 1) = 1
+                   AND tc.deleted_at IS NULL
+                WHERE COALESCE(c.is_active, 1) = 1
+                  AND tc.id IS NULL
+            ",
+            'DOCUMENT_NUMBERING_PO_CONFIG_INCOMPLETE' => "
+                SELECT COUNT(*) AS total
+                FROM companies c
+                LEFT JOIN transaction_codes tc
+                    ON tc.company_id = c.id
+                   AND tc.code = 'PO'
+                   AND COALESCE(tc.is_active, 1) = 1
+                   AND tc.deleted_at IS NULL
+                WHERE COALESCE(c.is_active, 1) = 1
+                  AND (
+                      tc.id IS NULL
+                      OR COALESCE(tc.prefix, '') = ''
+                      OR COALESCE(tc.format, '') = ''
+                      OR COALESCE(tc.reset_period, '') NOT IN ('daily', 'monthly', 'yearly', 'never')
+                      OR COALESCE(tc.padding, 0) < 1
+                      OR COALESCE(tc.padding, 0) > 12
+                  )
+            ",
+            'DOCUMENT_NUMBERING_SEQUENCE_DUPLICATE' => "
+                SELECT COUNT(*) AS total
+                FROM (
+                    SELECT company_id, site_id, transaction_code, prefix, period_key, COUNT(*) AS duplicate_count
+                    FROM document_number_sequences
+                    GROUP BY company_id, site_id, transaction_code, prefix, period_key
+                    HAVING COUNT(*) > 1
+                ) x
             ",
             'PO_LINE_NEGATIVE_QTY' => "
                 SELECT COUNT(*) AS total
