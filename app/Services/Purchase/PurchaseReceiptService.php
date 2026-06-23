@@ -30,6 +30,7 @@ class PurchaseReceiptService
         if ($lines === []) {
             throw new RuntimeException('At least one receipt line is required.');
         }
+
         $this->assertDocumentNumberAvailable($header);
         $this->assertStorageLocation($header);
         $this->assertPeriodOpen('purchase', $header, 'receipt_date');
@@ -157,12 +158,8 @@ class PurchaseReceiptService
             $glEntryId = $this->postReceiptGl($header, $receiptId, $inventoryValue, $userId);
             (new PostingIntegrityGuard())->assertGlEntryForAmount($inventoryValue, $glEntryId, 'Purchase receipt');
 
-            $receiptUpdate = [];
             if ($glEntryId !== null) {
-                $receiptUpdate['gl_entry_id'] = $glEntryId;
-            }
-            if ($receiptUpdate !== []) {
-                $receiptModel->update($receiptId, $receiptUpdate);
+                $receiptModel->update($receiptId, ['gl_entry_id' => $glEntryId]);
             }
 
             $this->refreshPoStatus((int) $po['id'], $userId);
@@ -188,7 +185,7 @@ class PurchaseReceiptService
             return $receiptId;
         } catch (Throwable $e) {
             $db->transRollback();
-            throw new RuntimeException($e->getMessage());
+            throw new RuntimeException($e->getMessage(), 0, $e);
         }
     }
 
@@ -270,8 +267,9 @@ class PurchaseReceiptService
                 'reversal_gl_entry_id' => $reversalGlEntryId,
             ]);
 
-            $this->recalculatePoReceiptQuantities((int) ($receipt['purchase_order_id'] ?? 0), $userId);
-            $this->refreshPoStatus((int) ($receipt['purchase_order_id'] ?? 0), $userId);
+            $poId = (int) ($receipt['purchase_order_id'] ?? 0);
+            $this->recalculatePoReceiptQuantities($poId, $userId);
+            $this->refreshPoStatus($poId, $userId);
 
             if ($db->transStatus() === false) {
                 throw new RuntimeException('Failed to reverse purchase receipt.');
@@ -291,7 +289,7 @@ class PurchaseReceiptService
             ]);
         } catch (Throwable $e) {
             $db->transRollback();
-            throw new RuntimeException($e->getMessage());
+            throw new RuntimeException($e->getMessage(), 0, $e);
         }
     }
 
@@ -402,12 +400,12 @@ class PurchaseReceiptService
         $location = $db->table('locations')->where('id', $locationId);
 
         if (! empty($header['company_id'])) {
-            $warehouse->where('company_id', (int) $header['company_id']);
-            $location->where('company_id', (int) $header['company_id']);
+            if ($db->fieldExists('company_id', 'warehouses')) $warehouse->where('company_id', (int) $header['company_id']);
+            if ($db->fieldExists('company_id', 'locations')) $location->where('company_id', (int) $header['company_id']);
         }
         if (! empty($header['site_id'])) {
-            $warehouse->where('site_id', (int) $header['site_id']);
-            $location->where('site_id', (int) $header['site_id']);
+            if ($db->fieldExists('site_id', 'warehouses')) $warehouse->where('site_id', (int) $header['site_id']);
+            if ($db->fieldExists('site_id', 'locations')) $location->where('site_id', (int) $header['site_id']);
         }
         if ($db->fieldExists('deleted_at', 'warehouses')) {
             $warehouse->where('deleted_at', null);
@@ -424,7 +422,7 @@ class PurchaseReceiptService
         if ($locationRow === null) {
             throw new RuntimeException('Selected location is not valid for this receipt.');
         }
-        if ((int) ($locationRow['warehouse_id'] ?? 0) !== $warehouseId) {
+        if ($db->fieldExists('warehouse_id', 'locations') && ! empty($locationRow['warehouse_id']) && (int) $locationRow['warehouse_id'] !== $warehouseId) {
             throw new RuntimeException('Selected location does not belong to selected warehouse.');
         }
     }
@@ -440,20 +438,40 @@ class PurchaseReceiptService
         $lines = $lineModel->where('purchase_order_id', $poId)->findAll();
 
         foreach ($lines as $line) {
-            $receivedRow = $db->table('purchase_receipt_lines prl')
-                ->select('COALESCE(SUM(prl.qty_received), 0) AS qty_received', false)
-                ->join('purchase_receipts pr', 'pr.id = prl.purchase_receipt_id', 'inner')
-                ->where('prl.purchase_order_line_id', (int) $line['id'])
-                ->where('pr.status', 'posted')
-                ->where('pr.reversed_at', null)
-                ->get()
-                ->getRowArray();
+            $lineId = (int) ($line['id'] ?? 0);
+            $lineNo = (int) ($line['line_no'] ?? $line['po_line'] ?? 0);
+            $reversedExpression = $db->fieldExists('reversed_qty', 'purchase_receipt_lines')
+                ? 'COALESCE(prl.reversed_qty, 0)'
+                : '0';
 
-            $qtyReceived = round((float) ($receivedRow['qty_received'] ?? 0), 4);
+            $builder = $db->table('purchase_receipt_lines prl')
+                ->select('COALESCE(SUM(COALESCE(prl.qty_received, 0) - ' . $reversedExpression . '), 0) AS qty_received', false)
+                ->join('purchase_receipts pr', 'pr.id = prl.purchase_receipt_id', 'inner')
+                ->where('pr.status', 'posted');
+
+            if ($db->fieldExists('reversed_at', 'purchase_receipts')) {
+                $builder->where('pr.reversed_at', null);
+            }
+
+            $builder
+                ->groupStart()
+                    ->where('prl.purchase_order_line_id', $lineId)
+                    ->orGroupStart()
+                        ->groupStart()
+                            ->where('prl.purchase_order_line_id', null)
+                            ->orWhere('prl.purchase_order_line_id', 0)
+                        ->groupEnd()
+                        ->where('prl.purchase_order_id', $poId)
+                        ->where('prl.line_no', $lineNo)
+                    ->groupEnd()
+                ->groupEnd();
+
+            $receivedRow = $builder->get()->getRowArray();
+            $qtyReceived = round(max(0.0, (float) ($receivedRow['qty_received'] ?? 0)), 4);
             $qtyOrdered = round($this->toNumber($line['qty_ordered'] ?? $line['qty'] ?? 0), 4);
             $qtyOutstanding = max(0.0, round($qtyOrdered - $qtyReceived, 4));
 
-            $lineModel->update($line['id'], [
+            $lineModel->update($lineId, [
                 'qty_received' => $qtyReceived,
                 'qty_outstanding' => $qtyOutstanding,
                 'line_status' => $qtyReceived <= 0 ? 'open' : ($qtyOutstanding <= 0 ? 'received' : 'partial_received'),
@@ -468,6 +486,12 @@ class PurchaseReceiptService
             return;
         }
 
+        $poModel = new PurchaseOrderModel();
+        $po = $poModel->find($poId);
+        if ($po === null || in_array((string) ($po['status'] ?? ''), ['cancelled', 'closed'], true)) {
+            return;
+        }
+
         $lineModel = new PurchaseOrderLineModel();
         $lines = $lineModel->where('purchase_order_id', $poId)->findAll();
         $totalOutstanding = 0.0;
@@ -478,7 +502,7 @@ class PurchaseReceiptService
         }
 
         $status = $totalOutstanding <= 0 ? 'received' : ($totalReceived > 0 ? 'partial_received' : 'approved');
-        (new PurchaseOrderModel())->update($poId, [
+        $poModel->update($poId, [
             'status' => $status,
             'document_status' => $status,
             'updated_by' => $userId,
