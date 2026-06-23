@@ -11,7 +11,7 @@ class ErpFinalHealthCheck extends BaseCommand
 {
     protected $group = 'ERP';
     protected $name = 'erp:final-healthcheck';
-    protected $description = 'Final ERP PENA health check for master hierarchy, PO receipt quantities, and inventory stock integrity.';
+    protected $description = 'Final ERP PENA health check for master hierarchy, PO receipt quantities, inventory stock integrity, and GL setup.';
 
     public function run(array $params)
     {
@@ -68,6 +68,53 @@ class ErpFinalHealthCheck extends BaseCommand
                       OR NOT (i.company_id <=> il.company_id)
                       OR NOT (i.site_id <=> il.site_id)
                   )
+            ",
+            'GL_ACCOUNT_2300_MISSING_OR_INACTIVE' => "
+                SELECT COUNT(*) AS total
+                FROM companies c
+                LEFT JOIN chart_accounts ca
+                    ON ca.company_id = c.id
+                   AND ca.account_no = '2300'
+                   AND ca.is_active = 1
+                WHERE COALESCE(c.is_active, 1) = 1
+                  AND ca.id IS NULL
+            ",
+            'GL_REQUIRED_ACCOUNTS_MISSING_OR_INACTIVE' => "
+                SELECT COUNT(*) AS total
+                FROM companies c
+                JOIN (
+                    SELECT '1200' account_no UNION ALL SELECT '1300' UNION ALL SELECT '1400'
+                    UNION ALL SELECT '2100' UNION ALL SELECT '2200' UNION ALL SELECT '2300'
+                    UNION ALL SELECT '4100' UNION ALL SELECT '5000' UNION ALL SELECT '6200'
+                    UNION ALL SELECT '7000' UNION ALL SELECT '8000'
+                ) req
+                LEFT JOIN chart_accounts ca
+                    ON ca.company_id = c.id
+                   AND ca.account_no = req.account_no
+                   AND ca.is_active = 1
+                WHERE COALESCE(c.is_active, 1) = 1
+                  AND ca.id IS NULL
+            ",
+            'GL_POSTING_PROFILES_MISSING_OR_INACTIVE' => "
+                SELECT COUNT(*) AS total
+                FROM companies c
+                JOIN (
+                    SELECT 'ap' module_code, 'payable' posting_key UNION ALL SELECT 'ap', 'grni'
+                    UNION ALL SELECT 'ap', 'inventory' UNION ALL SELECT 'ap', 'input_vat'
+                    UNION ALL SELECT 'ar', 'receivable' UNION ALL SELECT 'ar', 'sales_revenue'
+                    UNION ALL SELECT 'ar', 'output_vat' UNION ALL SELECT 'sales', 'cogs'
+                    UNION ALL SELECT 'sales', 'inventory' UNION ALL SELECT 'inventory', 'inventory'
+                    UNION ALL SELECT 'inventory', 'adjustment_gain' UNION ALL SELECT 'inventory', 'adjustment_loss'
+                    UNION ALL SELECT 'cashbank', 'cash_bank'
+                ) req
+                LEFT JOIN gl_posting_profiles gpp
+                    ON gpp.company_id = c.id
+                   AND gpp.module_code = req.module_code
+                   AND gpp.posting_key = req.posting_key
+                   AND gpp.is_active = 1
+                   AND gpp.deleted_at IS NULL
+                WHERE COALESCE(c.is_active, 1) = 1
+                  AND gpp.id IS NULL
             ",
             'PO_LINE_NEGATIVE_QTY' => "
                 SELECT COUNT(*) AS total
