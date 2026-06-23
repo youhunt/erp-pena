@@ -11,6 +11,8 @@ use Throwable;
 
 class DocumentNumberingController extends BaseController
 {
+    private const TABLE = 'transaction_codes';
+
     public function index(): string
     {
         $tenant = new TenantContext(session());
@@ -19,44 +21,52 @@ class DocumentNumberingController extends BaseController
         $db = Database::connect();
 
         $this->ensureTables($db);
-        $this->seedDefaults($db, $companyId, $siteId);
+        $this->seedDefaults($db, $companyId);
 
-        $prefixes = $db->table('prefix_codes')
-            ->where('company_id', $companyId)
-            ->where('is_active', 1)
-            ->orderBy('transaction_code', 'ASC')
-            ->get()
-            ->getResultArray();
+        $builder = $db->table(self::TABLE)->orderBy('code', 'ASC');
+        if ($companyId !== null && $db->fieldExists('company_id', self::TABLE)) {
+            $builder->where('company_id', $companyId);
+        }
+        if ($db->fieldExists('deleted_at', self::TABLE)) {
+            $builder->where('deleted_at', null);
+        }
+
+        $codes = $builder->get()->getResultArray();
 
         $sequences = [];
         if ($db->tableExists('document_number_sequences')) {
-            $builder = $db->table('document_number_sequences')
+            $sequenceBuilder = $db->table('document_number_sequences')
                 ->where('company_id', $companyId)
                 ->orderBy('transaction_code', 'ASC')
                 ->orderBy('period_key', 'DESC');
             if ($siteId !== null) {
-                $builder->where('site_id', $siteId);
+                $sequenceBuilder->where('site_id', $siteId);
             }
-            foreach ($builder->get()->getResultArray() as $row) {
+            foreach ($sequenceBuilder->get()->getResultArray() as $row) {
                 $sequences[(string) ($row['transaction_code'] ?? '')][] = $row;
             }
         }
 
         $previews = [];
-        foreach ($prefixes as $row) {
+        foreach ($codes as $row) {
+            $code = strtoupper(trim((string) ($row['code'] ?? '')));
+            if ($code === '') {
+                continue;
+            }
+
             try {
-                $previews[(string) $row['transaction_code']] = (new DocumentNumberService())->preview((string) $row['transaction_code'], new DateTimeImmutable(), [
+                $previews[$code] = (new DocumentNumberService())->preview($code, new DateTimeImmutable(), [
                     'company_id' => $companyId,
                     'site_id' => $siteId,
                 ]);
             } catch (Throwable $e) {
-                $previews[(string) $row['transaction_code']] = 'ERROR: ' . $e->getMessage();
+                $previews[$code] = 'ERROR: ' . $e->getMessage();
             }
         }
 
         return view('setup/document_numbering/index', [
             'title' => 'Document Numbering',
-            'prefixes' => $prefixes,
+            'codes' => $codes,
             'sequences' => $sequences,
             'previews' => $previews,
         ]);
@@ -70,6 +80,10 @@ class DocumentNumberingController extends BaseController
 
         $this->ensureTables($db);
 
+        if ($companyId === null || $companyId < 1) {
+            return redirect()->to(site_url('setup/document-numbering'))->with('error', 'Active company is required to save document numbering.');
+        }
+
         $rows = (array) $this->request->getPost('rows');
         foreach ($rows as $row) {
             if (! is_array($row)) {
@@ -77,14 +91,17 @@ class DocumentNumberingController extends BaseController
             }
 
             $id = (int) ($row['id'] ?? 0);
-            $transactionCode = strtoupper(trim((string) ($row['transaction_code'] ?? '')));
-            $prefix = trim((string) ($row['prefix'] ?? $transactionCode));
+            $code = strtoupper(trim((string) ($row['code'] ?? $row['transaction_code'] ?? '')));
+            $prefix = trim((string) ($row['prefix'] ?? $code));
             $format = trim((string) ($row['format'] ?? '{PREFIX}/{YYYY}{MM}/{SEQ}'));
             $resetPeriod = strtolower(trim((string) ($row['reset_period'] ?? 'monthly')));
             $padding = (int) ($row['padding'] ?? 5);
 
-            if ($transactionCode === '') {
+            if ($code === '') {
                 continue;
+            }
+            if (! preg_match('/^[A-Z0-9_\-\.]+$/', $code)) {
+                return redirect()->to(site_url('setup/document-numbering'))->with('error', 'Invalid transaction code: ' . $code);
             }
             if (! in_array($resetPeriod, ['daily', 'monthly', 'yearly', 'never'], true)) {
                 $resetPeriod = 'monthly';
@@ -93,51 +110,54 @@ class DocumentNumberingController extends BaseController
                 $padding = 5;
             }
             if ($prefix === '') {
-                $prefix = $transactionCode;
+                $prefix = $code;
             }
             if ($format === '') {
                 $format = '{PREFIX}/{YYYY}{MM}/{SEQ}';
             }
 
-            $payload = [
+            $payload = $this->payloadForTable($db, self::TABLE, [
                 'company_id' => $companyId,
-                'transaction_code' => $transactionCode,
-                'code' => $transactionCode,
-                'name' => trim((string) ($row['name'] ?? $transactionCode)),
+                'code' => $code,
+                'name' => trim((string) ($row['name'] ?? $code)),
                 'prefix' => $prefix,
                 'format' => $format,
                 'reset_period' => $resetPeriod,
                 'padding' => $padding,
                 'description' => trim((string) ($row['description'] ?? '')),
                 'is_active' => isset($row['is_active']) ? 1 : 0,
-                'updated_by' => (string) auth()->id(),
+                'updated_by' => (string) (auth()->id() ?? 'system'),
                 'updated_at' => date('Y-m-d H:i:s'),
-            ];
+            ]);
 
             if ($id > 0) {
-                $db->table('prefix_codes')
-                    ->where('id', $id)
-                    ->where('company_id', $companyId)
-                    ->update($payload);
+                $update = $db->table(self::TABLE)->where('id', $id);
+                if ($db->fieldExists('company_id', self::TABLE)) {
+                    $update->where('company_id', $companyId);
+                }
+                $update->update($payload);
                 continue;
             }
 
-            $payload['created_by'] = (string) auth()->id();
-            $payload['created_at'] = date('Y-m-d H:i:s');
-            $exists = $db->table('prefix_codes')
-                ->where('company_id', $companyId)
-                ->where('transaction_code', $transactionCode)
-                ->get(1)
-                ->getRowArray();
+            $payload = $this->payloadForTable($db, self::TABLE, $payload + [
+                'created_by' => (string) (auth()->id() ?? 'system'),
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
+
+            $exists = $db->table(self::TABLE);
+            if ($db->fieldExists('company_id', self::TABLE)) {
+                $exists->where('company_id', $companyId);
+            }
+            $exists = $exists->where('code', $code)->get(1)->getRowArray();
 
             if ($exists !== null) {
-                $db->table('prefix_codes')->where('id', (int) $exists['id'])->update($payload);
+                $db->table(self::TABLE)->where('id', (int) $exists['id'])->update($payload);
             } else {
-                $db->table('prefix_codes')->insert($payload);
+                $db->table(self::TABLE)->insert($payload);
             }
         }
 
-        return redirect()->to(site_url('setup/document-numbering'))->with('message', 'Document numbering setup saved. New documents will use the updated format. Existing sequence rows are not deleted.');
+        return redirect()->to(site_url('setup/document-numbering'))->with('message', 'Document numbering setup saved in Transaction Codes. New documents will use the updated format. Existing sequence rows are not deleted.');
     }
 
     public function resetSequence()
@@ -150,6 +170,9 @@ class DocumentNumberingController extends BaseController
 
         if ($transactionCode === '' || $periodKey === '') {
             return redirect()->to(site_url('setup/document-numbering'))->with('error', 'Transaction code and period key are required to reset sequence.');
+        }
+        if ($companyId === null || $companyId < 1) {
+            return redirect()->to(site_url('setup/document-numbering'))->with('error', 'Active company is required to reset sequence.');
         }
 
         Database::connect()->table('document_number_sequences')
@@ -164,16 +187,16 @@ class DocumentNumberingController extends BaseController
 
     private function ensureTables($db): void
     {
-        $db->query("CREATE TABLE IF NOT EXISTS prefix_codes (
+        $db->query("CREATE TABLE IF NOT EXISTS transaction_codes (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT,
             company_id INT NULL,
             code VARCHAR(50) NOT NULL,
             name VARCHAR(150) NOT NULL,
-            transaction_code VARCHAR(50) NULL,
             prefix VARCHAR(50) NULL,
             format VARCHAR(150) NULL,
             reset_period VARCHAR(20) NULL,
             padding INT NULL,
+            rate DECIMAL(18,6) NULL,
             description TEXT NULL,
             is_active TINYINT(1) NOT NULL DEFAULT 1,
             created_by VARCHAR(50) NULL,
@@ -182,16 +205,16 @@ class DocumentNumberingController extends BaseController
             updated_at DATETIME NULL,
             deleted_at DATETIME NULL,
             PRIMARY KEY (id),
-            KEY idx_prefix_codes_company_transaction (company_id, transaction_code)
+            KEY idx_transaction_codes_company_code (company_id, code)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
         foreach ([
             'company_id INT NULL',
-            'transaction_code VARCHAR(50) NULL',
             'prefix VARCHAR(50) NULL',
             'format VARCHAR(150) NULL',
             'reset_period VARCHAR(20) NULL',
             'padding INT NULL',
+            'rate DECIMAL(18,6) NULL',
             'description TEXT NULL',
             'is_active TINYINT(1) NOT NULL DEFAULT 1',
             'created_by VARCHAR(50) NULL',
@@ -201,8 +224,8 @@ class DocumentNumberingController extends BaseController
             'deleted_at DATETIME NULL',
         ] as $definition) {
             [$column] = explode(' ', $definition, 2);
-            if (! $db->fieldExists($column, 'prefix_codes')) {
-                $db->query('ALTER TABLE prefix_codes ADD COLUMN ' . $definition);
+            if (! $db->fieldExists($column, self::TABLE)) {
+                $db->query('ALTER TABLE ' . self::TABLE . ' ADD COLUMN ' . $definition);
             }
         }
 
@@ -228,7 +251,7 @@ class DocumentNumberingController extends BaseController
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     }
 
-    private function seedDefaults($db, ?int $companyId, ?int $siteId): void
+    private function seedDefaults($db, ?int $companyId): void
     {
         if ($companyId === null || $companyId < 1) {
             return;
@@ -245,9 +268,9 @@ class DocumentNumberingController extends BaseController
         ];
 
         foreach ($defaults as [$code, $name, $prefix, $format, $reset, $padding, $description]) {
-            $exists = $db->table('prefix_codes')
+            $exists = $db->table(self::TABLE)
                 ->where('company_id', $companyId)
-                ->where('transaction_code', $code)
+                ->where('code', $code)
                 ->get(1)
                 ->getRowArray();
 
@@ -255,11 +278,10 @@ class DocumentNumberingController extends BaseController
                 continue;
             }
 
-            $db->table('prefix_codes')->insert([
+            $db->table(self::TABLE)->insert($this->payloadForTable($db, self::TABLE, [
                 'company_id' => $companyId,
                 'code' => $code,
                 'name' => $name,
-                'transaction_code' => $code,
                 'prefix' => $prefix,
                 'format' => $format,
                 'reset_period' => $reset,
@@ -270,7 +292,18 @@ class DocumentNumberingController extends BaseController
                 'updated_by' => (string) (auth()->id() ?? 'system'),
                 'created_at' => date('Y-m-d H:i:s'),
                 'updated_at' => date('Y-m-d H:i:s'),
-            ]);
+            ]));
         }
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function payloadForTable($db, string $table, array $payload): array
+    {
+        $fields = $db->getFieldNames($table);
+
+        return array_intersect_key($payload, array_flip($fields));
     }
 }
