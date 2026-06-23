@@ -16,6 +16,15 @@ $discountPercent = (float) ($order['discount_percent'] ?? 0);
 $discountPercentAmount = round($subtotal * $discountPercent / 100, 2);
 $manualDiscountAmount = (float) ($order['discount_amount'] ?? 0);
 $totalDiscountAmount = round($discountPercentAmount + $manualDiscountAmount, 2);
+$itemDisplay = static function (array $line): array {
+    $code = trim((string) ($line['item_code'] ?? $line['item'] ?? $line['item_no'] ?? ''));
+    $name = trim((string) ($line['item_name'] ?? $line['description'] ?? ''));
+    if ($code === '' && $name !== '') {
+        $code = $name;
+        $name = '';
+    }
+    return [$code !== '' ? $code : '-', $name !== '' ? $name : '-'];
+};
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -118,9 +127,10 @@ $totalDiscountAmount = round($discountPercentAmount + $manualDiscountAmount, 2);
                         </thead>
                         <tbody>
                         <?php foreach ($lines as $line): ?>
+                            <?php [$displayCode, $displayName] = $itemDisplay($line); ?>
                             <tr>
                                 <td><?= esc($line['po_line'] ?? $line['line_no']) ?></td>
-                                <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
+                                <td><div class="fw-semibold"><?= esc($displayCode) ?></div><small class="text-muted"><?= esc($displayName) ?></small></td>
                                 <td><?= esc($line['description'] ?? '-') ?></td>
                                 <td class="text-end"><?= esc(number_format((float) ($line['qty_ordered'] ?? $line['qty'] ?? 0), 4)) ?></td>
                                 <td class="text-end"><?= esc(number_format((float) ($line['qty_received'] ?? 0), 4)) ?></td>
