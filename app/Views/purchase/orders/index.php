@@ -1,6 +1,7 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php $exportUrl = site_url('purchase/orders/export') . '?' . http_build_query($filters ?? []); ?>
 <div class="card">
     <div class="card-body">
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
@@ -9,6 +10,9 @@
                 <p class="text-muted mb-0">Manage purchase orders by active company/site.</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
+                <a href="<?= esc($exportUrl) ?>" class="btn btn-outline-success">
+                    <i class="bx bx-download me-1"></i> Export XLSX
+                </a>
                 <a href="<?= site_url('purchase/orders/import') ?>" class="btn btn-outline-primary">
                     <i class="bx bx-upload me-1"></i> Import
                 </a>
@@ -62,9 +66,8 @@
                         <td><span class="badge bg-secondary"><?= esc($order['status']) ?></span></td>
                         <td class="text-end"><?= esc(number_format((float) $order['total_amount'], 2)) ?></td>
                         <td class="text-end">
-                            <a href="<?= site_url('purchase/orders/' . $order['id']) ?>" class="btn btn-sm btn-outline-primary">
-                                <i class="bx bx-show"></i>
-                            </a>
+                            <a href="<?= site_url('purchase/orders/' . $order['id']) ?>" class="btn btn-sm btn-outline-primary"><i class="bx bx-show"></i></a>
+                            <a href="<?= site_url('purchase/orders/' . $order['id'] . '/export') ?>" class="btn btn-sm btn-outline-success">XLSX</a>
                             <?php if (($order['document_status'] ?? $order['status'] ?? '') === 'approved' || ($order['document_status'] ?? $order['status'] ?? '') === 'partial_received'): ?>
                                 <a href="<?= site_url('purchase/orders/' . $order['id'] . '/receive') ?>" class="btn btn-sm btn-outline-success">Receive</a>
                             <?php endif ?>
