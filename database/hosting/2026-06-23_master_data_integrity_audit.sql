@@ -5,6 +5,8 @@
 --
 -- This file does not change data. It only returns diagnostic rows.
 -- Expected result: every SELECT should return zero rows.
+-- Note:
+--   deleted_at is DATETIME, so audit only compares it with NULL to avoid MySQL #1292 warnings.
 
 -- =========================================================
 -- 1) Departments without company/site scope
@@ -20,7 +22,7 @@ SELECT
     'Department must have company_id and site_id.' AS issue_message
 FROM departments d
 WHERE (d.company_id IS NULL OR d.site_id IS NULL)
-  AND (d.deleted_at IS NULL OR d.deleted_at = '');
+  AND d.deleted_at IS NULL;
 
 -- =========================================================
 -- 2) Warehouses pointing to department from another company/site
@@ -42,7 +44,7 @@ WHERE w.department_id IS NOT NULL
       OR NOT (d.company_id <=> w.company_id)
       OR NOT (d.site_id <=> w.site_id)
   )
-  AND (w.deleted_at IS NULL OR w.deleted_at = '');
+  AND w.deleted_at IS NULL;
 
 -- =========================================================
 -- 3) Locations pointing to warehouse from another company/site
@@ -64,7 +66,7 @@ WHERE l.warehouse_id IS NOT NULL
       OR NOT (w.company_id <=> l.company_id)
       OR NOT (w.site_id <=> l.site_id)
   )
-  AND (l.deleted_at IS NULL OR l.deleted_at = '');
+  AND l.deleted_at IS NULL;
 
 -- =========================================================
 -- 4) Item locations where location does not belong to selected warehouse
