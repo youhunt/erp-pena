@@ -148,23 +148,34 @@ class PurchaseOrderService
         }
 
         $current = (string) ($po['document_status'] ?? $po['status'] ?? 'draft');
-        if ($current !== 'cancelled') {
-            throw new RuntimeException('Only cancelled purchase order can be activated. Current status: ' . $current . '.');
+        if (! in_array($current, ['cancelled', 'closed'], true)) {
+            throw new RuntimeException('Only cancelled or closed purchase order can be activated. Current status: ' . $current . '.');
         }
 
         $lineModel = new PurchaseOrderLineModel();
-        $lines = $lineModel->where('purchase_order_id', $poId)->findAll();
+        $lines = $lineModel->where('purchase_order_id', $poId)->orderBy('line_no', 'ASC')->findAll();
+        $totalReceived = 0.0;
+        $totalOutstanding = 0.0;
         foreach ($lines as $line) {
-            if ((float) ($line['qty_received'] ?? 0) > 0) {
-                throw new RuntimeException('PO cannot be activated because one or more lines have already been received.');
+            $received = (float) ($line['qty_received'] ?? 0);
+            $outstanding = (float) ($line['qty_outstanding'] ?? 0);
+            $totalReceived += $received;
+            $totalOutstanding += $outstanding;
+            if ($current === 'cancelled' && $received > 0) {
+                throw new RuntimeException('PO cannot be activated from cancelled because one or more lines have already been received.');
             }
         }
 
         $this->assertPeriodOpen($po);
+        $targetStatus = $current === 'closed'
+            ? ($totalOutstanding <= 0 && $totalReceived > 0 ? 'received' : ($totalReceived > 0 ? 'partial_received' : 'approved'))
+            : 'draft';
 
         $model->update($poId, [
-            'status' => 'draft',
-            'document_status' => 'draft',
+            'status' => $targetStatus,
+            'document_status' => $targetStatus,
+            'closed_at' => null,
+            'closed_by' => null,
             'cancelled_at' => null,
             'cancelled_by' => null,
             'cancel_reason' => null,
@@ -172,13 +183,15 @@ class PurchaseOrderService
         ]);
 
         foreach ($lines as $line) {
+            $received = (float) ($line['qty_received'] ?? 0);
+            $outstanding = (float) ($line['qty_outstanding'] ?? 0);
             $lineModel->update((int) $line['id'], [
-                'line_status' => 'open',
+                'line_status' => $received <= 0 ? 'open' : ($outstanding <= 0 ? 'received' : 'partial_received'),
                 'updated_by' => $userId,
             ]);
         }
 
-        $this->audit('po.activate', $poId, $po, ['to_status' => 'draft'], $userId, 'Purchase order activated back to draft.');
+        $this->audit('po.activate', $poId, $po, ['from_status' => $current, 'to_status' => $targetStatus], $userId, 'Purchase order activated.');
     }
 
     private function validateHeader(array $header, array $lines): void
@@ -358,6 +371,100 @@ class PurchaseOrderService
             'line_total' => (float) ($line['line_total'] ?? 0),
             'line_status' => $status === 'approved' ? 'approved' : 'open',
         ];
+    }
+
+    public function recalculateReceiptQuantities(int $poId, ?int $userId = null): void
+    {
+        $this->recalculatePoReceiptQuantities($poId, $userId);
+        $this->refreshPoStatus($poId, $userId);
+    }
+
+    private function recalculatePoReceiptQuantities(int $poId, ?int $userId = null): void
+    {
+        if ($poId < 1) {
+            return;
+        }
+
+        $db = Database::connect();
+        $lineModel = new PurchaseOrderLineModel();
+        $lines = $lineModel->where('purchase_order_id', $poId)->findAll();
+
+        foreach ($lines as $line) {
+            $builder = $db->table('purchase_receipt_lines prl')
+                ->select('COALESCE(SUM(prl.qty_received - COALESCE(prl.reversed_qty, 0)), 0) AS qty_received', false)
+                ->join('purchase_receipts pr', 'pr.id = prl.purchase_receipt_id', 'inner')
+                ->where('pr.status', 'posted');
+            if ($db->fieldExists('reversed_at', 'purchase_receipts')) {
+                $builder->where('pr.reversed_at', null);
+            }
+            $builder->groupStart()
+                ->where('prl.purchase_order_line_id', (int) $line['id'])
+                ->orGroupStart()
+                    ->where('prl.purchase_order_id', $poId)
+                    ->where('prl.line_no', (int) ($line['line_no'] ?? $line['po_line'] ?? 0))
+                ->groupEnd()
+            ->groupEnd();
+
+            $receivedRow = $builder->get()->getRowArray();
+            $qtyReceived = round((float) ($receivedRow['qty_received'] ?? 0), 4);
+            $qtyOrdered = round($this->toNumber($line['qty_ordered'] ?? $line['qty'] ?? 0), 4);
+            $qtyOutstanding = max(0.0, round($qtyOrdered - $qtyReceived, 4));
+
+            $lineModel->update($line['id'], [
+                'qty_received' => $qtyReceived,
+                'qty_outstanding' => $qtyOutstanding,
+                'line_status' => $qtyReceived <= 0 ? 'open' : ($qtyOutstanding <= 0 ? 'received' : 'partial_received'),
+                'updated_by' => $userId,
+            ]);
+        }
+    }
+
+    private function refreshPoStatus(int $poId, ?int $userId = null): void
+    {
+        if ($poId < 1) {
+            return;
+        }
+
+        $lineModel = new PurchaseOrderLineModel();
+        $lines = $lineModel->where('purchase_order_id', $poId)->findAll();
+        $totalOutstanding = 0.0;
+        $totalReceived = 0.0;
+        foreach ($lines as $line) {
+            $totalOutstanding += (float) ($line['qty_outstanding'] ?? 0);
+            $totalReceived += (float) ($line['qty_received'] ?? 0);
+        }
+
+        $status = $totalOutstanding <= 0 ? 'received' : ($totalReceived > 0 ? 'partial_received' : 'approved');
+        (new PurchaseOrderModel())->update($poId, [
+            'status' => $status,
+            'document_status' => $status,
+            'updated_by' => $userId,
+        ]);
+    }
+
+    private function currentOutstanding(array $poLine): float
+    {
+        if (array_key_exists('qty_outstanding', $poLine) && $poLine['qty_outstanding'] !== null && $poLine['qty_outstanding'] !== '') {
+            return max(0.0, $this->toNumber($poLine['qty_outstanding']));
+        }
+
+        $ordered = $this->toNumber($poLine['qty_ordered'] ?? $poLine['qty'] ?? 0);
+        $received = $this->toNumber($poLine['qty_received'] ?? 0);
+        return max(0.0, $ordered - $received);
+    }
+
+    private function toNumber(mixed $value): float
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0.0;
+        }
+        if (str_contains($value, ',') && ! str_contains($value, '.')) {
+            $value = str_replace(',', '.', $value);
+        } else {
+            $value = str_replace(',', '', $value);
+        }
+        return (float) $value;
     }
 
     private function audit(string $action, int $poId, array $header, array $payload, ?int $userId, string $description): void
