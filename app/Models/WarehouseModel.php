@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use CodeIgniter\Model;
+use RuntimeException;
 
 class WarehouseModel extends Model
 {
@@ -35,16 +36,62 @@ class WarehouseModel extends Model
         if (! empty($data['code'])) {
             $data['code'] = strtoupper((string) $data['code']);
         }
+
         foreach (['company_id', 'site_id', 'department_id'] as $nullableIntField) {
             if (array_key_exists($nullableIntField, $data) && ($data[$nullableIntField] === '' || $data[$nullableIntField] === 0 || $data[$nullableIntField] === '0')) {
                 $data[$nullableIntField] = null;
             }
         }
+
         if (! array_key_exists('is_active', $data) && $db->fieldExists('is_active', $this->table)) {
             $data['is_active'] = 1;
         }
+
+        $this->validateDepartmentScope($data);
+
         $payload['data'] = $data;
         return $this->checkDuplicateCode($payload);
+    }
+
+    private function validateDepartmentScope(array $data): void
+    {
+        if (empty($data['department_id'])) {
+            return;
+        }
+
+        $db = db_connect();
+        if (! $db->tableExists('departments')) {
+            throw new RuntimeException('Department master table does not exist.');
+        }
+
+        $department = $db->table('departments')
+            ->where('id', (int) $data['department_id'])
+            ->get()
+            ->getRowArray();
+
+        if ($department === null) {
+            throw new RuntimeException('Selected department is not valid.');
+        }
+
+        if ($db->fieldExists('deleted_at', 'departments') && ! empty($department['deleted_at'])) {
+            throw new RuntimeException('Selected department is inactive or deleted.');
+        }
+
+        if ($db->fieldExists('company_id', 'departments')) {
+            $warehouseCompany = (int) ($data['company_id'] ?? 0);
+            $departmentCompany = (int) ($department['company_id'] ?? 0);
+            if ($warehouseCompany > 0 && $departmentCompany > 0 && $warehouseCompany !== $departmentCompany) {
+                throw new RuntimeException('Selected department does not belong to selected company.');
+            }
+        }
+
+        if ($db->fieldExists('site_id', 'departments')) {
+            $warehouseSite = (int) ($data['site_id'] ?? 0);
+            $departmentSite = (int) ($department['site_id'] ?? 0);
+            if ($warehouseSite > 0 && $departmentSite > 0 && $warehouseSite !== $departmentSite) {
+                throw new RuntimeException('Selected department does not belong to selected site.');
+            }
+        }
     }
 
     private function checkDuplicateCode(array $payload): array
@@ -71,7 +118,7 @@ class WarehouseModel extends Model
             $builder->where('id !=', (int) $id);
         }
         if ($builder->countAllResults() > 0) {
-            throw new \RuntimeException('Duplicate warehouse code: ' . $code);
+            throw new RuntimeException('Duplicate warehouse code: ' . $code);
         }
         return $payload;
     }
