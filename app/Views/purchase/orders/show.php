@@ -53,10 +53,10 @@ $totalDiscountAmount = round($discountPercentAmount + $manualDiscountAmount, 2);
                     <?php if ($canEditPo): ?>
                         <a href="<?= site_url('purchase/orders/' . $order['id'] . '/edit') ?>" class="btn btn-outline-primary"><i class="bx bx-edit me-1"></i> Edit</a>
                     <?php endif ?>
-                    <?php if ($status === 'cancelled'): ?>
+                    <?php if (in_array($status, ['cancelled', 'closed'], true)): ?>
                         <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/activate') ?>">
                             <?= csrf_field() ?>
-                            <button class="btn btn-success" onclick="return confirm('Activate this cancelled PO back to draft?')"><i class="bx bx-reset me-1"></i> Activate</button>
+                            <button class="btn btn-success" onclick="return confirm('Activate this PO? Closed PO will return to received/partial status based on receipt qty.')"><i class="bx bx-reset me-1"></i> Activate</button>
                         </form>
                     <?php endif ?>
                     <?php if ($status === 'draft'): ?>
