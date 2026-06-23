@@ -12,9 +12,8 @@ use RuntimeException;
 /**
  * Enterprise document number generator.
  *
- * The service uses a dedicated sequence table and a database transaction so
- * PO/SO/Invoice/Receipt/Journal numbers are generated consistently per tenant,
- * transaction code, prefix, and reset period.
+ * The service uses transaction_codes as the document-numbering setup source
+ * and document_number_sequences as the concurrency-safe running number table.
  */
 final class DocumentNumberService
 {
@@ -32,10 +31,10 @@ final class DocumentNumberService
      * Supported options:
      * - company_id: int|null, defaults to active company
      * - site_id: int|null, defaults to active site or 0
-     * - prefix: string|null, defaults to transaction code or setup config
-     * - format: string|null, defaults to `{PREFIX}/{YYYY}{MM}/{SEQ}`
-     * - reset_period: daily|monthly|yearly|never, defaults to monthly
-     * - padding: int, defaults to 5
+     * - prefix: string|null, fallback when transaction code setup has no prefix
+     * - format: string|null, fallback when transaction code setup has no format
+     * - reset_period: daily|monthly|yearly|never, fallback when setup has no reset_period
+     * - padding: int, fallback when setup has no padding
      * - meta: array<string, string|int|null>, optional extra token values
      *
      * @param array<string, mixed> $options
@@ -49,7 +48,7 @@ final class DocumentNumberService
         $db = $this->connection();
 
         if (! $db->tableExists(self::TABLE)) {
-            throw new RuntimeException('Table document_number_sequences does not exist. Run php spark migrate --all first.');
+            throw new RuntimeException('Table document_number_sequences does not exist. Run the document numbering hosting SQL first.');
         }
 
         $db->transStart();
@@ -146,8 +145,6 @@ final class DocumentNumberService
      */
     private function resolveConfig(string $transactionCode, array $options): array
     {
-        $setup = $this->resolveSetupConfig($transactionCode);
-
         $tenant = $this->tenant();
         $companyId = (int) ($options['company_id'] ?? $tenant->requireCompany());
         $siteId = (int) ($options['site_id'] ?? ($tenant->optionalSite() ?? 0));
@@ -156,22 +153,26 @@ final class DocumentNumberService
             throw new RuntimeException('Active company is required to generate document number.');
         }
 
-        $resetPeriod = strtolower((string) ($options['reset_period'] ?? $setup['reset_period'] ?? 'monthly'));
+        $setup = $this->resolveSetupConfig($transactionCode, $companyId);
+
+        // Transaction Code UI is the source of truth. Options are only fallbacks
+        // so legacy controllers that still pass default formats do not override setup.
+        $resetPeriod = strtolower((string) ($setup['reset_period'] ?? $options['reset_period'] ?? 'monthly'));
         if (! in_array($resetPeriod, ['daily', 'monthly', 'yearly', 'never'], true)) {
             throw new InvalidArgumentException('Invalid reset_period. Use daily, monthly, yearly, or never.');
         }
 
-        $padding = (int) ($options['padding'] ?? $setup['padding'] ?? 5);
+        $padding = (int) ($setup['padding'] ?? $options['padding'] ?? 5);
         if ($padding < 1 || $padding > 12) {
             throw new InvalidArgumentException('Document number padding must be between 1 and 12.');
         }
 
-        $prefix = trim((string) ($options['prefix'] ?? $setup['prefix'] ?? $transactionCode));
+        $prefix = trim((string) ($setup['prefix'] ?? $options['prefix'] ?? $transactionCode));
         if ($prefix === '') {
             $prefix = $transactionCode;
         }
 
-        $format = trim((string) ($options['format'] ?? $setup['format'] ?? '{PREFIX}/{YYYY}{MM}/{SEQ}'));
+        $format = trim((string) ($setup['format'] ?? $options['format'] ?? '{PREFIX}/{YYYY}{MM}/{SEQ}'));
         if ($format === '') {
             $format = '{PREFIX}/{YYYY}{MM}/{SEQ}';
         }
@@ -188,53 +189,77 @@ final class DocumentNumberService
     }
 
     /**
-     * Try to read existing setup tables if the current database has them.
-     *
-     * This method is intentionally defensive because the Excel-origin setup
-     * schema may evolve. Explicit options passed to next()/preview() always win.
+     * Read document-numbering setup from transaction_codes.
      *
      * @return array<string, mixed>
      */
-    private function resolveSetupConfig(string $transactionCode): array
+    private function resolveSetupConfig(string $transactionCode, int $companyId): array
     {
         $db = $this->connection();
-        $config = [];
 
-        foreach (['prefix_codes', 'prefix_code'] as $table) {
+        foreach (['transaction_codes', 'transaction_code'] as $table) {
             if (! $db->tableExists($table)) {
                 continue;
             }
 
             $fields = $db->getFieldNames($table);
-            $builder = $db->table($table);
-
-            if (in_array('transaction_code', $fields, true)) {
-                $builder->where('transaction_code', $transactionCode);
-            } elseif (in_array('code', $fields, true)) {
-                $builder->where('code', $transactionCode);
-            } else {
+            $hasCode = in_array('code', $fields, true);
+            $hasTransactionCode = in_array('transaction_code', $fields, true);
+            if (! $hasCode && ! $hasTransactionCode) {
                 continue;
             }
 
-            if (in_array('is_active', $fields, true)) {
-                $builder->where('is_active', 1);
-            }
+            $scopeValues = in_array('company_id', $fields, true) && $companyId > 0
+                ? [$companyId, null]
+                : [null];
 
-            $row = $builder->get(1)->getRowArray();
-            if ($row === null) {
-                continue;
-            }
+            foreach ($scopeValues as $scopeCompanyId) {
+                $builder = $db->table($table);
 
-            foreach (['prefix', 'format', 'reset_period', 'padding'] as $key) {
-                if (array_key_exists($key, $row) && $row[$key] !== null && $row[$key] !== '') {
-                    $config[$key] = $row[$key];
+                if ($hasCode && $hasTransactionCode) {
+                    $builder->groupStart()
+                        ->where('code', $transactionCode)
+                        ->orWhere('transaction_code', $transactionCode)
+                        ->groupEnd();
+                } elseif ($hasCode) {
+                    $builder->where('code', $transactionCode);
+                } else {
+                    $builder->where('transaction_code', $transactionCode);
                 }
-            }
 
-            break;
+                if (in_array('company_id', $fields, true)) {
+                    $scopeCompanyId === null
+                        ? $builder->where('company_id', null)
+                        : $builder->where('company_id', $scopeCompanyId);
+                }
+                if (in_array('is_active', $fields, true)) {
+                    $builder->where('is_active', 1);
+                }
+                if (in_array('deleted_at', $fields, true)) {
+                    $builder->where('deleted_at', null);
+                }
+
+                $row = $builder->get(1)->getRowArray();
+                if ($row === null) {
+                    continue;
+                }
+
+                $config = [];
+                foreach (['prefix', 'format', 'reset_period', 'padding'] as $key) {
+                    if (array_key_exists($key, $row) && $row[$key] !== null && $row[$key] !== '') {
+                        $config[$key] = $row[$key];
+                    }
+                }
+
+                if (! isset($config['prefix']) && $hasCode && ! empty($row['code'])) {
+                    $config['prefix'] = $row['code'];
+                }
+
+                return $config;
+            }
         }
 
-        return $config;
+        return [];
     }
 
     private function periodKey(string $resetPeriod, DateTimeInterface $date): string
