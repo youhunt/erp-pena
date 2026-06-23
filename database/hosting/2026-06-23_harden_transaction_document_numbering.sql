@@ -1,5 +1,6 @@
 -- ERP PENA - harden Document Numbering to use Transaction Codes as the source of truth.
--- Run this in hosting/phpMyAdmin after pulling the code patch.
+-- Safe hosting/phpMyAdmin version: no hardcoded menu_items columns.
+-- Route remains available at /setup/document-numbering even if sidebar menu table differs.
 
 CREATE TABLE IF NOT EXISTS transaction_codes (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -126,45 +127,8 @@ SET prefix = IF(COALESCE(prefix, '') = '', 'PO', prefix),
 WHERE code = 'PO'
   AND deleted_at IS NULL;
 
--- Add sidebar/menu link for Setup > Document Numbering if menu_items uses this structure.
-SET @setup_parent_id := (
-    SELECT id
-    FROM menu_items
-    WHERE LOWER(COALESCE(title, name, label, '')) IN ('setup', 'master setup', 'master data', 'setup master')
-       OR route IN ('setup', '/setup')
-       OR url IN ('setup', '/setup')
-    ORDER BY id ASC
-    LIMIT 1
-);
-
-INSERT INTO menu_items (
-    parent_id,
-    title,
-    route,
-    icon,
-    sort_order,
-    permission,
-    is_active,
-    created_at,
-    updated_at
-)
-SELECT
-    @setup_parent_id,
-    'Document Numbering',
-    'setup/document-numbering',
-    'bx bx-hash',
-    9,
-    'setup.master.view',
-    1,
-    NOW(),
-    NOW()
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM menu_items
-    WHERE route IN ('setup/document-numbering', '/setup/document-numbering')
-       OR url IN ('setup/document-numbering', '/setup/document-numbering')
-       OR LOWER(COALESCE(title, name, label, '')) = 'document numbering'
-);
+-- Menu insert intentionally skipped here because some hosting databases have different menu_items columns.
+-- Access the page directly: /setup/document-numbering
 
 -- Validation output: all totals should be 0.
 SELECT 'DOCUMENT_NUMBERING_REQUIRED_CODES_MISSING_OR_INACTIVE' AS check_name, COUNT(*) AS total
