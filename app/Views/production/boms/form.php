@@ -24,6 +24,20 @@ foreach ($items as $item) {
     }
 }
 ?>
+<style>
+    .bom-component-table th,
+    .bom-component-table td { vertical-align: middle; }
+    .bom-component-table .col-no { width: 76px; min-width: 76px; }
+    .bom-component-table .col-item { min-width: 390px; }
+    .bom-component-table .col-type { width: 105px; min-width: 105px; }
+    .bom-component-table .col-qty { width: 110px; min-width: 110px; }
+    .bom-component-table .col-uom { width: 95px; min-width: 95px; }
+    .bom-component-table .col-factor { width: 95px; min-width: 95px; }
+    .bom-component-table .col-desc { min-width: 180px; }
+    .bom-component-table .form-control,
+    .bom-component-table .form-select { min-height: 38px; }
+    .bom-component-table .legacy-uom { text-transform: uppercase; text-align: center; }
+</style>
 <form method="post" action="<?= esc($action, 'attr') ?>">
     <?= csrf_field() ?>
     <div class="card"><div class="card-body">
@@ -44,8 +58,8 @@ foreach ($items as $item) {
     </div></div>
     <div class="card"><div class="card-body">
         <h4 class="card-title mb-3">Child Components</h4>
-        <div class="table-responsive"><table class="table table-nowrap align-middle mb-0">
-            <thead class="table-light"><tr><th>No</th><th>Child Item</th><th>Type</th><th class="text-end">Qty Used</th><th>UoM</th><th class="text-end">Factor</th><th>Description</th></tr></thead>
+        <div class="table-responsive"><table class="table table-nowrap align-middle mb-0 bom-component-table">
+            <thead class="table-light"><tr><th class="col-no">No</th><th class="col-item">Child Item</th><th class="col-type">Type</th><th class="col-qty text-end">Qty Used</th><th class="col-uom">UoM</th><th class="col-factor text-end">Factor</th><th class="col-desc">Description</th></tr></thead>
             <tbody><?php foreach ($lineRows as $i=>$line): ?><?php
                 $child = trim((string) ($line['child_item_code'] ?? ''));
                 $childId = (int) ($line['child_item_id'] ?? 0);
@@ -58,14 +72,15 @@ foreach ($items as $item) {
                 } elseif ($child !== '') {
                     $childLabel = trim($child . ' - ' . (string) ($line['child_item_name'] ?? ''), ' -');
                 }
+                $lineUom = trim((string) ($line['uom_code'] ?? ''));
             ?><tr>
-                <td><input type="number" name="child_no[]" class="form-control" value="<?= esc($line['child_no'] ?? (($i+1)*10)) ?>"></td>
-                <td><select name="child_item_code[]" class="form-select"><option value="">Select item</option><?php if ($child !== '' && ! isset($itemByCode[$child])): ?><option value="<?= esc($child, 'attr') ?>" selected><?= esc($childLabel) ?></option><?php endif ?><?php foreach ($items as $item): ?><?php $code=$itemCode($item); ?><option value="<?= esc($code, 'attr') ?>" <?= $child===$code?'selected':'' ?>><?= esc($itemLabel($item)) ?></option><?php endforeach ?></select></td>
-                <td><input name="component_type[]" class="form-control" value="<?= esc($line['component_type'] ?? 'material') ?>"></td>
-                <td><input type="number" step="0.000001" name="qty_used[]" class="form-control text-end" value="<?= esc($line['qty_used'] ?? ($i===0?'1':'0')) ?>"></td>
-                <td><select name="line_uom_code[]" class="form-select"><?php foreach ($uoms as $uom): ?><?php $code=$uom['code']??''; ?><option value="<?= esc($code) ?>" <?= ($line['uom_code']??'')===$code?'selected':'' ?>><?= esc($code) ?></option><?php endforeach ?></select></td>
-                <td><input type="number" step="0.00001" name="factor[]" class="form-control text-end" value="<?= esc($line['factor'] ?? '1') ?>"></td>
-                <td><input name="line_description[]" class="form-control" value="<?= esc($line['description'] ?? '') ?>"></td>
+                <td class="col-no"><input type="number" name="child_no[]" class="form-control" value="<?= esc($line['child_no'] ?? (($i+1)*10)) ?>"></td>
+                <td class="col-item"><select name="child_item_code[]" class="form-select"><option value="">Select item</option><?php if ($child !== '' && ! isset($itemByCode[$child])): ?><option value="<?= esc($child, 'attr') ?>" selected><?= esc($childLabel) ?></option><?php endif ?><?php foreach ($items as $item): ?><?php $code=$itemCode($item); ?><option value="<?= esc($code, 'attr') ?>" <?= $child===$code?'selected':'' ?>><?= esc($itemLabel($item)) ?></option><?php endforeach ?></select></td>
+                <td class="col-type"><input name="component_type[]" class="form-control" value="<?= esc($line['component_type'] ?? 'material') ?>"></td>
+                <td class="col-qty"><input type="number" step="0.000001" name="qty_used[]" class="form-control text-end" value="<?= esc($line['qty_used'] ?? ($i===0?'1':'0')) ?>"></td>
+                <td class="col-uom"><input name="line_uom_code[]" class="form-control legacy-uom" maxlength="20" value="<?= esc($lineUom !== '' ? $lineUom : 'PCS') ?>"></td>
+                <td class="col-factor"><input type="number" step="0.00001" name="factor[]" class="form-control text-end" value="<?= esc($line['factor'] ?? '1') ?>"></td>
+                <td class="col-desc"><input name="line_description[]" class="form-control" value="<?= esc($line['description'] ?? '') ?>"></td>
             </tr><?php endforeach ?></tbody>
         </table></div>
         <div class="d-flex gap-2 mt-4"><button class="btn btn-primary" type="submit"><i class="bx bx-save me-1"></i> <?= $isEdit ? 'Update BOM' : 'Save BOM' ?></button><a class="btn btn-light" href="<?= $isEdit ? site_url('production/boms/' . (int) ($bom['id'] ?? 0)) : site_url('production/boms') ?>">Cancel</a></div>
