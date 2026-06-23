@@ -13,6 +13,7 @@ use App\Models\SalesOrderLineModel;
 use App\Models\SalesOrderModel;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
+use Config\Database;
 use RuntimeException;
 
 class DocumentAuditExportController extends BaseController
@@ -91,34 +92,56 @@ class DocumentAuditExportController extends BaseController
 
     private function scope($model, TenantContext $tenant): void
     {
-        if ($tenant->activeCompanyId() !== null) {
+        $table = $this->tableName($model);
+        $db = Database::connect();
+        if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', $table)) {
             $model->where('company_id', $tenant->activeCompanyId());
         }
-        if ($tenant->activeSiteId() !== null) {
+        if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', $table)) {
             $model->where('site_id', $tenant->activeSiteId());
         }
     }
 
     private function applyFilters($model): void
     {
+        $db = Database::connect();
+        $table = $this->tableName($model);
         $status = trim((string) $this->request->getGet('status'));
         $q = trim((string) $this->request->getGet('q'));
+
         if ($status !== '') {
-            $field = method_exists($model, 'builder') ? 'status' : 'status';
-            $model->groupStart()->where('status', $status)->orWhere('document_status', $status)->groupEnd();
+            if ($db->fieldExists('document_status', $table)) {
+                $model->where('document_status', $status);
+            } elseif ($db->fieldExists('status', $table)) {
+                $model->where('status', $status);
+            }
         }
+
         if ($q !== '') {
-            $model->groupStart()
-                ->like('po_no', $q)
-                ->orLike('receipt_no', $q)
-                ->orLike('so_no', $q)
-                ->orLike('delivery_no', $q)
-                ->orLike('supplier_code', $q)
-                ->orLike('supplier_name', $q)
-                ->orLike('customer_code', $q)
-                ->orLike('customer_name', $q)
-                ->groupEnd();
+            $searchFields = array_values(array_filter([
+                'po_no',
+                'receipt_no',
+                'so_no',
+                'delivery_no',
+                'supplier_code',
+                'supplier_name',
+                'customer_code',
+                'customer_name',
+            ], static fn (string $field): bool => $db->fieldExists($field, $table)));
+
+            if ($searchFields !== []) {
+                $model->groupStart();
+                foreach ($searchFields as $index => $field) {
+                    $index === 0 ? $model->like($field, $q) : $model->orLike($field, $q);
+                }
+                $model->groupEnd();
+            }
         }
+    }
+
+    private function tableName($model): string
+    {
+        return method_exists($model, 'getTable') ? $model->getTable() : $model->table;
     }
 
     private function summaryRows(string $title, array $rows): array
@@ -191,7 +214,7 @@ class DocumentAuditExportController extends BaseController
 
     private function documentNo(array $row, int $id): string
     {
-        foreach (['po_no', 'receipt_no', 'so_no', 'delivery_no', 'invoice_no', 'payment_no', 'receipt_no'] as $field) {
+        foreach (['po_no', 'receipt_no', 'so_no', 'delivery_no', 'invoice_no', 'payment_no'] as $field) {
             if (! empty($row[$field])) {
                 return (string) $row[$field];
             }
