@@ -18,11 +18,20 @@ class WarehouseModel extends Model
     protected function normalizeMaster(array $payload): array
     {
         $data = $payload['data'] ?? [];
+        $db = db_connect();
+
         foreach ($data as $field => $value) {
             if (is_string($value)) {
                 $data[$field] = trim($value);
             }
         }
+
+        foreach (array_keys($data) as $field) {
+            if (! $db->fieldExists($field, $this->table)) {
+                unset($data[$field]);
+            }
+        }
+
         if (! empty($data['code'])) {
             $data['code'] = strtoupper((string) $data['code']);
         }
@@ -31,7 +40,7 @@ class WarehouseModel extends Model
                 $data[$nullableIntField] = null;
             }
         }
-        if (! array_key_exists('is_active', $data)) {
+        if (! array_key_exists('is_active', $data) && $db->fieldExists('is_active', $this->table)) {
             $data['is_active'] = 1;
         }
         $payload['data'] = $data;
@@ -45,8 +54,13 @@ class WarehouseModel extends Model
         if ($code === '' || empty($data['company_id'])) {
             return $payload;
         }
-        $builder = db_connect()->table($this->table)->where('company_id', (int) $data['company_id'])->where('code', $code)->where('deleted_at', null);
-        if (array_key_exists('site_id', $data)) {
+
+        $db = db_connect();
+        $builder = $db->table($this->table)->where('company_id', (int) $data['company_id'])->where('code', $code);
+        if ($db->fieldExists('deleted_at', $this->table)) {
+            $builder->where('deleted_at', null);
+        }
+        if (array_key_exists('site_id', $data) && $db->fieldExists('site_id', $this->table)) {
             empty($data['site_id']) ? $builder->where('site_id', null) : $builder->where('site_id', (int) $data['site_id']);
         }
         $id = $payload['id'] ?? null;
