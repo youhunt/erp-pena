@@ -76,6 +76,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
 
     $routes->group('sales', static function (RouteCollection $routes): void {
         $routes->get('orders', 'Sales\SalesOrderController::index');
+        $routes->get('orders/export', 'System\DocumentAuditExportController::salesOrders');
         $routes->get('orders/new', 'Sales\SalesOrderController::create');
         $routes->get('orders/import', 'System\OrderImportController::salesForm');
         $routes->get('orders/import-template', 'System\OrderImportController::salesTemplate');
@@ -84,6 +85,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('orders', 'Sales\SalesOrderController::store');
         $routes->get('orders/(:num)/edit', 'Sales\SalesOrderController::edit/$1');
         $routes->post('orders/(:num)', 'Sales\SalesOrderController::update/$1');
+        $routes->get('orders/(:num)/export', 'System\DocumentAuditExportController::salesOrder/$1');
         $routes->get('orders/(:num)', 'Sales\SalesOrderController::show/$1');
         $routes->post('orders/(:num)/submit', 'Sales\SalesOrderController::submit/$1');
         $routes->post('orders/(:num)/approve', 'Sales\SalesOrderController::approve/$1');
@@ -96,10 +98,12 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('orders/(:num)/deliver', 'Sales\SalesDeliveryController::createFromSo/$1');
         $routes->post('orders/(:num)/deliver', 'Sales\SalesDeliveryController::storeFromSo/$1');
         $routes->get('deliveries', 'Sales\SalesDeliveryController::index');
+        $routes->get('deliveries/export', 'System\DocumentAuditExportController::salesDeliveries');
         $routes->get('deliveries/import', 'System\FulfillmentImportController::salesDeliveryForm');
         $routes->get('deliveries/import-template', 'System\FulfillmentImportController::salesDeliveryTemplate');
         $routes->post('deliveries/import', 'System\FulfillmentImportController::importSalesDelivery');
         $routes->post('deliveries/import/commit', 'System\FulfillmentImportController::commitSalesDelivery');
+        $routes->get('deliveries/(:num)/export', 'System\DocumentAuditExportController::salesDelivery/$1');
         $routes->get('deliveries/(:num)', 'Sales\SalesDeliveryController::show/$1');
         $routes->post('deliveries/(:num)/reverse', 'Sales\SalesDeliveryController::reverse/$1');
         $routes->get('deliveries/(:num)/invoice', 'AccountsReceivable\SalesInvoiceController::createFromDelivery/$1');
@@ -123,6 +127,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
 
     $routes->group('purchase', static function (RouteCollection $routes): void {
         $routes->get('orders', 'Purchase\PurchaseOrderController::index');
+        $routes->get('orders/export', 'System\DocumentAuditExportController::purchaseOrders');
         $routes->get('orders/new', 'Purchase\PurchaseOrderController::create');
         $routes->get('orders/import', 'System\OrderImportController::purchaseForm');
         $routes->get('orders/import-template', 'System\OrderImportController::purchaseTemplate');
@@ -131,6 +136,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('orders', 'Purchase\PurchaseOrderController::store');
         $routes->get('orders/(:num)/edit', 'Purchase\PurchaseOrderController::edit/$1');
         $routes->post('orders/(:num)', 'Purchase\PurchaseOrderController::update/$1');
+        $routes->get('orders/(:num)/export', 'System\DocumentAuditExportController::purchaseOrder/$1');
         $routes->get('orders/(:num)', 'Purchase\PurchaseOrderController::show/$1');
         $routes->post('orders/(:num)/submit', 'Purchase\PurchaseOrderController::submit/$1');
         $routes->post('orders/(:num)/approve', 'Purchase\PurchaseOrderController::approve/$1');
@@ -140,10 +146,12 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('orders/(:num)/receive', 'Purchase\PurchaseReceiptController::createFromPo/$1');
         $routes->post('orders/(:num)/receive', 'Purchase\PurchaseReceiptController::storeFromPo/$1');
         $routes->get('receipts', 'Purchase\PurchaseReceiptController::index');
+        $routes->get('receipts/export', 'System\DocumentAuditExportController::purchaseReceipts');
         $routes->get('receipts/import', 'System\FulfillmentImportController::purchaseReceiptForm');
         $routes->get('receipts/import-template', 'System\FulfillmentImportController::purchaseReceiptTemplate');
         $routes->post('receipts/import', 'System\FulfillmentImportController::importPurchaseReceipt');
         $routes->post('receipts/import/commit', 'System\FulfillmentImportController::commitPurchaseReceipt');
+        $routes->get('receipts/(:num)/export', 'System\DocumentAuditExportController::purchaseReceipt/$1');
         $routes->get('receipts/(:num)', 'Purchase\PurchaseReceiptController::show/$1');
         $routes->post('receipts/(:num)/reverse', 'Purchase\PurchaseReceiptController::reverse/$1');
         $routes->get('receipts/(:num)/invoice', 'AccountsPayable\PurchaseInvoiceController::createFromReceipt/$1');
