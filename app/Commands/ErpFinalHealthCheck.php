@@ -11,7 +11,7 @@ class ErpFinalHealthCheck extends BaseCommand
 {
     protected $group = 'ERP';
     protected $name = 'erp:final-healthcheck';
-    protected $description = 'Final ERP PENA health check for master hierarchy and PO receipt quantities.';
+    protected $description = 'Final ERP PENA health check for master hierarchy, PO receipt quantities, and inventory stock integrity.';
 
     public function run(array $params)
     {
@@ -80,6 +80,84 @@ class ErpFinalHealthCheck extends BaseCommand
                 FROM purchase_order_lines pol
                 WHERE COALESCE(pol.qty_ordered, 0) > 0
                   AND COALESCE(pol.qty_received, 0) > COALESCE(pol.qty_ordered, 0)
+            ",
+            'STOCK_MOVEMENT_INVALID_DIRECTION_OR_QTY' => "
+                SELECT COUNT(*) AS total
+                FROM inventory_stock_movements m
+                WHERE m.direction NOT IN ('in', 'out')
+                   OR COALESCE(m.qty, 0) <= 0
+                   OR COALESCE(m.item_code, '') = ''
+            ",
+            'STOCK_BALANCE_NEGATIVE_QTY' => "
+                SELECT COUNT(*) AS total
+                FROM inventory_stock_balances b
+                WHERE COALESCE(b.qty_on_hand, 0) < 0
+                   OR COALESCE(b.qty_reserved, 0) < 0
+                   OR COALESCE(b.qty_available, 0) < 0
+                   OR COALESCE(b.stock_value, 0) < 0
+            ",
+            'STOCK_BALANCE_AVAILABLE_MISMATCH' => "
+                SELECT COUNT(*) AS total
+                FROM inventory_stock_balances b
+                WHERE ABS(COALESCE(b.qty_available, 0) - (COALESCE(b.qty_on_hand, 0) - COALESCE(b.qty_reserved, 0))) > 0.0001
+            ",
+            'STOCK_MOVEMENT_WITHOUT_BALANCE' => "
+                SELECT COUNT(*) AS total
+                FROM (
+                    SELECT
+                        m.company_id,
+                        m.site_id,
+                        m.warehouse_id,
+                        m.location_id,
+                        m.item_code,
+                        COALESCE(m.batch_no, '') AS batch_no
+                    FROM inventory_stock_movements m
+                    GROUP BY
+                        m.company_id,
+                        m.site_id,
+                        m.warehouse_id,
+                        m.location_id,
+                        m.item_code,
+                        COALESCE(m.batch_no, '')
+                ) x
+                LEFT JOIN inventory_stock_balances b
+                    ON b.company_id <=> x.company_id
+                   AND b.site_id <=> x.site_id
+                   AND b.warehouse_id <=> x.warehouse_id
+                   AND b.location_id <=> x.location_id
+                   AND b.item_code <=> x.item_code
+                   AND COALESCE(b.batch_no, '') <=> x.batch_no
+                WHERE b.id IS NULL
+            ",
+            'STOCK_BALANCE_MOVEMENT_QTY_MISMATCH' => "
+                SELECT COUNT(*) AS total
+                FROM inventory_stock_balances b
+                INNER JOIN (
+                    SELECT
+                        m.company_id,
+                        m.site_id,
+                        m.warehouse_id,
+                        m.location_id,
+                        m.item_code,
+                        COALESCE(m.batch_no, '') AS batch_no,
+                        SUM(CASE WHEN m.direction = 'in' THEN COALESCE(m.qty, 0) ELSE -COALESCE(m.qty, 0) END) AS movement_qty,
+                        SUM(CASE WHEN m.direction = 'in' THEN COALESCE(m.stock_value, 0) ELSE -COALESCE(m.stock_value, 0) END) AS movement_value
+                    FROM inventory_stock_movements m
+                    GROUP BY
+                        m.company_id,
+                        m.site_id,
+                        m.warehouse_id,
+                        m.location_id,
+                        m.item_code,
+                        COALESCE(m.batch_no, '')
+                ) x
+                    ON b.company_id <=> x.company_id
+                   AND b.site_id <=> x.site_id
+                   AND b.warehouse_id <=> x.warehouse_id
+                   AND b.location_id <=> x.location_id
+                   AND b.item_code <=> x.item_code
+                   AND COALESCE(b.batch_no, '') <=> x.batch_no
+                WHERE ABS(COALESCE(b.qty_on_hand, 0) - COALESCE(x.movement_qty, 0)) > 0.0001
             ",
         ];
 
