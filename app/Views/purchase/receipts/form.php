@@ -12,6 +12,15 @@ if (! is_array($oldBatchNos)) {
 }
 $selectedWarehouseId = (int) old('warehouse_id', $selectedWarehouseId ?? 0);
 $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
+$itemDisplay = static function (array $line): array {
+    $code = trim((string) ($line['item_code'] ?? $line['item'] ?? $line['item_no'] ?? ''));
+    $name = trim((string) ($line['item_name'] ?? $line['description'] ?? ''));
+    if ($code === '' && $name !== '') {
+        $code = $name;
+        $name = '';
+    }
+    return [$code !== '' ? $code : '-', $name !== '' ? $name : '-'];
+};
 ?>
 <form method="post" action="<?= site_url('purchase/orders/' . $po['id'] . '/receive') ?>">
     <?= csrf_field() ?>
@@ -55,13 +64,14 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
                 </div>
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Location</label>
-                    <select name="location_id" id="receiptLocation" class="form-select" required>
-                        <option value="" data-warehouse-id="">Select Location</option>
+                    <select name="location_id" id="receiptLocation" class="form-select" required data-selected-location-id="<?= esc((string) $selectedLocationId, 'attr') ?>">
+                        <option value="">Select Location</option>
                         <?php foreach ($locations as $location): ?>
                             <?php $locationId = (int) $location['id']; ?>
                             <option value="<?= $locationId ?>" data-warehouse-id="<?= (int) ($location['warehouse_id'] ?? 0) ?>" <?= $selectedLocationId === $locationId ? 'selected' : '' ?>><?= esc(($location['code'] ?? $location['id']) . ' - ' . ($location['name'] ?? '-')) ?></option>
                         <?php endforeach ?>
                     </select>
+                    <small class="text-muted">Location otomatis difilter sesuai warehouse yang dipilih.</small>
                 </div>
                 <div class="col-md-12 mb-3">
                     <label class="form-label">Notes</label>
@@ -97,10 +107,11 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
                         $outstanding = (float) ($line['qty_outstanding'] ?? $line['qty'] ?? 0);
                         $qtyValue = array_key_exists($index, $oldQtys) ? $oldQtys[$index] : $outstanding;
                         $batchValue = array_key_exists($index, $oldBatchNos) ? $oldBatchNos[$index] : '';
+                        [$displayCode, $displayName] = $itemDisplay($line);
                         ?>
                         <tr>
                             <td><?= esc($line['po_line'] ?? $line['line_no']) ?><input type="hidden" name="purchase_order_line_id[]" value="<?= (int) $line['id'] ?>"></td>
-                            <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
+                            <td><div class="fw-semibold"><?= esc($displayCode) ?></div><small class="text-muted"><?= esc($displayName) ?></small></td>
                             <td><input type="text" name="batch_no[]" class="form-control" value="<?= esc((string) $batchValue) ?>" placeholder="Optional"></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_ordered'] ?? $line['qty'] ?? 0), 4)) ?></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_received'] ?? 0), 4)) ?></td>
@@ -147,6 +158,14 @@ document.addEventListener('DOMContentLoaded', function () {
     const warehouse = document.getElementById('receiptWarehouse');
     const location = document.getElementById('receiptLocation');
     const totalReceiveNow = document.getElementById('totalReceiveNow');
+    const originalLocations = location
+        ? Array.from(location.options).filter(option => option.value !== '').map(option => ({
+            value: option.value,
+            text: option.text,
+            warehouseId: option.dataset.warehouseId || '',
+            selected: option.selected
+        }))
+        : [];
 
     function number(value) {
         value = String(value || '').trim();
@@ -173,31 +192,34 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    function syncLocations() {
+    function rebuildLocations() {
         if (!warehouse || !location) return;
         const warehouseId = warehouse.value;
-        let selectedVisible = false;
+        const selectedBefore = location.value || location.dataset.selectedLocationId || '';
+        const matching = originalLocations.filter(item => warehouseId !== '' && item.warehouseId === warehouseId);
 
-        Array.from(location.options).forEach(function (option) {
-            if (option.value === '') {
-                option.hidden = false;
-                return;
-            }
-            const visible = warehouseId !== '' && option.dataset.warehouseId === warehouseId;
-            option.hidden = !visible;
-            if (visible && option.selected) selectedVisible = true;
+        location.innerHTML = '';
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = matching.length ? 'Select Location' : 'No location for selected warehouse';
+        location.appendChild(placeholder);
+
+        matching.forEach(function (item) {
+            const option = document.createElement('option');
+            option.value = item.value;
+            option.textContent = item.text;
+            option.dataset.warehouseId = item.warehouseId;
+            location.appendChild(option);
         });
 
-        if (!selectedVisible) {
-            const firstVisible = Array.from(location.options).find(function (option) {
-                return option.value !== '' && !option.hidden;
-            });
-            location.value = firstVisible ? firstVisible.value : '';
-        }
+        const hasPrevious = matching.some(item => item.value === selectedBefore);
+        location.value = hasPrevious ? selectedBefore : (matching[0] ? matching[0].value : '');
+        location.dataset.selectedLocationId = location.value;
+        location.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    if (warehouse && location) warehouse.addEventListener('change', syncLocations);
-    syncLocations();
+    if (warehouse && location) warehouse.addEventListener('change', rebuildLocations);
+    rebuildLocations();
     recalcReceiveTotal();
 });
 </script>
