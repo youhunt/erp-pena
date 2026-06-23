@@ -8,9 +8,9 @@
                 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
                     <div>
                         <h4 class="card-title mb-1">Document Numbering</h4>
-                        <p class="text-muted mb-0">Setup format nomor dokumen seperti PO, PR, SO, SI, PI, dan JV.</p>
+                        <p class="text-muted mb-0">Setup nomor dokumen sekarang memakai <strong>Transaction Codes</strong> sebagai sumber utama.</p>
                     </div>
-                    <a href="<?= site_url('setup/prefix-codes') ?>" class="btn btn-light">Legacy Prefix Codes</a>
+                    <a href="<?= site_url('setup/transaction-codes') ?>" class="btn btn-light">Open Transaction Codes</a>
                 </div>
 
                 <?php if (session('message')): ?>
@@ -22,7 +22,7 @@
 
                 <div class="alert alert-info">
                     <div class="fw-semibold mb-1">Token format yang bisa dipakai</div>
-                    <code>{PREFIX}</code>, <code>{YYYY}</code>, <code>{YY}</code>, <code>{MM}</code>, <code>{DD}</code>, <code>{SEQ}</code>, <code>{PERIOD}</code>
+                    <code>{PREFIX}</code>, <code>{CODE}</code>, <code>{YYYY}</code>, <code>{YY}</code>, <code>{MM}</code>, <code>{DD}</code>, <code>{SEQ}</code>, <code>{PERIOD}</code>
                     <div class="mt-2 small">
                         Contoh PO001: <code>{PREFIX}{SEQ}</code>, reset <code>never</code>, padding <code>3</code>.<br>
                         Contoh PO/202606/0001: <code>{PREFIX}/{YYYY}{MM}/{SEQ}</code>, reset <code>monthly</code>, padding <code>4</code>.
@@ -41,17 +41,17 @@
                                     <th style="min-width:230px;">Format</th>
                                     <th style="min-width:130px;">Reset</th>
                                     <th style="min-width:100px;">Padding</th>
-                                    <th style="min-width:180px;">Preview</th>
+                                    <th style="min-width:180px;">Next Preview</th>
                                     <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
-                            <?php foreach ($prefixes as $index => $row): ?>
-                                <?php $code = (string) ($row['transaction_code'] ?? $row['code'] ?? ''); ?>
+                            <?php foreach (($codes ?? []) as $index => $row): ?>
+                                <?php $code = strtoupper(trim((string) ($row['code'] ?? $row['transaction_code'] ?? ''))); ?>
                                 <tr>
                                     <td>
                                         <input type="hidden" name="rows[<?= $index ?>][id]" value="<?= (int) ($row['id'] ?? 0) ?>">
-                                        <input type="text" class="form-control form-control-sm fw-semibold" name="rows[<?= $index ?>][transaction_code]" value="<?= esc($code, 'attr') ?>" required>
+                                        <input type="text" class="form-control form-control-sm fw-semibold" name="rows[<?= $index ?>][code]" value="<?= esc($code, 'attr') ?>" required>
                                     </td>
                                     <td><input type="text" class="form-control form-control-sm" name="rows[<?= $index ?>][name]" value="<?= esc((string) ($row['name'] ?? ''), 'attr') ?>"></td>
                                     <td><input type="text" class="form-control form-control-sm" name="rows[<?= $index ?>][prefix]" value="<?= esc((string) ($row['prefix'] ?? $code), 'attr') ?>"></td>
@@ -79,9 +79,15 @@
                                             <div class="small text-muted mb-1">Sequence aktif untuk <?= esc($code) ?>:</div>
                                             <div class="d-flex flex-wrap gap-2">
                                                 <?php foreach ($sequences[$code] as $seq): ?>
-                                                    <span class="badge bg-secondary-subtle text-secondary">
-                                                        <?= esc(($seq['period_key'] ?? '-') . ' / last: ' . ($seq['last_number'] ?? 0) . ' / ' . ($seq['last_document_no'] ?? '-')) ?>
-                                                    </span>
+                                                    <div class="border rounded px-2 py-1 small bg-light">
+                                                        <span class="me-2"><?= esc(($seq['period_key'] ?? '-') . ' / last: ' . ($seq['last_number'] ?? 0) . ' / ' . ($seq['last_document_no'] ?? '-')) ?></span>
+                                                        <form method="post" action="<?= site_url('setup/document-numbering/reset-sequence') ?>" class="d-inline" onsubmit="return confirm('Reset sequence <?= esc($code, 'js') ?> period <?= esc((string) ($seq['period_key'] ?? ''), 'js') ?>? Nomor berikutnya akan mulai ulang untuk period ini.');">
+                                                            <?= csrf_field() ?>
+                                                            <input type="hidden" name="transaction_code" value="<?= esc($code, 'attr') ?>">
+                                                            <input type="hidden" name="period_key" value="<?= esc((string) ($seq['period_key'] ?? ''), 'attr') ?>">
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger py-0">Reset</button>
+                                                        </form>
+                                                    </div>
                                                 <?php endforeach ?>
                                             </div>
                                         </td>
