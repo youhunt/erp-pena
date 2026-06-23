@@ -26,6 +26,11 @@ class WarehouseModel extends Model
         if (! empty($data['code'])) {
             $data['code'] = strtoupper((string) $data['code']);
         }
+        foreach (['company_id', 'site_id', 'department_id'] as $nullableIntField) {
+            if (array_key_exists($nullableIntField, $data) && ($data[$nullableIntField] === '' || $data[$nullableIntField] === 0 || $data[$nullableIntField] === '0')) {
+                $data[$nullableIntField] = null;
+            }
+        }
         if (! array_key_exists('is_active', $data)) {
             $data['is_active'] = 1;
         }
