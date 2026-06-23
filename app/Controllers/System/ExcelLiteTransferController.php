@@ -262,7 +262,7 @@ class ExcelLiteTransferController extends BaseController
             unset($data[$alias]);
             if ($value === null || $value === '') continue;
             $id = $this->lookupIdByCode($relation['table'], (string) $value, (bool) $relation['tenant'], (bool) $relation['site'], $data['company_id'] ?? null, $data['site_id'] ?? null);
-            if ($id === null) throw new RuntimeException("{$alias} '{$value}' tidak ditemukan.");
+            if ($id === null) throw new RuntimeException("{$alias} '{$value}' tidak ditemukan untuk company/site yang dipilih.");
             $data[$relation['field']] = $id;
         }
 
@@ -343,11 +343,9 @@ class ExcelLiteTransferController extends BaseController
     {
         $db = Database::connect();
         $builder = $db->table($table)->where($this->codeColumn($table), $code);
-        $tenantContext = new TenantContext(session());
-        $company = $companyId ?? $tenantContext->activeCompanyId();
-        $activeSite = $siteId ?? $tenantContext->activeSiteId();
-        if ($tenant && $company !== null && $db->fieldExists('company_id', $table)) $builder->where('company_id', $company);
-        if ($site && $activeSite !== null && $db->fieldExists('site_id', $table)) $builder->where('site_id', $activeSite);
+        if (! $this->applyStrictScope($builder, $table, $tenant, $site, $companyId, $siteId)) {
+            return null;
+        }
         if ($db->fieldExists('deleted_at', $table)) $builder->where('deleted_at', null);
         $row = $builder->get()->getRowArray();
         return $row !== null ? (int) $row['id'] : null;
@@ -365,14 +363,44 @@ class ExcelLiteTransferController extends BaseController
         if ($code === '') return null;
         $db = Database::connect();
         $builder = $db->table($table)->where($this->codeColumn($table), $code);
-        $tenantContext = new TenantContext(session());
-        $company = $companyId ?? $tenantContext->activeCompanyId();
-        $activeSite = $siteId ?? $tenantContext->activeSiteId();
-        if ($tenant && $company !== null && $db->fieldExists('company_id', $table)) $builder->where('company_id', $company);
-        if ($site && $activeSite !== null && $db->fieldExists('site_id', $table)) $builder->where('site_id', $activeSite);
+        if (! $this->applyStrictScope($builder, $table, $tenant, $site, $companyId, $siteId)) {
+            return null;
+        }
         if ($db->fieldExists('deleted_at', $table)) $builder->where('deleted_at', null);
         $row = $builder->get()->getRowArray();
         return $row[$nameColumn] ?? $row['name'] ?? null;
+    }
+
+    private function applyStrictScope($builder, string $table, bool $tenant, bool $site, ?int $companyId, ?int $siteId): bool
+    {
+        $db = Database::connect();
+        $tenantContext = new TenantContext(session());
+        $company = $companyId ?? $tenantContext->activeCompanyId();
+        $activeSite = $siteId ?? $tenantContext->activeSiteId();
+
+        if ($tenant) {
+            if ($company === null) return false;
+            if ($db->fieldExists('company_id', $table)) {
+                $builder->where('company_id', $company);
+            } elseif ($db->fieldExists('company', $table)) {
+                $builder->where('company', $this->lookupCodeById('companies', (int) $company));
+            } else {
+                return false;
+            }
+        }
+
+        if ($site) {
+            if ($activeSite === null) return false;
+            if ($db->fieldExists('site_id', $table)) {
+                $builder->where('site_id', $activeSite);
+            } elseif ($db->fieldExists('site', $table)) {
+                $builder->where('site', $this->lookupCodeById('sites', (int) $activeSite));
+            } else {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function codeColumn(string $table): string
@@ -472,7 +500,7 @@ class ExcelLiteTransferController extends BaseController
 
     private function previewDir(): string
     {
-        return rtrim(WRITEPATH, '\\/') . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . self::PREVIEW_DIR;
+        return rtrim(WRITEPATH, '\/') . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . self::PREVIEW_DIR;
     }
 
     private function previewPath(string $token): ?string
