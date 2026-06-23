@@ -80,6 +80,17 @@ class FinanceGlSeeder extends Seeder
                 ->get()->getRowArray();
 
             if ($exists !== null) {
+                $this->db->table('chart_accounts')
+                    ->where('id', (int) $exists['id'])
+                    ->update([
+                        'account_name' => $name,
+                        'account_type' => $type,
+                        'normal_balance' => $normal,
+                        'parent_account_no' => $parent,
+                        'is_postable' => $postable,
+                        'is_active' => 1,
+                        'updated_at' => $now,
+                    ]);
                 continue;
             }
 
@@ -101,22 +112,25 @@ class FinanceGlSeeder extends Seeder
     private function seedPostingProfiles(int $companyId, string $now): void
     {
         $profiles = [
-            ['SALES', 'AR_CONTROL', '1200', 'Default A/R control account'],
-            ['SALES', 'SALES_REVENUE', '4100', 'Default sales revenue account'],
-            ['SALES', 'OUTPUT_VAT', '2200', 'Default output VAT account'],
-            ['SALES', 'COGS', '5000', 'Default COGS account'],
-            ['SALES', 'INVENTORY', '1300', 'Default inventory account'],
-            ['PURCHASE', 'AP_CONTROL', '2100', 'Default A/P control account'],
-            ['PURCHASE', 'GRNI', '2300', 'Default goods received not invoiced account'],
-            ['PURCHASE', 'INVENTORY', '1300', 'Default purchased inventory account'],
-            ['PURCHASE', 'INPUT_VAT', '1400', 'Default input VAT account'],
-            ['CASHBANK', 'CASH_ON_HAND', '1110', 'Default cash account'],
-            ['CASHBANK', 'BANK', '1120', 'Default bank account'],
-            ['POS', 'CASH_RECEIPT', '1110', 'Default POS cash receipt account'],
-            ['POS', 'SALES_REVENUE', '4100', 'Default POS sales revenue account'],
-            ['POS', 'OUTPUT_VAT', '2200', 'Default POS output VAT account'],
-            ['POS', 'COGS', '5000', 'Default POS COGS account'],
-            ['POS', 'INVENTORY', '1300', 'Default POS inventory account'],
+            ['ap', 'payable', '2100', 'Accounts Payable'],
+            ['ap', 'grni', '2300', 'Goods Received Not Invoiced'],
+            ['ap', 'manual_expense', '6200', 'Manual A/P Expense'],
+            ['ap', 'inventory', '1300', 'Purchased Inventory'],
+            ['ap', 'input_vat', '1400', 'Input VAT'],
+            ['ar', 'receivable', '1200', 'Accounts Receivable'],
+            ['ar', 'sales_revenue', '4100', 'Sales Revenue'],
+            ['ar', 'output_vat', '2200', 'Output VAT'],
+            ['sales', 'cogs', '5000', 'Cost of Goods Sold'],
+            ['sales', 'inventory', '1300', 'Inventory'],
+            ['inventory', 'inventory', '1300', 'Inventory'],
+            ['inventory', 'adjustment_gain', '7000', 'Inventory Adjustment Gain'],
+            ['inventory', 'adjustment_loss', '8000', 'Inventory Adjustment Loss'],
+            ['cashbank', 'cash_bank', '1100', 'Cash and Bank'],
+            ['pos', 'cash_receipt', '1110', 'Default POS cash receipt account'],
+            ['pos', 'sales_revenue', '4100', 'Default POS sales revenue account'],
+            ['pos', 'output_vat', '2200', 'Default POS output VAT account'],
+            ['pos', 'cogs', '5000', 'Default POS COGS account'],
+            ['pos', 'inventory', '1300', 'Default POS inventory account'],
         ];
 
         foreach ($profiles as [$module, $key, $accountNo, $description]) {
@@ -124,9 +138,19 @@ class FinanceGlSeeder extends Seeder
                 ->where('company_id', $companyId)
                 ->where('module_code', $module)
                 ->where('posting_key', $key)
+                ->where('deleted_at', null)
                 ->get()->getRowArray();
 
             if ($exists !== null) {
+                $this->db->table('gl_posting_profiles')
+                    ->where('id', (int) $exists['id'])
+                    ->update([
+                        'account_no' => $accountNo,
+                        'description' => $description,
+                        'is_active' => 1,
+                        'updated_by' => 'system',
+                        'updated_at' => $now,
+                    ]);
                 continue;
             }
 
