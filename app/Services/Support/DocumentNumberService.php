@@ -320,6 +320,12 @@ final class DocumentNumberService
             throw new InvalidArgumentException('Transaction code may only contain letters, numbers, underscore, dash, and dot.');
         }
 
+        // Sales Delivery is standardized as SD. This keeps older DO callers
+        // compatible while still using the Transaction Code setup decided in UI.
+        if ($transactionCode === 'DO') {
+            return 'SD';
+        }
+
         return $transactionCode;
     }
 
