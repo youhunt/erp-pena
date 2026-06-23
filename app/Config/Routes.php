@@ -273,6 +273,9 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     });
 
     $routes->group('setup', static function (RouteCollection $routes): void {
+        $routes->get('document-numbering', 'Setup\DocumentNumberingController::index');
+        $routes->post('document-numbering', 'Setup\DocumentNumberingController::save');
+        $routes->post('document-numbering/reset-sequence', 'Setup\DocumentNumberingController::resetSequence');
         $routes->get('options/cities', 'Setup\MasterDataController::cityOptions');
         $routes->get('options/locations', 'Setup\MasterDataController::locationOptions');
         foreach (['transaction-codes','prefix-codes','companies','sites','departments','warehouses','locations','countries','provinces','cities','postal-codes','currencies','uoms','uom-conversions','vat','wht','item-vat','address-master','customer-terms','customer-promos','customers','supplier-terms','supplier-promos','suppliers','items','item-locations','batch-masters'] as $resource) {
