@@ -73,6 +73,24 @@ class ItemModel extends Model
         if (! array_key_exists('purchasep', $data) && array_key_exists('item_price', $data)) {
             $data['purchasep'] = $data['item_price'];
         }
+
+        // Legacy/imported item rows sometimes provide item_group (for example RM)
+        // but leave item_type NULL. The database requires item_type, so normalize
+        // it here before insert/update to keep BOM/import auto-create flow safe.
+        if (! array_key_exists('item_type', $data) || trim((string) ($data['item_type'] ?? '')) === '') {
+            $group = strtoupper(trim((string) ($data['item_group'] ?? '')));
+            $stockWhs = strtoupper(trim((string) ($data['stockwhs'] ?? '')));
+            $data['item_type'] = match (true) {
+                in_array($group, ['FG', 'FINISH', 'FINISHED', 'FINISHED_GOODS'], true) => 'finished_good',
+                in_array($group, ['WIP', 'SEMI', 'SEMI_FINISHED'], true) => 'wip',
+                in_array($group, ['SP', 'SUPPLY', 'SUPPLIES'], true) => 'supply',
+                in_array($group, ['SRV', 'SERVICE', 'SERVICES'], true) => 'service',
+                in_array($group, ['RM', 'RAW', 'RAW_MATERIAL'], true) => 'material',
+                in_array($stockWhs, ['FG', 'FINISH', 'FINISHED', 'FINISHED_GOODS'], true) => 'finished_good',
+                default => 'material',
+            };
+        }
+
         if (array_key_exists('active', $data) && ! array_key_exists('is_active', $data)) {
             $data['is_active'] = (int) (bool) $data['active'];
         }
