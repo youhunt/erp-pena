@@ -1,6 +1,22 @@
 -- ERP PENA - ERP Core Health Check
 -- Purpose: validate previous ERP core development before continuing MRP/advanced planning.
--- Expected: all FAIL_COUNT checks should be 0, and required table checks should be 1.
+-- IMPORTANT:
+--   In phpMyAdmin, click/select the ERP application database first.
+--   Do NOT run this while the selected database is information_schema.
+--   Check current selected DB with: SELECT DATABASE();
+-- Expected:
+--   Required table checks = 1.
+--   FAIL_* checks = 0.
+
+SELECT DATABASE() AS selected_database;
+
+SELECT
+    CASE
+        WHEN DATABASE() IS NULL THEN 'ERROR_NO_DATABASE_SELECTED'
+        WHEN DATABASE() = 'information_schema' THEN 'ERROR_WRONG_DATABASE_INFORMATION_SCHEMA'
+        ELSE 'OK_DATABASE_SELECTED'
+    END AS check_name,
+    DATABASE() AS value;
 
 SELECT 'CORE_TABLE_COMPANIES' AS check_name, COUNT(*) AS total
 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'companies';
@@ -22,6 +38,9 @@ FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 
 
 SELECT 'CORE_TABLE_DOCUMENT_SEQUENCES' AS check_name, COUNT(*) AS total
 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'document_number_sequences';
+
+-- Stop here and select the ERP database first if CORE_TABLE_ITEMS = 0.
+-- The checks below read ERP tables directly.
 
 SELECT 'FAIL_ITEM_TYPE_NULL_OR_BLANK' AS check_name, COUNT(*) AS total
 FROM items
