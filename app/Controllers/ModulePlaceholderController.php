@@ -18,7 +18,7 @@ class ModulePlaceholderController extends BaseController
             return redirect()->to('/production/mrp');
         }
         if ($slug === 'planned-released') {
-            return redirect()->to('/production/mrp#planned-order-board');
+            return $this->plannedReleased();
         }
         if ($slug === 'mps') {
             return $this->mps();
@@ -29,6 +29,73 @@ class ModulePlaceholderController extends BaseController
         return view('modules/placeholder', [
             'title' => $title,
             'slug' => $slug,
+        ]);
+    }
+
+    private function plannedReleased(): string
+    {
+        $db = Database::connect();
+        $tenant = new TenantContext(session());
+        $companyId = $tenant->activeCompanyId();
+        $siteId = $tenant->activeSiteId();
+        $status = trim((string) ($this->request->getGet('status') ?: ''));
+        $type = trim((string) ($this->request->getGet('type') ?: ''));
+
+        $rows = [];
+        $summary = [
+            'total' => 0,
+            'planned' => 0,
+            'prepared' => 0,
+            'approved' => 0,
+            'converted' => 0,
+            'cancelled' => 0,
+        ];
+        $typeSummary = [];
+
+        if ($db->tableExists('production_mrp_planned_orders')) {
+            $base = $db->table('production_mrp_planned_orders po')
+                ->select('po.*, r.run_no, r.from_date, r.to_date')
+                ->join('production_mrp_runs r', 'r.id = po.mrp_run_id', 'left');
+
+            if ($companyId !== null) {
+                $base->where('po.company_id', $companyId);
+            }
+            if ($siteId !== null) {
+                $base->where('po.site_id', $siteId);
+            }
+            if ($status !== '') {
+                $base->where('po.status', $status);
+            }
+            if ($type !== '') {
+                $base->where('po.plan_type', $type);
+            }
+
+            $rows = $base
+                ->orderBy('po.status', 'ASC')
+                ->orderBy('po.id', 'DESC')
+                ->get(500)
+                ->getResultArray();
+
+            foreach ($rows as $row) {
+                $summary['total']++;
+                $s = (string) ($row['status'] ?? 'planned');
+                if (array_key_exists($s, $summary)) {
+                    $summary[$s]++;
+                }
+                $t = (string) ($row['plan_type'] ?? 'planning_task');
+                $typeSummary[$t] = ($typeSummary[$t] ?? 0) + 1;
+            }
+            ksort($typeSummary);
+        }
+
+        return view('production/planned_released/index', [
+            'title' => 'Planned Released',
+            'rows' => $rows,
+            'summary' => $summary,
+            'typeSummary' => $typeSummary,
+            'status' => $status,
+            'type' => $type,
+            'hasTable' => $db->tableExists('production_mrp_planned_orders'),
         ]);
     }
 
