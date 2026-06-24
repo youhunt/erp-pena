@@ -77,8 +77,8 @@ class ErpMenu extends BaseConfig
             ]),
             $this->group('Planning', 'bx-calendar', 70, [
                 $this->leaf('Forecast', 'production/forecasts', 'planning.view'),
-                $this->leaf('Planned Released', 'production/mrp#planned-order-board', 'planning.view'),
-                $this->leaf('MPS', 'production/mps', 'planning.view'),
+                $this->leaf('Planned Released', 'modules/planned-released', 'planning.view'),
+                $this->leaf('MPS', 'modules/mps', 'planning.view'),
                 $this->leaf('MRP', 'production/mrp', 'planning.view'),
             ]),
             $this->group('Production', 'bx-factory', 80, [
