@@ -14,7 +14,7 @@
             </div>
         </div>
 
-        <form method="get" action="<?= site_url('modules/mps') ?>" class="row g-3 mb-4 border rounded p-3 bg-light">
+        <form method="get" action="<?= site_url('production/mps') ?>" class="row g-3 mb-4 border rounded p-3 bg-light">
             <div class="col-md-3">
                 <label class="form-label">From Date</label>
                 <input type="date" name="from_date" class="form-control" value="<?= esc($fromDate) ?>">
@@ -35,8 +35,21 @@
             <div class="col-md-3"><div class="border rounded p-3"><div class="text-muted">Need BOM</div><h4 class="text-warning"><?= number_format((float) ($summary['without_bom'] ?? 0), 0) ?></h4></div></div>
         </div>
 
-        <div class="alert alert-info">
-            MPS ini adalah jadwal produksi awal dari forecast. Item dengan status <strong>Ready for MRP</strong> bisa diproses di MRP. Item dengan status <strong>Create BOM</strong> perlu BOM aktif dulu.
+        <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                MPS ini adalah jadwal produksi awal dari forecast. Item dengan status <strong>Ready for MRP</strong> bisa diproses di MRP. Item dengan status <strong>Create BOM</strong> perlu BOM aktif dulu.
+            </div>
+            <?php if (($summary['items'] ?? 0) > 0): ?>
+                <form method="post" action="<?= site_url('production/mrp/run') ?>" class="d-inline">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="from_date" value="<?= esc($fromDate, 'attr') ?>">
+                    <input type="hidden" name="to_date" value="<?= esc($toDate, 'attr') ?>">
+                    <input type="hidden" name="item_code" value="">
+                    <button type="submit" class="btn btn-success btn-sm">
+                        Generate MRP from MPS Period
+                    </button>
+                </form>
+            <?php endif ?>
         </div>
 
         <div class="table-responsive">
