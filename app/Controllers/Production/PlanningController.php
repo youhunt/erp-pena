@@ -13,6 +13,8 @@ class PlanningController extends BaseController
 {
     private const ACTION_STATUSES = ['open', 'in_progress', 'converted', 'closed', 'ignored'];
 
+    private const PLANNED_ORDER_STATUSES = ['planned', 'prepared', 'approved', 'converted', 'cancelled'];
+
     private const PLANNED_ACTION_TYPES = [
         'create_purchase_requisition' => 'planned_purchase_requisition',
         'create_work_order' => 'planned_work_order',
@@ -163,6 +165,12 @@ class PlanningController extends BaseController
             return $this->generatePlannedOrders($db, $run, $id);
         }
 
+        $plannedOrderId = (int) ($this->request->getGet('planned_order_id') ?? 0);
+        $plannedStatus = trim((string) ($this->request->getGet('planned_status') ?? ''));
+        if ($plannedOrderId > 0 && $plannedStatus !== '') {
+            return $this->updatePlannedOrderStatus($db, $id, $plannedOrderId, $plannedStatus);
+        }
+
         $actionLineId = (int) ($this->request->getGet('action_line_id') ?? 0);
         $actionStatus = trim((string) ($this->request->getGet('action_status') ?? ''));
         if ($actionLineId > 0 && $actionStatus !== '') {
@@ -205,6 +213,7 @@ class PlanningController extends BaseController
             'actionFilter' => $actionFilter,
             'statusFilter' => $statusFilter,
             'actionStatuses' => self::ACTION_STATUSES,
+            'plannedOrderStatuses' => self::PLANNED_ORDER_STATUSES,
             'hasActionColumns' => $db->fieldExists('action_status', 'production_mrp_lines'),
             'hasPlannedOrderTable' => $hasPlannedOrderTable,
         ]);
@@ -280,6 +289,52 @@ class PlanningController extends BaseController
         }
 
         return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('message', 'Created ' . $created . ' planned order(s).');
+    }
+
+    private function updatePlannedOrderStatus($db, int $runId, int $plannedOrderId, string $status): \CodeIgniter\HTTP\RedirectResponse
+    {
+        if (! in_array($status, self::PLANNED_ORDER_STATUSES, true)) {
+            return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('error', 'Invalid planned order status.');
+        }
+        if (! $db->tableExists('production_mrp_planned_orders')) {
+            return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('error', 'Planned order table is not installed yet.');
+        }
+
+        $plannedOrder = $db->table('production_mrp_planned_orders')
+            ->where('id', $plannedOrderId)
+            ->where('mrp_run_id', $runId)
+            ->get(1)
+            ->getRowArray();
+        if ($plannedOrder === null) {
+            return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('error', 'Planned order not found.');
+        }
+
+        $db->table('production_mrp_planned_orders')
+            ->where('id', $plannedOrderId)
+            ->where('mrp_run_id', $runId)
+            ->update([
+                'status' => $status,
+                'updated_by' => auth()->id(),
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+
+        if ((int) ($plannedOrder['mrp_line_id'] ?? 0) > 0 && $db->fieldExists('action_status', 'production_mrp_lines')) {
+            $lineStatus = match ($status) {
+                'converted' => 'converted',
+                'cancelled' => 'ignored',
+                default => 'in_progress',
+            };
+            $db->table('production_mrp_lines')
+                ->where('id', (int) $plannedOrder['mrp_line_id'])
+                ->where('mrp_run_id', $runId)
+                ->update([
+                    'action_status' => $lineStatus,
+                    'action_updated_by' => auth()->id(),
+                    'action_updated_at' => date('Y-m-d H:i:s'),
+                ]);
+        }
+
+        return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('message', 'Planned order status updated.');
     }
 
     private function updateMrpActionStatus($db, int $runId, int $lineId, string $status): \CodeIgniter\HTTP\RedirectResponse
