@@ -11,6 +11,8 @@ use RuntimeException;
 
 class PlanningController extends BaseController
 {
+    private const ACTION_STATUSES = ['open', 'in_progress', 'converted', 'closed', 'ignored'];
+
     public function forecasts(): string
     {
         $tenant = new TenantContext(session());
@@ -139,7 +141,7 @@ class PlanningController extends BaseController
         return redirect()->to('/production/mrp/runs/' . $runId)->with('message', 'MRP generated.');
     }
 
-    public function showMrp(int $id): string
+    public function showMrp(int $id): string|\CodeIgniter\HTTP\RedirectResponse
     {
         $tenant = new TenantContext(session());
         $companyId = $this->companyId($tenant);
@@ -149,8 +151,25 @@ class PlanningController extends BaseController
             throw PageNotFoundException::forPageNotFound();
         }
 
-        $lines = $db->table('production_mrp_lines')
-            ->where('mrp_run_id', $id)
+        $actionLineId = (int) ($this->request->getGet('action_line_id') ?? 0);
+        $actionStatus = trim((string) ($this->request->getGet('action_status') ?? ''));
+        if ($actionLineId > 0 && $actionStatus !== '') {
+            return $this->updateMrpActionStatus($db, $id, $actionLineId, $actionStatus);
+        }
+
+        $actionFilter = trim((string) ($this->request->getGet('action') ?? ''));
+        $statusFilter = trim((string) ($this->request->getGet('status') ?? ''));
+
+        $linesBuilder = $db->table('production_mrp_lines')
+            ->where('mrp_run_id', $id);
+        if ($actionFilter !== '') {
+            $linesBuilder->where('suggested_action', $actionFilter);
+        }
+        if ($statusFilter !== '' && $db->fieldExists('action_status', 'production_mrp_lines')) {
+            $linesBuilder->where('action_status', $statusFilter);
+        }
+
+        $lines = $linesBuilder
             ->orderBy('line_type', 'ASC')
             ->orderBy('net_requirement', 'DESC')
             ->get(1000)
@@ -160,7 +179,32 @@ class PlanningController extends BaseController
             'title' => 'MRP Run ' . ($run['run_no'] ?? '#' . $id),
             'run' => $run,
             'lines' => $lines,
+            'actionFilter' => $actionFilter,
+            'statusFilter' => $statusFilter,
+            'actionStatuses' => self::ACTION_STATUSES,
+            'hasActionColumns' => $db->fieldExists('action_status', 'production_mrp_lines'),
         ]);
+    }
+
+    private function updateMrpActionStatus($db, int $runId, int $lineId, string $status): \CodeIgniter\HTTP\RedirectResponse
+    {
+        if (! in_array($status, self::ACTION_STATUSES, true)) {
+            return redirect()->to('/production/mrp/runs/' . $runId . '#mrp-action-plan')->with('error', 'Invalid MRP action status.');
+        }
+        if (! $db->fieldExists('action_status', 'production_mrp_lines')) {
+            return redirect()->to('/production/mrp/runs/' . $runId . '#mrp-action-plan')->with('error', 'Run database/hosting/2026-06-24_add_mrp_action_plan_columns.sql first.');
+        }
+
+        $db->table('production_mrp_lines')
+            ->where('id', $lineId)
+            ->where('mrp_run_id', $runId)
+            ->update([
+                'action_status' => $status,
+                'action_updated_by' => auth()->id(),
+                'action_updated_at' => date('Y-m-d H:i:s'),
+            ]);
+
+        return redirect()->to('/production/mrp/runs/' . $runId . '#mrp-action-plan')->with('message', 'MRP action status updated.');
     }
 
     private function companyId(TenantContext $tenant): int
