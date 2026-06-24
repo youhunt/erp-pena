@@ -76,10 +76,10 @@ class ErpMenu extends BaseConfig
                 $this->leaf('Inventory Period Close', 'period-close/inventory', 'inventory.stock.view'),
             ]),
             $this->group('Planning', 'bx-calendar', 70, [
-                $this->leaf('Forecast', $this->placeholderRoute('Forecast'), 'planning.view'),
-                $this->leaf('Planned Released', $this->placeholderRoute('Planned Released'), 'planning.view'),
-                $this->leaf('MPS', $this->placeholderRoute('MPS'), 'planning.view'),
-                $this->leaf('MRP', $this->placeholderRoute('MRP'), 'planning.view'),
+                $this->leaf('Forecast', 'production/forecasts', 'planning.view'),
+                $this->leaf('Planned Released', 'production/mrp#planned-order-board', 'planning.view'),
+                $this->leaf('MPS', 'production/mps', 'planning.view'),
+                $this->leaf('MRP', 'production/mrp', 'planning.view'),
             ]),
             $this->group('Production', 'bx-factory', 80, [
                 $this->leaf('BOM', 'production/boms', 'production.view'),
