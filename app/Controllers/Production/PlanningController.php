@@ -13,6 +13,14 @@ class PlanningController extends BaseController
 {
     private const ACTION_STATUSES = ['open', 'in_progress', 'converted', 'closed', 'ignored'];
 
+    private const PLANNED_ACTION_TYPES = [
+        'create_purchase_requisition' => 'planned_purchase_requisition',
+        'create_work_order' => 'planned_work_order',
+        'create_item_master' => 'master_data_task',
+        'create_bom' => 'bom_task',
+        'review_service_requirement' => 'service_review',
+    ];
+
     public function forecasts(): string
     {
         $tenant = new TenantContext(session());
@@ -151,6 +159,10 @@ class PlanningController extends BaseController
             throw PageNotFoundException::forPageNotFound();
         }
 
+        if ((string) $this->request->getGet('generate_planned_orders') === '1') {
+            return $this->generatePlannedOrders($db, $run, $id);
+        }
+
         $actionLineId = (int) ($this->request->getGet('action_line_id') ?? 0);
         $actionStatus = trim((string) ($this->request->getGet('action_status') ?? ''));
         if ($actionLineId > 0 && $actionStatus !== '') {
@@ -175,15 +187,99 @@ class PlanningController extends BaseController
             ->get(1000)
             ->getResultArray();
 
+        $plannedOrders = [];
+        $hasPlannedOrderTable = $db->tableExists('production_mrp_planned_orders');
+        if ($hasPlannedOrderTable) {
+            $plannedOrders = $db->table('production_mrp_planned_orders')
+                ->where('mrp_run_id', $id)
+                ->orderBy('id', 'DESC')
+                ->get(500)
+                ->getResultArray();
+        }
+
         return view('production/mrp/show', [
             'title' => 'MRP Run ' . ($run['run_no'] ?? '#' . $id),
             'run' => $run,
             'lines' => $lines,
+            'plannedOrders' => $plannedOrders,
             'actionFilter' => $actionFilter,
             'statusFilter' => $statusFilter,
             'actionStatuses' => self::ACTION_STATUSES,
             'hasActionColumns' => $db->fieldExists('action_status', 'production_mrp_lines'),
+            'hasPlannedOrderTable' => $hasPlannedOrderTable,
         ]);
+    }
+
+    private function generatePlannedOrders($db, array $run, int $runId): \CodeIgniter\HTTP\RedirectResponse
+    {
+        if (! $db->tableExists('production_mrp_planned_orders')) {
+            return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('error', 'Run database/hosting/2026-06-24_add_mrp_planned_orders.sql first.');
+        }
+        if (! $db->fieldExists('action_status', 'production_mrp_lines')) {
+            return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('error', 'Run MRP action plan columns SQL first.');
+        }
+
+        $lines = $db->table('production_mrp_lines')
+            ->where('mrp_run_id', $runId)
+            ->where('net_requirement >', 0)
+            ->whereIn('suggested_action', array_keys(self::PLANNED_ACTION_TYPES))
+            ->get(1000)
+            ->getResultArray();
+
+        $created = 0;
+        $now = date('Y-m-d H:i:s');
+        foreach ($lines as $line) {
+            $lineId = (int) ($line['id'] ?? 0);
+            if ($lineId < 1) {
+                continue;
+            }
+            $exists = $db->table('production_mrp_planned_orders')->where('mrp_line_id', $lineId)->countAllResults();
+            if ($exists > 0) {
+                continue;
+            }
+
+            $suggestedAction = (string) ($line['suggested_action'] ?? '');
+            $planType = self::PLANNED_ACTION_TYPES[$suggestedAction] ?? 'planning_task';
+            $planNo = 'MPO-' . date('YmdHis') . '-' . $lineId;
+
+            $db->table('production_mrp_planned_orders')->insert([
+                'company_id' => (int) ($line['company_id'] ?? $run['company_id'] ?? 0),
+                'site_id' => $line['site_id'] ?? $run['site_id'] ?? null,
+                'mrp_run_id' => $runId,
+                'mrp_line_id' => $lineId,
+                'plan_no' => $planNo,
+                'plan_type' => $planType,
+                'suggested_action' => $suggestedAction,
+                'item_code' => (string) ($line['component_item_code'] ?? ''),
+                'item_name' => (string) ($line['component_item_name'] ?? ''),
+                'uom_code' => (string) ($line['uom_code'] ?? ''),
+                'qty' => (float) ($line['net_requirement'] ?? 0),
+                'status' => 'planned',
+                'source_parent_item_code' => (string) ($line['parent_item_code'] ?? ''),
+                'target_doc_type' => $planType,
+                'target_doc_no' => null,
+                'notes' => 'Generated from MRP run ' . (string) ($run['run_no'] ?? $runId),
+                'created_by' => auth()->id(),
+                'updated_by' => auth()->id(),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+            $db->table('production_mrp_lines')
+                ->where('id', $lineId)
+                ->where('mrp_run_id', $runId)
+                ->update([
+                    'action_status' => 'in_progress',
+                    'planned_doc_type' => $planType,
+                    'planned_doc_no' => $planNo,
+                    'action_updated_by' => auth()->id(),
+                    'action_updated_at' => $now,
+                ]);
+
+            $created++;
+        }
+
+        return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('message', 'Created ' . $created . ' planned order(s).');
     }
 
     private function updateMrpActionStatus($db, int $runId, int $lineId, string $status): \CodeIgniter\HTTP\RedirectResponse
