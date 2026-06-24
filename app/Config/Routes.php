@@ -244,6 +244,8 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('forecasts', 'Production\PlanningController::forecasts');
         $routes->get('forecasts/new', 'Production\PlanningController::newForecast');
         $routes->post('forecasts', 'Production\PlanningController::storeForecast');
+        $routes->get('mps', 'ModulePlaceholderController::mpsPage');
+        $routes->get('planned-released', 'ModulePlaceholderController::plannedReleasedPage');
         $routes->get('mrp', 'Production\PlanningController::mrp');
         $routes->post('mrp/run', 'Production\PlanningController::runMrp');
         $routes->get('mrp/runs/(:num)', 'Production\PlanningController::showMrp/$1');
