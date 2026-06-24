@@ -12,6 +12,12 @@ foreach ($lines as $line) {
 }
 ksort($actionGroups);
 ksort($statusGroups);
+$actionFilter ??= '';
+$statusFilter ??= '';
+$actionStatuses ??= ['open', 'in_progress', 'converted', 'closed', 'ignored'];
+$hasActionColumns = (bool) ($hasActionColumns ?? false);
+$runId = (int) ($run['id'] ?? 0);
+$runUrl = site_url('production/mrp/runs/' . $runId);
 ?>
 <div class="card">
     <div class="card-body">
@@ -27,6 +33,10 @@ ksort($statusGroups);
         </div>
 
         <?php if (session('message')): ?><div class="alert alert-success"><?= esc(session('message')) ?></div><?php endif ?>
+        <?php if (session('error')): ?><div class="alert alert-danger"><?= esc(session('error')) ?></div><?php endif ?>
+        <?php if (! $hasActionColumns): ?>
+            <div class="alert alert-warning">Kolom MRP Action Plan belum tersedia. Jalankan <code>database/hosting/2026-06-24_add_mrp_action_plan_columns.sql</code>.</div>
+        <?php endif ?>
 
         <div class="row mb-4">
             <div class="col-md-3"><div class="border rounded p-3"><div class="text-muted">Demand Items</div><h4><?= number_format((float) ($run['demand_count'] ?? 0), 0) ?></h4></div></div>
@@ -41,11 +51,15 @@ ksort($statusGroups);
                     <h5 class="mb-3">Action Plan Summary</h5>
                     <div class="table-responsive">
                         <table class="table table-sm align-middle mb-0">
-                            <thead class="table-light"><tr><th>Suggested Action</th><th class="text-end">Lines</th></tr></thead>
+                            <thead class="table-light"><tr><th>Suggested Action</th><th class="text-end">Lines</th><th class="text-end">Filter</th></tr></thead>
                             <tbody>
-                            <?php if ($actionGroups === []): ?><tr><td colspan="2" class="text-center text-muted">No action.</td></tr><?php endif ?>
+                            <?php if ($actionGroups === []): ?><tr><td colspan="3" class="text-center text-muted">No action.</td></tr><?php endif ?>
                             <?php foreach ($actionGroups as $action => $count): ?>
-                                <tr><td><code><?= esc($action !== '' ? $action : '-') ?></code></td><td class="text-end fw-semibold"><?= number_format((float) $count, 0) ?></td></tr>
+                                <tr>
+                                    <td><code><?= esc($action !== '' ? $action : '-') ?></code></td>
+                                    <td class="text-end fw-semibold"><?= number_format((float) $count, 0) ?></td>
+                                    <td class="text-end"><a class="btn btn-sm btn-light" href="<?= $runUrl ?>?action=<?= urlencode($action) ?>#mrp-action-plan">View</a></td>
+                                </tr>
                             <?php endforeach ?>
                             </tbody>
                         </table>
@@ -58,13 +72,36 @@ ksort($statusGroups);
                     <div class="d-flex flex-wrap gap-2">
                         <?php if ($statusGroups === []): ?><span class="text-muted">No status.</span><?php endif ?>
                         <?php foreach ($statusGroups as $status => $count): ?>
-                            <span class="badge bg-light text-dark border"><?= esc($status !== '' ? $status : 'open') ?>: <?= number_format((float) $count, 0) ?></span>
+                            <a class="badge bg-light text-dark border" href="<?= $runUrl ?>?status=<?= urlencode($status) ?>#mrp-action-plan"><?= esc($status !== '' ? $status : 'open') ?>: <?= number_format((float) $count, 0) ?></a>
                         <?php endforeach ?>
                     </div>
-                    <p class="text-muted mt-3 mb-0">Status action akan dipakai untuk follow-up material: open, in_progress, converted, closed, atau ignored.</p>
+                    <p class="text-muted mt-3 mb-0">Status action dipakai untuk follow-up: open, in_progress, converted, closed, ignored.</p>
                 </div>
             </div>
         </div>
+
+        <form method="get" action="<?= $runUrl ?>" class="row g-2 mb-3">
+            <div class="col-md-4">
+                <select name="action" class="form-select">
+                    <option value="">All Suggested Actions</option>
+                    <?php foreach (array_keys($actionGroups) as $action): ?>
+                        <option value="<?= esc($action, 'attr') ?>" <?= $actionFilter === $action ? 'selected' : '' ?>><?= esc($action !== '' ? $action : '-') ?></option>
+                    <?php endforeach ?>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="status" class="form-select">
+                    <option value="">All Status</option>
+                    <?php foreach ($actionStatuses as $status): ?>
+                        <option value="<?= esc($status, 'attr') ?>" <?= $statusFilter === $status ? 'selected' : '' ?>><?= esc($status) ?></option>
+                    <?php endforeach ?>
+                </select>
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button class="btn btn-light" type="submit">Filter</button>
+                <a class="btn btn-outline-secondary" href="<?= $runUrl ?>#mrp-action-plan">Reset</a>
+            </div>
+        </form>
 
         <div class="table-responsive">
             <table class="table table-hover align-middle">
@@ -80,7 +117,7 @@ ksort($statusGroups);
                         <th class="text-end">Net Req.</th>
                         <th>Action</th>
                         <th>Status</th>
-                        <th>Notes</th>
+                        <th>Quick Update</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -90,6 +127,7 @@ ksort($statusGroups);
                         $net = (float) ($line['net_requirement'] ?? 0);
                         $type = (string) ($line['line_type'] ?? 'material');
                         $actionStatus = (string) ($line['action_status'] ?? 'open');
+                        $lineId = (int) ($line['id'] ?? 0);
                         $statusClass = match ($actionStatus) {
                             'converted', 'closed' => 'bg-success-subtle text-success',
                             'in_progress' => 'bg-primary-subtle text-primary',
@@ -108,7 +146,17 @@ ksort($statusGroups);
                         <td class="text-end fw-bold <?= $net > 0 ? 'text-danger' : 'text-success' ?>"><?= number_format($net, 6) ?></td>
                         <td><code><?= esc($line['suggested_action'] ?? '') ?></code></td>
                         <td><span class="badge <?= $statusClass ?>"><?= esc($actionStatus !== '' ? $actionStatus : 'open') ?></span></td>
-                        <td><?= esc($line['action_notes'] ?? '') ?></td>
+                        <td>
+                            <?php if ($hasActionColumns && $lineId > 0): ?>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <a class="btn btn-outline-primary" href="<?= $runUrl ?>?action_line_id=<?= $lineId ?>&action_status=in_progress#mrp-action-plan">Start</a>
+                                    <a class="btn btn-outline-success" href="<?= $runUrl ?>?action_line_id=<?= $lineId ?>&action_status=converted#mrp-action-plan">Converted</a>
+                                    <a class="btn btn-outline-secondary" href="<?= $runUrl ?>?action_line_id=<?= $lineId ?>&action_status=ignored#mrp-action-plan">Ignore</a>
+                                </div>
+                            <?php else: ?>
+                                <span class="text-muted">-</span>
+                            <?php endif ?>
+                        </td>
                     </tr>
                 <?php endforeach ?>
                 </tbody>
