@@ -65,8 +65,12 @@ foreach (['sites' => 'siteOptions', 'departments' => 'departmentOptions', 'wareh
                     <select name="item_code" id="item_code" class="form-select select2" required>
                         <option value="">-- Select Item --</option>
                         <?php foreach ($itemOptions as $item): ?>
-                            <?php $code = (string) ($item['item_code'] ?? $item['code'] ?? ''); $name = (string) ($item['item_name'] ?? $item['name'] ?? ''); ?>
-                            <option value="<?= esc($code, 'attr') ?>" data-name="<?= esc($name, 'attr') ?>"><?= esc(trim($code . ' - ' . $name)) ?></option>
+                            <?php
+                                $code = (string) ($item['item_code'] ?? $item['code'] ?? '');
+                                $name = (string) ($item['item_name'] ?? $item['name'] ?? '');
+                                $description = (string) ($item['description'] ?? $item['remarks'] ?? $name);
+                            ?>
+                            <option value="<?= esc($code, 'attr') ?>" data-name="<?= esc($name, 'attr') ?>" data-description="<?= esc($description, 'attr') ?>"><?= esc(trim($code . ' - ' . $name)) ?></option>
                         <?php endforeach ?>
                     </select>
                 </div>
@@ -75,8 +79,12 @@ foreach (['sites' => 'siteOptions', 'departments' => 'departmentOptions', 'wareh
                     <label class="form-label">Site</label>
                     <select name="site_code" class="form-select select2">
                         <option value="">-- Site --</option>
-                        <?php foreach ($siteOptions as $site): ?><?php $code = (string) ($site['code'] ?? $site['site_code'] ?? ''); ?>
-                            <option value="<?= esc($code, 'attr') ?>"><?= esc(trim($code . ' - ' . (string) ($site['name'] ?? $site['description'] ?? ''))) ?></option>
+                        <?php foreach ($siteOptions as $site): ?>
+                            <?php
+                                $code = (string) ($site['code'] ?? $site['site_code'] ?? '');
+                                $selected = ((int) ($site['id'] ?? 0) === (int) $siteId) ? 'selected' : '';
+                            ?>
+                            <option value="<?= esc($code, 'attr') ?>" <?= $selected ?>><?= esc(trim($code . ' - ' . (string) ($site['name'] ?? $site['description'] ?? ''))) ?></option>
                         <?php endforeach ?>
                     </select>
                 </div>
@@ -98,7 +106,7 @@ foreach (['sites' => 'siteOptions', 'departments' => 'departmentOptions', 'wareh
                         <?php endforeach ?>
                     </select>
                 </div>
-                <div class="col-md-8"><label class="form-label">Description</label><input type="text" name="description" class="form-control" placeholder="Cost KARET Finish Goods NOVA"></div>
+                <div class="col-md-8"><label class="form-label">Description</label><input type="text" name="description" id="description" class="form-control" placeholder="Cost KARET Finish Goods NOVA"></div>
                 <div class="col-md-2"><label class="form-label">This Item Cost</label><input type="number" step="0.000001" name="this_item_cost" class="form-control" value="0"></div>
                 <div class="col-md-2 d-flex align-items-end"><button type="submit" class="btn btn-primary w-100">Save</button></div>
             </form>
@@ -143,14 +151,25 @@ foreach (['sites' => 'siteOptions', 'departments' => 'departmentOptions', 'wareh
 document.addEventListener('DOMContentLoaded', function () {
     const itemSelect = document.getElementById('item_code');
     const itemName = document.getElementById('item_name');
-    if (itemSelect && itemName) {
-        itemSelect.addEventListener('change', function () {
-            const selected = itemSelect.options[itemSelect.selectedIndex];
-            itemName.value = selected ? (selected.getAttribute('data-name') || '') : '';
-        });
+    const description = document.getElementById('description');
+
+    const fillItemFields = function () {
+        if (!itemSelect) return;
+        const selected = itemSelect.options[itemSelect.selectedIndex];
+        const code = selected ? (selected.value || '') : '';
+        const name = selected ? (selected.getAttribute('data-name') || '') : '';
+        const desc = selected ? (selected.getAttribute('data-description') || '') : '';
+
+        if (itemName) itemName.value = name;
+        if (description) description.value = code ? ('Cost ' + (desc || name || code)) : '';
+    };
+
+    if (itemSelect) {
+        itemSelect.addEventListener('change', fillItemFields);
     }
     if (window.jQuery && jQuery.fn.select2) {
         jQuery('.select2').select2({ width: '100%' });
+        jQuery('#item_code').on('change.select2 change', fillItemFields);
     }
 });
 </script>
