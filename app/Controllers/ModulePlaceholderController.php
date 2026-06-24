@@ -32,6 +32,16 @@ class ModulePlaceholderController extends BaseController
         ]);
     }
 
+    public function mpsPage(): string
+    {
+        return $this->mps();
+    }
+
+    public function plannedReleasedPage(): string
+    {
+        return $this->plannedReleased();
+    }
+
     private function plannedReleased(): string
     {
         $db = Database::connect();
