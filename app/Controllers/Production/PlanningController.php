@@ -3,6 +3,7 @@
 namespace App\Controllers\Production;
 
 use App\Controllers\BaseController;
+use App\Services\Production\MrpPlannedOrderConverter;
 use App\Services\Production\MrpService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
@@ -27,9 +28,7 @@ class PlanningController extends BaseController
     {
         $tenant = new TenantContext(session());
         $db = Database::connect();
-        $builder = $db->table('production_forecasts')
-            ->where('company_id', $this->companyId($tenant));
-
+        $builder = $db->table('production_forecasts')->where('company_id', $this->companyId($tenant));
         if ($tenant->activeSiteId() !== null) {
             $builder->where('site_id', $tenant->activeSiteId());
         }
@@ -82,7 +81,6 @@ class PlanningController extends BaseController
         $item = $this->itemByCode($itemCode, $companyId, (int) $site['id']);
         $now = date('Y-m-d H:i:s');
         $db = Database::connect();
-
         $db->table('production_forecasts')->insert([
             'company_id' => $companyId,
             'site_id' => (int) $site['id'],
@@ -127,10 +125,7 @@ class PlanningController extends BaseController
 
     public function runMrp()
     {
-        if (! $this->validate([
-            'from_date' => 'required|valid_date[Y-m-d]',
-            'to_date' => 'required|valid_date[Y-m-d]',
-        ])) {
+        if (! $this->validate(['from_date' => 'required|valid_date[Y-m-d]', 'to_date' => 'required|valid_date[Y-m-d]'])) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
 
@@ -180,20 +175,14 @@ class PlanningController extends BaseController
         $actionFilter = trim((string) ($this->request->getGet('action') ?? ''));
         $statusFilter = trim((string) ($this->request->getGet('status') ?? ''));
 
-        $linesBuilder = $db->table('production_mrp_lines')
-            ->where('mrp_run_id', $id);
+        $linesBuilder = $db->table('production_mrp_lines')->where('mrp_run_id', $id);
         if ($actionFilter !== '') {
             $linesBuilder->where('suggested_action', $actionFilter);
         }
         if ($statusFilter !== '' && $db->fieldExists('action_status', 'production_mrp_lines')) {
             $linesBuilder->where('action_status', $statusFilter);
         }
-
-        $lines = $linesBuilder
-            ->orderBy('line_type', 'ASC')
-            ->orderBy('net_requirement', 'DESC')
-            ->get(1000)
-            ->getResultArray();
+        $lines = $linesBuilder->orderBy('line_type', 'ASC')->orderBy('net_requirement', 'DESC')->get(1000)->getResultArray();
 
         $plannedOrders = [];
         $hasPlannedOrderTable = $db->tableExists('production_mrp_planned_orders');
@@ -239,18 +228,12 @@ class PlanningController extends BaseController
         $now = date('Y-m-d H:i:s');
         foreach ($lines as $line) {
             $lineId = (int) ($line['id'] ?? 0);
-            if ($lineId < 1) {
+            if ($lineId < 1 || $db->table('production_mrp_planned_orders')->where('mrp_line_id', $lineId)->countAllResults() > 0) {
                 continue;
             }
-            $exists = $db->table('production_mrp_planned_orders')->where('mrp_line_id', $lineId)->countAllResults();
-            if ($exists > 0) {
-                continue;
-            }
-
             $suggestedAction = (string) ($line['suggested_action'] ?? '');
             $planType = self::PLANNED_ACTION_TYPES[$suggestedAction] ?? 'planning_task';
             $planNo = 'MPO-' . date('YmdHis') . '-' . $lineId;
-
             $db->table('production_mrp_planned_orders')->insert([
                 'company_id' => (int) ($line['company_id'] ?? $run['company_id'] ?? 0),
                 'site_id' => $line['site_id'] ?? $run['site_id'] ?? null,
@@ -266,25 +249,19 @@ class PlanningController extends BaseController
                 'status' => 'planned',
                 'source_parent_item_code' => (string) ($line['parent_item_code'] ?? ''),
                 'target_doc_type' => $planType,
-                'target_doc_no' => null,
                 'notes' => 'Generated from MRP run ' . (string) ($run['run_no'] ?? $runId),
                 'created_by' => auth()->id(),
                 'updated_by' => auth()->id(),
                 'created_at' => $now,
                 'updated_at' => $now,
             ]);
-
-            $db->table('production_mrp_lines')
-                ->where('id', $lineId)
-                ->where('mrp_run_id', $runId)
-                ->update([
-                    'action_status' => 'in_progress',
-                    'planned_doc_type' => $planType,
-                    'planned_doc_no' => $planNo,
-                    'action_updated_by' => auth()->id(),
-                    'action_updated_at' => $now,
-                ]);
-
+            $db->table('production_mrp_lines')->where('id', $lineId)->where('mrp_run_id', $runId)->update([
+                'action_status' => 'in_progress',
+                'planned_doc_type' => $planType,
+                'planned_doc_no' => $planNo,
+                'action_updated_by' => auth()->id(),
+                'action_updated_at' => $now,
+            ]);
             $created++;
         }
 
@@ -299,39 +276,36 @@ class PlanningController extends BaseController
         if (! $db->tableExists('production_mrp_planned_orders')) {
             return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('error', 'Planned order table is not installed yet.');
         }
-
-        $plannedOrder = $db->table('production_mrp_planned_orders')
-            ->where('id', $plannedOrderId)
-            ->where('mrp_run_id', $runId)
-            ->get(1)
-            ->getRowArray();
+        $plannedOrder = $db->table('production_mrp_planned_orders')->where('id', $plannedOrderId)->where('mrp_run_id', $runId)->get(1)->getRowArray();
         if ($plannedOrder === null) {
             return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('error', 'Planned order not found.');
         }
 
-        $db->table('production_mrp_planned_orders')
-            ->where('id', $plannedOrderId)
-            ->where('mrp_run_id', $runId)
-            ->update([
-                'status' => $status,
-                'updated_by' => auth()->id(),
-                'updated_at' => date('Y-m-d H:i:s'),
-            ]);
+        if ($status === 'converted' && ($plannedOrder['plan_type'] ?? '') === 'planned_work_order') {
+            try {
+                $woId = (new MrpPlannedOrderConverter())->convertToWorkOrder($plannedOrderId, auth()->id());
+                return redirect()->to('/production/work-orders/' . $woId)->with('message', 'Planned work order converted to draft Work Order.');
+            } catch (RuntimeException $e) {
+                return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('error', $e->getMessage());
+            }
+        }
 
+        $db->table('production_mrp_planned_orders')->where('id', $plannedOrderId)->where('mrp_run_id', $runId)->update([
+            'status' => $status,
+            'updated_by' => auth()->id(),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
         if ((int) ($plannedOrder['mrp_line_id'] ?? 0) > 0 && $db->fieldExists('action_status', 'production_mrp_lines')) {
             $lineStatus = match ($status) {
                 'converted' => 'converted',
                 'cancelled' => 'ignored',
                 default => 'in_progress',
             };
-            $db->table('production_mrp_lines')
-                ->where('id', (int) $plannedOrder['mrp_line_id'])
-                ->where('mrp_run_id', $runId)
-                ->update([
-                    'action_status' => $lineStatus,
-                    'action_updated_by' => auth()->id(),
-                    'action_updated_at' => date('Y-m-d H:i:s'),
-                ]);
+            $db->table('production_mrp_lines')->where('id', (int) $plannedOrder['mrp_line_id'])->where('mrp_run_id', $runId)->update([
+                'action_status' => $lineStatus,
+                'action_updated_by' => auth()->id(),
+                'action_updated_at' => date('Y-m-d H:i:s'),
+            ]);
         }
 
         return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('message', 'Planned order status updated.');
@@ -345,16 +319,11 @@ class PlanningController extends BaseController
         if (! $db->fieldExists('action_status', 'production_mrp_lines')) {
             return redirect()->to('/production/mrp/runs/' . $runId . '#mrp-action-plan')->with('error', 'Run database/hosting/2026-06-24_add_mrp_action_plan_columns.sql first.');
         }
-
-        $db->table('production_mrp_lines')
-            ->where('id', $lineId)
-            ->where('mrp_run_id', $runId)
-            ->update([
-                'action_status' => $status,
-                'action_updated_by' => auth()->id(),
-                'action_updated_at' => date('Y-m-d H:i:s'),
-            ]);
-
+        $db->table('production_mrp_lines')->where('id', $lineId)->where('mrp_run_id', $runId)->update([
+            'action_status' => $status,
+            'action_updated_by' => auth()->id(),
+            'action_updated_at' => date('Y-m-d H:i:s'),
+        ]);
         return redirect()->to('/production/mrp/runs/' . $runId . '#mrp-action-plan')->with('message', 'MRP action status updated.');
     }
 
@@ -394,11 +363,7 @@ class PlanningController extends BaseController
 
     private function siteByCode(string $code, int $companyId): ?array
     {
-        return Database::connect()->table('sites')
-            ->where('company_id', $companyId)
-            ->where('code', $code)
-            ->get(1)
-            ->getRowArray() ?: null;
+        return Database::connect()->table('sites')->where('company_id', $companyId)->where('code', $code)->get(1)->getRowArray() ?: null;
     }
 
     private function itemByCode(string $code, int $companyId, int $siteId): ?array
