@@ -174,7 +174,6 @@ class PlanningController extends BaseController
 
         $actionFilter = trim((string) ($this->request->getGet('action') ?? ''));
         $statusFilter = trim((string) ($this->request->getGet('status') ?? ''));
-
         $linesBuilder = $db->table('production_mrp_lines')->where('mrp_run_id', $id);
         if ($actionFilter !== '') {
             $linesBuilder->where('suggested_action', $actionFilter);
@@ -187,11 +186,7 @@ class PlanningController extends BaseController
         $plannedOrders = [];
         $hasPlannedOrderTable = $db->tableExists('production_mrp_planned_orders');
         if ($hasPlannedOrderTable) {
-            $plannedOrders = $db->table('production_mrp_planned_orders')
-                ->where('mrp_run_id', $id)
-                ->orderBy('id', 'DESC')
-                ->get(500)
-                ->getResultArray();
+            $plannedOrders = $db->table('production_mrp_planned_orders')->where('mrp_run_id', $id)->orderBy('id', 'DESC')->get(500)->getResultArray();
         }
 
         return view('production/mrp/show', [
@@ -281,10 +276,17 @@ class PlanningController extends BaseController
             return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('error', 'Planned order not found.');
         }
 
-        if ($status === 'converted' && ($plannedOrder['plan_type'] ?? '') === 'planned_work_order') {
+        if ($status === 'converted') {
             try {
-                $woId = (new MrpPlannedOrderConverter())->convertToWorkOrder($plannedOrderId, auth()->id());
-                return redirect()->to('/production/work-orders/' . $woId)->with('message', 'Planned work order converted to draft Work Order.');
+                $converter = new MrpPlannedOrderConverter();
+                if (($plannedOrder['plan_type'] ?? '') === 'planned_work_order') {
+                    $woId = $converter->convertToWorkOrder($plannedOrderId, auth()->id());
+                    return redirect()->to('/production/work-orders/' . $woId)->with('message', 'Planned work order converted to draft Work Order.');
+                }
+                if (in_array(($plannedOrder['plan_type'] ?? ''), ['planned_purchase_requisition', 'planned_purchase_order'], true)) {
+                    $poId = $converter->convertToPurchaseOrder($plannedOrderId, auth()->id());
+                    return redirect()->to('/purchase/orders/' . $poId)->with('message', 'Planned purchase converted to draft Purchase Order.');
+                }
             } catch (RuntimeException $e) {
                 return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('error', $e->getMessage());
             }
@@ -307,7 +309,6 @@ class PlanningController extends BaseController
                 'action_updated_at' => date('Y-m-d H:i:s'),
             ]);
         }
-
         return redirect()->to('/production/mrp/runs/' . $runId . '#planned-orders')->with('message', 'Planned order status updated.');
     }
 
