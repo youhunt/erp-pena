@@ -126,7 +126,7 @@ class MrpService
                 $stockAvailable = $this->availableStock($db, $companyId, $siteId, $row['component_item_code']);
                 $gross = round((float) $row['gross_requirement'], 6);
                 $net = max($gross - $stockAvailable, 0);
-                $action = $net > 0 ? 'plan_purchase_or_produce' : 'covered_by_stock';
+                $action = $net > 0 ? $this->suggestedAction($db, $companyId, $siteId, $row['component_item_code']) : 'covered_by_stock';
 
                 $db->table('production_mrp_lines')->insert([
                     'mrp_run_id' => $runId,
@@ -229,5 +229,46 @@ class MrpService
 
         $row = $builder->get()->getRowArray();
         return round((float) ($row['qty_available'] ?? 0), 6);
+    }
+
+    private function suggestedAction($db, int $companyId, ?int $siteId, string $itemCode): string
+    {
+        $item = $this->itemRow($db, $companyId, $siteId, $itemCode);
+        if ($item === null) {
+            return 'create_item_master';
+        }
+
+        $type = strtolower(trim((string) ($item['item_type'] ?? '')));
+        $group = strtoupper(trim((string) ($item['item_group'] ?? '')));
+
+        if (in_array($type, ['finished_good', 'wip', 'semi_finished', 'assembly'], true) || in_array($group, ['FG', 'WIP', 'SEMI'], true)) {
+            return 'create_work_order';
+        }
+
+        if (in_array($type, ['service'], true) || in_array($group, ['SRV', 'SERVICE'], true)) {
+            return 'review_service_requirement';
+        }
+
+        return 'create_purchase_requisition';
+    }
+
+    private function itemRow($db, int $companyId, ?int $siteId, string $itemCode): ?array
+    {
+        if (! $db->tableExists('items')) {
+            return null;
+        }
+
+        $builder = $db->table('items')
+            ->where('company_id', $companyId)
+            ->where('item_code', $itemCode);
+
+        if ($siteId !== null && $siteId > 0) {
+            $builder->groupStart()->where('site_id', $siteId)->orWhere('site_id', null)->orWhere('site_id', 0)->groupEnd();
+        }
+        if ($db->fieldExists('deleted_at', 'items')) {
+            $builder->where('deleted_at', null);
+        }
+
+        return $builder->orderBy('site_id', 'DESC')->get(1)->getRowArray() ?: null;
     }
 }
