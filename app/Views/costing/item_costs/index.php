@@ -6,11 +6,19 @@ $db = \Config\Database::connect();
 $tenant = new \App\Services\TenantContext(session());
 $companyId = $tenant->activeCompanyId();
 $siteId = $tenant->activeSiteId();
+$activeSiteCode = '';
 
 $itemOptions = [];
 $siteOptions = [];
 $departmentOptions = [];
 $warehouseOptions = [];
+
+if ($siteId !== null && $db->tableExists('sites')) {
+    $activeSite = $db->table('sites')->where('id', $siteId)->get(1)->getRowArray();
+    if ($activeSite !== null) {
+        $activeSiteCode = (string) ($activeSite['code'] ?? $activeSite['site_code'] ?? '');
+    }
+}
 
 if ($db->tableExists('items')) {
     $builder = $db->table('items');
@@ -62,7 +70,7 @@ foreach (['sites' => 'siteOptions', 'departments' => 'departmentOptions', 'wareh
                 <input type="hidden" name="action" value="save">
                 <div class="col-md-3">
                     <label class="form-label">Item Code</label>
-                    <select name="item_code" id="item_code" class="form-select select2" required>
+                    <select name="item_code" id="item_code" class="form-select select2" required onchange="window.fillItemCostFields && window.fillItemCostFields()">
                         <option value="">-- Select Item --</option>
                         <?php foreach ($itemOptions as $item): ?>
                             <?php
@@ -77,12 +85,12 @@ foreach (['sites' => 'siteOptions', 'departments' => 'departmentOptions', 'wareh
                 <div class="col-md-3"><label class="form-label">Item Name</label><input type="text" name="item_name" id="item_name" class="form-control" readonly></div>
                 <div class="col-md-2">
                     <label class="form-label">Site</label>
-                    <select name="site_code" class="form-select select2">
+                    <select name="site_code" id="site_code" class="form-select select2">
                         <option value="">-- Site --</option>
                         <?php foreach ($siteOptions as $site): ?>
                             <?php
                                 $code = (string) ($site['code'] ?? $site['site_code'] ?? '');
-                                $selected = ((int) ($site['id'] ?? 0) === (int) $siteId) ? 'selected' : '';
+                                $selected = ((int) ($site['id'] ?? 0) === (int) $siteId || ($activeSiteCode !== '' && $code === $activeSiteCode)) ? 'selected' : '';
                             ?>
                             <option value="<?= esc($code, 'attr') ?>" <?= $selected ?>><?= esc(trim($code . ' - ' . (string) ($site['name'] ?? $site['description'] ?? ''))) ?></option>
                         <?php endforeach ?>
@@ -148,29 +156,33 @@ foreach (['sites' => 'siteOptions', 'departments' => 'departmentOptions', 'wareh
     </div>
 </div>
 <script>
+window.fillItemCostFields = function () {
+    var itemSelect = document.getElementById('item_code');
+    var itemName = document.getElementById('item_name');
+    var description = document.getElementById('description');
+    if (!itemSelect) return;
+
+    var selected = itemSelect.options[itemSelect.selectedIndex];
+    var code = selected ? (selected.value || '') : '';
+    var name = selected ? (selected.getAttribute('data-name') || '') : '';
+    var desc = selected ? (selected.getAttribute('data-description') || '') : '';
+
+    if (itemName) itemName.value = name;
+    if (description) description.value = code ? ('Cost ' + (desc || name || code)) : '';
+};
+
 document.addEventListener('DOMContentLoaded', function () {
-    const itemSelect = document.getElementById('item_code');
-    const itemName = document.getElementById('item_name');
-    const description = document.getElementById('description');
-
-    const fillItemFields = function () {
-        if (!itemSelect) return;
-        const selected = itemSelect.options[itemSelect.selectedIndex];
-        const code = selected ? (selected.value || '') : '';
-        const name = selected ? (selected.getAttribute('data-name') || '') : '';
-        const desc = selected ? (selected.getAttribute('data-description') || '') : '';
-
-        if (itemName) itemName.value = name;
-        if (description) description.value = code ? ('Cost ' + (desc || name || code)) : '';
-    };
-
+    var itemSelect = document.getElementById('item_code');
     if (itemSelect) {
-        itemSelect.addEventListener('change', fillItemFields);
+        itemSelect.addEventListener('change', window.fillItemCostFields);
+        itemSelect.addEventListener('input', window.fillItemCostFields);
     }
     if (window.jQuery && jQuery.fn.select2) {
         jQuery('.select2').select2({ width: '100%' });
-        jQuery('#item_code').on('change.select2 change', fillItemFields);
+        jQuery('#item_code').on('select2:select change', window.fillItemCostFields);
+        jQuery('#site_code').trigger('change.select2');
     }
+    window.setTimeout(window.fillItemCostFields, 100);
 });
 </script>
 <?= $this->endSection() ?>
