@@ -317,10 +317,13 @@ class CashBankController extends BaseController
 
     private function scope($model, TenantContext $tenant): void
     {
-        if ($tenant->activeCompanyId() !== null) {
+        $db = \Config\Database::connect();
+        $table = method_exists($model, 'getTable') ? $model->getTable() : '';
+
+        if ($tenant->activeCompanyId() !== null && ($table === '' || $db->fieldExists('company_id', $table))) {
             $model->where('company_id', $tenant->activeCompanyId());
         }
-        if ($tenant->activeSiteId() !== null) {
+        if ($tenant->activeSiteId() !== null && $table !== '' && $db->fieldExists('site_id', $table)) {
             $model->where('site_id', $tenant->activeSiteId());
         }
     }
