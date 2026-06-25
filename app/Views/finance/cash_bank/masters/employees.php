@@ -4,18 +4,13 @@
 <?php
 $edit = $editRow ?? null;
 $formMode = $edit !== null || (string) service('request')->getGet('mode') === 'form';
+$selectedSite = (string) ($edit['site_code'] ?? '');
+$selectedDept = (string) ($edit['department_code'] ?? '');
 ?>
 <div class="card"><div class="card-body">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h4 class="card-title mb-1">Employee ID</h4>
-            <p class="text-muted mb-0">Manage employee master data.</p>
-        </div>
-        <?php if ($formMode): ?>
-            <a href="<?= site_url('cash-bank/employees') ?>" class="btn btn-light">Back</a>
-        <?php else: ?>
-            <a href="<?= site_url('cash-bank/employees?mode=form') ?>" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New</a>
-        <?php endif ?>
+        <div><h4 class="card-title mb-1">Employee ID</h4><p class="text-muted mb-0">Manage employee master data.</p></div>
+        <?php if ($formMode): ?><a href="<?= site_url('cash-bank/employees') ?>" class="btn btn-light">Back</a><?php else: ?><a href="<?= site_url('cash-bank/employees?mode=form') ?>" class="btn btn-primary"><i class="bx bx-plus me-1"></i> New</a><?php endif ?>
     </div>
 
     <?php if (session('message')): ?><div class="alert alert-success"><?= esc(session('message')) ?></div><?php endif ?>
@@ -23,12 +18,11 @@ $formMode = $edit !== null || (string) service('request')->getGet('mode') === 'f
 
     <?php if ($formMode): ?>
         <form method="get" action="<?= site_url('cash-bank/employees') ?>" class="row g-3">
-            <input type="hidden" name="action" value="save">
-            <input type="hidden" name="id" value="<?= esc($edit['id'] ?? '') ?>">
+            <input type="hidden" name="action" value="save"><input type="hidden" name="id" value="<?= esc($edit['id'] ?? '') ?>">
             <div class="col-12"><div class="alert alert-info"><strong><?= $edit ? 'Edit Employee' : 'Create Employee' ?></strong></div></div>
             <div class="col-md-3"><label class="form-label">Employee ID</label><input type="text" name="employee_code" maxlength="12" class="form-control" required value="<?= esc($edit['employee_code'] ?? '') ?>"></div>
-            <div class="col-md-3"><label class="form-label">Site Code</label><input type="text" name="site_code" maxlength="12" class="form-control" value="<?= esc($edit['site_code'] ?? '') ?>"></div>
-            <div class="col-md-3"><label class="form-label">Dept Code</label><input type="text" name="department_code" maxlength="12" class="form-control" value="<?= esc($edit['department_code'] ?? '') ?>"></div>
+            <div class="col-md-3"><label class="form-label">Site Code</label><select name="site_code" class="form-select select2"><option value="">Select Site</option><?php foreach ($sites as $site): ?><?php $code = (string)($site['code'] ?? $site['site_code'] ?? ''); ?><option value="<?= esc($code, 'attr') ?>" <?= $selectedSite === $code ? 'selected' : '' ?>><?= esc($code . ' - ' . ($site['name'] ?? '')) ?></option><?php endforeach ?></select></div>
+            <div class="col-md-3"><label class="form-label">Dept Code</label><select name="department_code" class="form-select select2"><option value="">Select Department</option><?php foreach ($departments as $dept): ?><?php $code = (string)($dept['code'] ?? $dept['department_code'] ?? ''); ?><option value="<?= esc($code, 'attr') ?>" <?= $selectedDept === $code ? 'selected' : '' ?>><?= esc($code . ' - ' . ($dept['name'] ?? '')) ?></option><?php endforeach ?></select></div>
             <div class="col-md-3"><label class="form-label">Employee Name</label><input type="text" name="name" maxlength="500" class="form-control" required value="<?= esc($edit['name'] ?? '') ?>"></div>
             <div class="col-md-12"><label class="form-label">Description</label><input type="text" name="description" maxlength="500" class="form-control" value="<?= esc($edit['description'] ?? '') ?>"></div>
             <div class="col-12 text-end"><a href="<?= site_url('cash-bank/employees') ?>" class="btn btn-light">Cancel</a> <button class="btn btn-primary" type="submit">Save</button></div>
@@ -40,4 +34,5 @@ $formMode = $edit !== null || (string) service('request')->getGet('mode') === 'f
         </tbody></table></div>
     <?php endif ?>
 </div></div>
+<script>document.addEventListener('DOMContentLoaded',function(){if(window.jQuery&&jQuery.fn.select2){jQuery('.select2').select2({width:'100%'});}});</script>
 <?= $this->endSection() ?>
