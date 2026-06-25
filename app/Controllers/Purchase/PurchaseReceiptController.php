@@ -261,13 +261,13 @@ class PurchaseReceiptController extends BaseController
             $payload = [
                 'item_code' => $resolved['item_code'],
             ];
-            if (trim((string) ($line['item_name'] ?? '')) === '' && ($resolved['item_name'] ?? '') !== '') {
+            if (($resolved['item_name'] ?? '') !== '') {
                 $payload['item_name'] = $resolved['item_name'];
             }
-            if (trim((string) ($line['uom_code'] ?? '')) === '' && ($resolved['uom_code'] ?? '') !== '') {
+            if (($resolved['uom_code'] ?? '') !== '') {
                 $payload['uom_code'] = $resolved['uom_code'];
             }
-            if (empty($line['item_id']) && ! empty($resolved['item_id'])) {
+            if (! empty($resolved['item_id'])) {
                 $payload['item_id'] = $resolved['item_id'];
             }
             $lineModel->update($lineId, $payload);
@@ -278,6 +278,7 @@ class PurchaseReceiptController extends BaseController
     {
         $itemCode = trim((string) ($line['item_code'] ?? $line['item'] ?? $line['item_no'] ?? $line['itemcode'] ?? ''));
         $itemName = trim((string) ($line['item_name'] ?? $line['description'] ?? ''));
+        $description = trim((string) ($line['description'] ?? ''));
         $uomCode = trim((string) ($line['uom_code'] ?? ''));
         $itemId = (int) ($line['item_id'] ?? 0);
 
@@ -290,19 +291,16 @@ class PurchaseReceiptController extends BaseController
             ];
         }
 
-        if ($itemId > 0) {
-            $db = Database::connect();
-            if ($db->tableExists('items')) {
-                $item = $db->table('items')->where('id', $itemId)->get(1)->getRowArray();
-                if ($item !== null) {
-                    return [
-                        'item_id' => $itemId,
-                        'item_code' => trim((string) ($item['item_code'] ?? $item['code'] ?? $item['item'] ?? $item['item_no'] ?? '')),
-                        'item_name' => trim((string) ($item['item_name'] ?? $item['name'] ?? $itemName)),
-                        'uom_code' => trim((string) ($uomCode ?: ($item['stockuom'] ?? $item['uom_code'] ?? 'PCS'))),
-                    ];
-                }
-            }
+        $item = $itemId > 0 ? $this->findItemById($itemId) : null;
+        if ($item === null && $itemName !== '') {
+            $item = $this->findItemByImportedName($itemName);
+        }
+        if ($item === null && $description !== '' && $description !== $itemName) {
+            $item = $this->findItemByImportedName($description);
+        }
+
+        if ($item !== null) {
+            return $this->itemPayloadFromMaster($item, $uomCode, $itemName);
         }
 
         return [
@@ -310,6 +308,100 @@ class PurchaseReceiptController extends BaseController
             'item_code' => '',
             'item_name' => $itemName,
             'uom_code' => $uomCode,
+        ];
+    }
+
+    private function findItemById(int $itemId): ?array
+    {
+        if ($itemId < 1) {
+            return null;
+        }
+        $db = Database::connect();
+        if (! $db->tableExists('items')) {
+            return null;
+        }
+        return $db->table('items')->where('id', $itemId)->get(1)->getRowArray() ?: null;
+    }
+
+    private function findItemByImportedName(string $name): ?array
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return null;
+        }
+
+        $db = Database::connect();
+        if (! $db->tableExists('items')) {
+            return null;
+        }
+
+        $tenant = new TenantContext(session());
+        $builder = $db->table('items');
+        if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', 'items')) {
+            $builder->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', 'items')) {
+            $builder->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->orWhere('site_id', 0)->groupEnd();
+        }
+        if ($db->fieldExists('deleted_at', 'items')) {
+            $builder->where('deleted_at', null);
+        }
+
+        $builder->groupStart();
+        if ($db->fieldExists('item_name', 'items')) {
+            $builder->orWhere('item_name', $name);
+        }
+        if ($db->fieldExists('name', 'items')) {
+            $builder->orWhere('name', $name);
+        }
+        if ($db->fieldExists('description', 'items')) {
+            $builder->orWhere('description', $name);
+        }
+        if ($db->fieldExists('item_code', 'items')) {
+            $builder->orWhere('item_code', $name);
+        }
+        if ($db->fieldExists('code', 'items')) {
+            $builder->orWhere('code', $name);
+        }
+        $builder->groupEnd();
+
+        $exact = $builder->orderBy('id', 'ASC')->get(1)->getRowArray();
+        if ($exact !== null) {
+            return $exact;
+        }
+
+        $fallback = $db->table('items');
+        if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', 'items')) {
+            $fallback->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', 'items')) {
+            $fallback->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->orWhere('site_id', 0)->groupEnd();
+        }
+        if ($db->fieldExists('deleted_at', 'items')) {
+            $fallback->where('deleted_at', null);
+        }
+        $fallback->groupStart();
+        if ($db->fieldExists('item_name', 'items')) {
+            $fallback->orLike('item_name', $name);
+        }
+        if ($db->fieldExists('name', 'items')) {
+            $fallback->orLike('name', $name);
+        }
+        if ($db->fieldExists('description', 'items')) {
+            $fallback->orLike('description', $name);
+        }
+        $fallback->groupEnd();
+
+        return $fallback->orderBy('id', 'ASC')->get(1)->getRowArray() ?: null;
+    }
+
+    private function itemPayloadFromMaster(array $item, string $existingUom = '', string $fallbackName = ''): array
+    {
+        return [
+            'item_id' => ! empty($item['id']) ? (int) $item['id'] : null,
+            'item_code' => trim((string) ($item['item_code'] ?? $item['code'] ?? $item['item'] ?? $item['item_no'] ?? '')),
+            'item_name' => trim((string) ($item['item_name'] ?? $item['name'] ?? $fallbackName)),
+            'uom_code' => trim((string) ($existingUom ?: ($item['stockuom'] ?? $item['uom_code'] ?? 'PCS'))),
         ];
     }
 
