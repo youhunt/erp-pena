@@ -55,6 +55,8 @@ class CashBankController extends BaseController
             'direction' => 'in',
             'currency_code' => 'IDR',
             'cash_bank_code' => '',
+            'rate_type' => 'BI',
+            'exchange_rate' => '',
             'amount' => '0.00',
             'reference_no' => '',
             'description' => '',
@@ -88,6 +90,8 @@ class CashBankController extends BaseController
             'cash_bank_code' => 'required|max_length[60]',
             'amount' => 'required|numeric|greater_than[0]',
             'counter_account_no' => 'required|max_length[60]',
+            'rate_type' => 'permit_empty|max_length[12]',
+            'exchange_rate' => 'permit_empty|numeric',
         ])) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
@@ -104,6 +108,8 @@ class CashBankController extends BaseController
                 'entry_type' => $entryType,
                 'cash_bank_code' => trim((string) $this->request->getPost('cash_bank_code')),
                 'currency_code' => trim((string) ($this->request->getPost('currency_code') ?: 'IDR')),
+                'rate_type' => trim((string) ($this->request->getPost('rate_type') ?: 'BI')),
+                'exchange_rate' => (float) ($this->request->getPost('exchange_rate') ?: 0),
                 'amount' => (float) $this->request->getPost('amount'),
                 'counter_account_no' => trim((string) $this->request->getPost('counter_account_no')),
                 'reference_no' => trim((string) $this->request->getPost('reference_no')),
@@ -230,7 +236,7 @@ class CashBankController extends BaseController
         return view('finance/cash_bank/statements/show', [
             'title' => 'Bank Statement Import Detail',
             'import' => $import,
-            'lines' => (new BankStatementLineModel())->where('bank_statement_import_id', $id)->orderBy('line_no', 'ASC')->findAll(500),
+            'lines' => (new BankStatementLineModel())->where('bank_statement_import_id', $id)->orderBy('line_no', 'ASC')->findAll(),
         ]);
     }
 
@@ -243,48 +249,19 @@ class CashBankController extends BaseController
         }
 
         try {
-            $result = (new BankStatementImportService())->autoMatch($id, $companyId, $tenant->activeSiteId(), auth()->id());
+            (new BankStatementImportService())->matchImport($id, $companyId, $tenant->activeSiteId(), auth()->id());
         } catch (RuntimeException $exception) {
             return redirect()->back()->with('error', $exception->getMessage());
         }
 
-        return redirect()->to('/cash-bank/statements/' . $id)
-            ->with('message', "Auto match finished. {$result['matched']} matched, {$result['skipped']} skipped.");
+        return redirect()->to('/cash-bank/statements/' . $id)->with('message', 'Bank statement matching completed.');
     }
 
     public function newReconciliation(): string
     {
-        $tenant = new TenantContext(session());
-        $selectedCode = trim((string) ($this->request->getGet('cash_bank_code') ?: ''));
-        $accounts = $this->cashBankAccounts('bank');
-        $defaults = [
-            'bank_statement_import_id' => null,
-            'reconcile_no' => 'BR-' . date('Ymd-His'),
-            'statement_date' => date('Y-m-d'),
-            'statement_balance' => '0.00',
-            'statement_ref' => '',
-            'notes' => '',
-        ];
-        $selectedEntryIds = [];
-
-        $statementContext = $this->statementReconciliationContext($tenant);
-        if ($statementContext !== null) {
-            $selectedCode = (string) $statementContext['cash_bank_code'];
-            $defaults = array_merge($defaults, $statementContext['defaults']);
-            $selectedEntryIds = $statementContext['entry_ids'];
-        }
-
-        if ($selectedCode === '' && $accounts !== []) {
-            $selectedCode = (string) $accounts[0]['cash_bank_code'];
-        }
-
         return view('finance/cash_bank/reconciliations/form', [
-            'title' => 'Create Bank Reconcile',
-            'accounts' => $accounts,
-            'selectedCode' => $selectedCode,
-            'defaults' => $defaults,
-            'selectedEntryIds' => $selectedEntryIds,
-            'entries' => $selectedCode !== '' ? $this->unreconciledBankEntries($tenant, $selectedCode) : [],
+            'title' => 'Create Bank Reconciliation',
+            'accounts' => $this->cashBankAccounts('bank'),
         ]);
     }
 
@@ -297,31 +274,28 @@ class CashBankController extends BaseController
         }
 
         if (! $this->validate([
-            'reconcile_no' => 'required|max_length[60]',
-            'statement_date' => 'required|valid_date[Y-m-d]',
             'cash_bank_code' => 'required|max_length[60]',
-            'statement_balance' => 'required|numeric',
+            'statement_date' => 'required|valid_date[Y-m-d]',
         ])) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
 
         try {
-            $reconciliationId = (new BankReconciliationService())->post([
+            $reconciliationId = (new BankReconciliationService())->create([
                 'company_id' => $companyId,
                 'site_id' => $tenant->activeSiteId(),
-                'reconcile_no' => trim((string) $this->request->getPost('reconcile_no')),
+                'cash_bank_code' => trim((string) $this->request->getPost('cash_bank_code')),
                 'statement_date' => (string) $this->request->getPost('statement_date'),
                 'statement_ref' => trim((string) $this->request->getPost('statement_ref')),
-                'cash_bank_code' => trim((string) $this->request->getPost('cash_bank_code')),
-                'bank_statement_import_id' => (int) $this->request->getPost('bank_statement_import_id'),
-                'statement_balance' => (float) $this->request->getPost('statement_balance'),
+                'opening_balance' => (float) $this->request->getPost('opening_balance'),
+                'closing_balance' => (float) $this->request->getPost('closing_balance'),
                 'notes' => trim((string) $this->request->getPost('notes')),
-            ], (array) $this->request->getPost('entry_ids'), auth()->id());
+            ], auth()->id());
         } catch (RuntimeException $exception) {
             return redirect()->back()->withInput()->with('error', $exception->getMessage());
         }
 
-        return redirect()->to('/cash-bank/reconciliations/' . $reconciliationId)->with('message', 'Bank reconciliation posted.');
+        return redirect()->to('/cash-bank/reconciliations/' . $reconciliationId)->with('message', 'Bank reconciliation draft created.');
     }
 
     public function showReconciliation(int $id): string
@@ -335,114 +309,10 @@ class CashBankController extends BaseController
         }
 
         return view('finance/cash_bank/reconciliations/show', [
-            'title' => 'Bank Reconcile Detail',
+            'title' => 'Bank Reconciliation Detail',
             'reconciliation' => $reconciliation,
-            'entries' => (new CashBankEntryModel())->where('bank_reconciliation_id', $id)->orderBy('entry_date', 'ASC')->findAll(),
+            'lines' => (new BankStatementLineModel())->where('bank_reconciliation_id', $id)->orderBy('line_no', 'ASC')->findAll(),
         ]);
-    }
-
-    private function cashBankAccounts(string $type): array
-    {
-        $tenant = new TenantContext(session());
-        $model = new CashBankAccountModel();
-        $this->scope($model, $tenant);
-
-        return $model->where('account_type', $type)->where('is_active', 1)->orderBy('cash_bank_code', 'ASC')->findAll(100);
-    }
-
-    private function chartAccounts(): array
-    {
-        $tenant = new TenantContext(session());
-        $model = new ChartAccountModel();
-        if ($tenant->activeCompanyId() !== null) {
-            $model->where('company_id', $tenant->activeCompanyId());
-        }
-
-        return $model->where('is_active', 1)->where('is_postable', 1)->orderBy('account_no', 'ASC')->findAll(300);
-    }
-
-    private function unreconciledBankEntries(TenantContext $tenant, string $cashBankCode): array
-    {
-        $model = new CashBankEntryModel();
-        $this->scope($model, $tenant);
-
-        return $model
-            ->where('cash_bank_code', $cashBankCode)
-            ->whereIn('entry_type', ['bank_in', 'bank_out'])
-            ->where('bank_reconciliation_id', null)
-            ->orderBy('entry_date', 'ASC')
-            ->orderBy('id', 'ASC')
-            ->findAll(200);
-    }
-
-    private function entryDefaultsFromStatementLine(TenantContext $tenant): array
-    {
-        $statementLineId = (int) ($this->request->getGet('statement_line_id') ?? 0);
-        if ($statementLineId < 1 || $tenant->activeCompanyId() === null) {
-            return [];
-        }
-
-        $lineModel = new BankStatementLineModel();
-        $this->scope($lineModel, $tenant);
-        $line = $lineModel
-            ->where('id', $statementLineId)
-            ->where('match_status !=', 'matched')
-            ->first();
-        if ($line === null) {
-            return [];
-        }
-
-        $signed = (float) ($line['signed_amount'] ?? 0);
-        return [
-            'statement_line_id' => (int) $line['id'],
-            'entry_no' => 'BANK-' . date('Ymd-His'),
-            'entry_date' => (string) ($line['statement_date'] ?? date('Y-m-d')),
-            'direction' => $signed >= 0 ? 'in' : 'out',
-            'currency_code' => (string) ($line['currency_code'] ?? 'IDR'),
-            'cash_bank_code' => (string) ($line['cash_bank_code'] ?? ''),
-            'amount' => number_format(abs($signed), 2, '.', ''),
-            'reference_no' => (string) ($line['reference_no'] ?? ''),
-            'description' => (string) ($line['description'] ?? ''),
-        ];
-    }
-
-    private function statementReconciliationContext(TenantContext $tenant): ?array
-    {
-        $statementImportId = (int) ($this->request->getGet('statement_import_id') ?? 0);
-        if ($statementImportId < 1 || $tenant->activeCompanyId() === null) {
-            return null;
-        }
-
-        $model = new BankStatementImportModel();
-        $this->scope($model, $tenant);
-        $import = $model->find($statementImportId);
-        if ($import === null || ($import['status'] ?? '') === 'reconciled') {
-            return null;
-        }
-
-        $lines = (new BankStatementLineModel())
-            ->where('bank_statement_import_id', $statementImportId)
-            ->where('match_status', 'matched')
-            ->where('cash_bank_entry_id IS NOT NULL', null, false)
-            ->findAll(500);
-
-        $entryIds = array_values(array_unique(array_map(
-            static fn (array $line): int => (int) $line['cash_bank_entry_id'],
-            $lines
-        )));
-
-        return [
-            'cash_bank_code' => (string) $import['cash_bank_code'],
-            'entry_ids' => $entryIds,
-            'defaults' => [
-                'bank_statement_import_id' => (int) $import['id'],
-                'reconcile_no' => 'BR-' . date('Ymd-His'),
-                'statement_date' => (string) ($import['statement_date'] ?? date('Y-m-d')),
-                'statement_balance' => number_format((float) ($import['closing_balance'] ?? 0), 2, '.', ''),
-                'statement_ref' => (string) ($import['statement_ref'] ?? ''),
-                'notes' => 'From bank statement import #' . $import['id'] . ' - ' . ($import['source_filename'] ?? ''),
-            ],
-        ];
     }
 
     private function scope($model, TenantContext $tenant): void
@@ -451,56 +321,61 @@ class CashBankController extends BaseController
             $model->where('company_id', $tenant->activeCompanyId());
         }
         if ($tenant->activeSiteId() !== null) {
-            $model->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->groupEnd();
+            $model->where('site_id', $tenant->activeSiteId());
         }
     }
 
-    private function validateXlsxUpload($file): ?string
+    private function cashBankAccounts(string $type): array
     {
-        if ($file === null || ! $file->isValid()) {
-            return 'Please upload a valid Excel file.';
-        }
-
-        if ($file->getSize() < 1) {
-            return 'Uploaded Excel file is empty.';
-        }
-
-        if ($file->getSize() > 5 * 1024 * 1024) {
-            return 'Excel file is too large. Maximum allowed size is 5 MB.';
-        }
-
-        if (strtolower($file->getClientExtension()) !== 'xlsx') {
-            return 'Only .xlsx Excel files are supported for bank statement import.';
-        }
-
-        return null;
+        $tenant = new TenantContext(session());
+        $model = new CashBankAccountModel();
+        $this->scope($model, $tenant);
+        return $model->where('account_type', $type)->where('is_active', 1)->orderBy('cash_bank_code', 'ASC')->findAll();
     }
 
-    private function xlsxResponse(string $filename, array $rows, string $sheetTitle)
+    private function chartAccounts(): array
     {
-        if (! class_exists(\PhpOffice\PhpSpreadsheet\Spreadsheet::class)) {
-            throw new RuntimeException('PhpSpreadsheet is required to generate Excel files. Run composer install.');
+        $tenant = new TenantContext(session());
+        $model = new ChartAccountModel();
+        $this->scope($model, $tenant);
+        return $model->where('is_active', 1)->orderBy('account_no', 'ASC')->findAll(500);
+    }
+
+    private function entryDefaultsFromStatementLine(TenantContext $tenant): array
+    {
+        $lineId = (int) $this->request->getGet('statement_line_id');
+        if ($lineId < 1) {
+            return [];
+        }
+        $line = (new BankStatementLineModel())->find($lineId);
+        if ($line === null || (string) ($line['match_status'] ?? '') === 'matched') {
+            return [];
+        }
+        $import = (new BankStatementImportModel())->find((int) ($line['bank_statement_import_id'] ?? 0));
+        if ($import === null) {
+            return [];
+        }
+        if ($tenant->activeCompanyId() !== null && (int) ($import['company_id'] ?? 0) !== $tenant->activeCompanyId()) {
+            return [];
+        }
+        if ($tenant->activeSiteId() !== null && ! empty($import['site_id']) && (int) $import['site_id'] !== $tenant->activeSiteId()) {
+            return [];
         }
 
-        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle(substr($sheetTitle, 0, 31));
-        $sheet->fromArray($rows, null, 'A1');
-        $highestColumn = $sheet->getHighestColumn();
-        $sheet->getStyle('A1:' . $highestColumn . '1')->getFont()->setBold(true);
-        foreach (range('A', $highestColumn) as $column) {
-            $sheet->getColumnDimension($column)->setAutoSize(true);
-        }
+        $debit = (float) ($line['debit'] ?? 0);
+        $credit = (float) ($line['credit'] ?? 0);
+        $amount = $credit > 0 ? $credit : $debit;
 
-        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-        ob_start();
-        $writer->save('php://output');
-        $content = ob_get_clean() ?: '';
-        $spreadsheet->disconnectWorksheets();
-
-        return $this->response
-            ->setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-            ->setHeader('Content-Disposition', 'attachment; filename="' . $filename . '"')
-            ->setBody($content);
+        return [
+            'statement_line_id' => $lineId,
+            'entry_no' => 'BANK-' . date('Ymd-His') . '-' . $lineId,
+            'entry_date' => $line['value_date'] ?? $line['statement_date'] ?? date('Y-m-d'),
+            'direction' => $credit > 0 ? 'in' : 'out',
+            'currency_code' => $line['currency_code'] ?? $import['currency_code'] ?? 'IDR',
+            'cash_bank_code' => $import['cash_bank_code'] ?? '',
+            'amount' => number_format($amount, 2, '.', ''),
+            'reference_no' => $line['reference_no'] ?? '',
+            'description' => $line['description'] ?? '',
+        ];
     }
 }
