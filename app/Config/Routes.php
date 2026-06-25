@@ -212,7 +212,10 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->get('period-close/(:segment)', 'Finance\PeriodCloseController::index/$1');
 
     $routes->group('cash-bank', static function (RouteCollection $routes): void {
-        $routes->get('accounts', 'Finance\CashBankController::accounts');
+        $routes->get('accounts', 'Finance\CashBankMasterController::accounts');
+        $routes->get('currencies', 'Finance\CashBankMasterController::currencies');
+        $routes->get('employees', 'Finance\CashBankMasterController::employees');
+        $routes->get('rates', 'Finance\CashBankMasterController::rates');
         $routes->get('cash-entries', 'Finance\CashBankController::entries/cash');
         $routes->get('cash-entries/export', 'System\CashBankAuditExportController::entries/cash');
         $routes->get('cash-entries/new', 'Finance\CashBankController::newEntry/cash');
