@@ -63,6 +63,8 @@ class PurchaseReceiptController extends BaseController
             return view('errors/html/error_404', ['message' => 'Only approved or partially received PO can be received. Current status: ' . $status]);
         }
 
+        $this->healPoLineItemCodes($poId);
+
         $warehouses = $this->masterRows('warehouses');
         $locations = $this->masterRows('locations');
 
@@ -93,6 +95,8 @@ class PurchaseReceiptController extends BaseController
         if (! $this->validate(['receipt_no' => 'permit_empty|max_length[60]', 'receipt_date' => 'required|valid_date[Y-m-d]'])) {
             return redirect()->to($receiveUrl)->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
+
+        $this->healPoLineItemCodes($poId);
 
         $lines = $this->postedLines();
         if ($lines === []) {
@@ -230,6 +234,85 @@ class PurchaseReceiptController extends BaseController
         return $lines;
     }
 
+    private function healPoLineItemCodes(int $poId): void
+    {
+        if ($poId < 1) {
+            return;
+        }
+
+        $db = Database::connect();
+        if (! $db->tableExists('purchase_order_lines')) {
+            return;
+        }
+
+        $lineModel = new PurchaseOrderLineModel();
+        $lines = $lineModel->where('purchase_order_id', $poId)->findAll();
+        foreach ($lines as $line) {
+            $lineId = (int) ($line['id'] ?? 0);
+            if ($lineId < 1 || trim((string) ($line['item_code'] ?? '')) !== '') {
+                continue;
+            }
+
+            $resolved = $this->resolveLineItem($line);
+            if (($resolved['item_code'] ?? '') === '') {
+                continue;
+            }
+
+            $payload = [
+                'item_code' => $resolved['item_code'],
+            ];
+            if (trim((string) ($line['item_name'] ?? '')) === '' && ($resolved['item_name'] ?? '') !== '') {
+                $payload['item_name'] = $resolved['item_name'];
+            }
+            if (trim((string) ($line['uom_code'] ?? '')) === '' && ($resolved['uom_code'] ?? '') !== '') {
+                $payload['uom_code'] = $resolved['uom_code'];
+            }
+            if (empty($line['item_id']) && ! empty($resolved['item_id'])) {
+                $payload['item_id'] = $resolved['item_id'];
+            }
+            $lineModel->update($lineId, $payload);
+        }
+    }
+
+    private function resolveLineItem(array $line): array
+    {
+        $itemCode = trim((string) ($line['item_code'] ?? $line['item'] ?? $line['item_no'] ?? $line['itemcode'] ?? ''));
+        $itemName = trim((string) ($line['item_name'] ?? $line['description'] ?? ''));
+        $uomCode = trim((string) ($line['uom_code'] ?? ''));
+        $itemId = (int) ($line['item_id'] ?? 0);
+
+        if ($itemCode !== '') {
+            return [
+                'item_id' => $itemId ?: null,
+                'item_code' => $itemCode,
+                'item_name' => $itemName,
+                'uom_code' => $uomCode,
+            ];
+        }
+
+        if ($itemId > 0) {
+            $db = Database::connect();
+            if ($db->tableExists('items')) {
+                $item = $db->table('items')->where('id', $itemId)->get(1)->getRowArray();
+                if ($item !== null) {
+                    return [
+                        'item_id' => $itemId,
+                        'item_code' => trim((string) ($item['item_code'] ?? $item['code'] ?? $item['item'] ?? $item['item_no'] ?? '')),
+                        'item_name' => trim((string) ($item['item_name'] ?? $item['name'] ?? $itemName)),
+                        'uom_code' => trim((string) ($uomCode ?: ($item['stockuom'] ?? $item['uom_code'] ?? 'PCS'))),
+                    ];
+                }
+            }
+        }
+
+        return [
+            'item_id' => $itemId ?: null,
+            'item_code' => '',
+            'item_name' => $itemName,
+            'uom_code' => $uomCode,
+        ];
+    }
+
     private function masterRows(string $table): array
     {
         $tenant = new TenantContext(session());
@@ -263,7 +346,14 @@ class PurchaseReceiptController extends BaseController
     private function oldOrDefaultLocationId(array $locations, ?int $warehouseId): ?int
     {
         $old = $this->nullableInt(old('location_id'));
-        if ($old !== null) {
+        if ($old !== null && $warehouseId !== null) {
+            foreach ($locations as $location) {
+                if ((int) ($location['id'] ?? 0) === $old && (int) ($location['warehouse_id'] ?? 0) === $warehouseId) {
+                    return $old;
+                }
+            }
+        }
+        if ($old !== null && $warehouseId === null) {
             return $old;
         }
 
