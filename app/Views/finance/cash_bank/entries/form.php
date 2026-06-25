@@ -39,32 +39,46 @@
                 </div>
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Currency</label>
-                    <input type="text" name="currency_code" class="form-control" value="<?= esc(old('currency_code', $defaults['currency_code'] ?? 'IDR')) ?>">
+                    <input type="text" name="currency_code" id="entryCurrency" class="form-control" readonly value="<?= esc(old('currency_code', $defaults['currency_code'] ?? 'IDR')) ?>">
+                    <small class="text-muted">Auto from selected Cash/Bank Account.</small>
                 </div>
             </div>
 
             <div class="row">
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Cash/Bank Account</label>
-                    <select name="cash_bank_code" class="form-select" required>
+                    <select name="cash_bank_code" id="cashBankCode" class="form-select select2" required>
                         <option value="">Select Account</option>
                         <?php $cashBankCode = old('cash_bank_code', $defaults['cash_bank_code'] ?? ''); ?>
                         <?php foreach ($accounts as $account): ?>
-                            <option value="<?= esc($account['cash_bank_code']) ?>" <?= $cashBankCode === $account['cash_bank_code'] ? 'selected' : '' ?>>
-                                <?= esc($account['cash_bank_code'] . ' - ' . $account['cash_bank_name'] . ' / Balance ' . number_format((float) $account['current_balance'], 2)) ?>
+                            <?php
+                                $code = (string) ($account['cash_bank_code'] ?? '');
+                                $currency = (string) ($account['currency_code'] ?? 'IDR');
+                                $balance = (float) ($account['current_balance'] ?? 0);
+                            ?>
+                            <option
+                                value="<?= esc($code, 'attr') ?>"
+                                data-currency="<?= esc($currency, 'attr') ?>"
+                                data-balance="<?= esc((string) $balance, 'attr') ?>"
+                                <?= $cashBankCode === $code ? 'selected' : '' ?>
+                            >
+                                <?= esc($code . ' - ' . ($account['cash_bank_name'] ?? '-') . ' / ' . $currency . ' / Balance ' . number_format($balance, 2)) ?>
                             </option>
                         <?php endforeach ?>
                     </select>
+                    <div class="form-text" id="cashBankBalanceHint">Select account to see currency and balance.</div>
                 </div>
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Counter GL Account</label>
-                    <select name="counter_account_no" class="form-select">
-                        <option value="">No GL Posting</option>
+                    <select name="counter_account_no" class="form-select select2" required>
+                        <option value="">Select GL Account</option>
+                        <?php $counterAccountNo = old('counter_account_no', $defaults['counter_account_no'] ?? ''); ?>
                         <?php foreach ($chartAccounts as $account): ?>
-                            <option value="<?= esc($account['account_no']) ?>"><?= esc($account['account_no'] . ' - ' . $account['account_name']) ?></option>
+                            <?php $accountNo = (string) ($account['account_no'] ?? ''); ?>
+                            <option value="<?= esc($accountNo, 'attr') ?>" <?= $counterAccountNo === $accountNo ? 'selected' : '' ?>><?= esc($accountNo . ' - ' . ($account['account_name'] ?? '')) ?></option>
                         <?php endforeach ?>
                     </select>
-                    <div class="form-text">Isi untuk membuat journal otomatis ke GL.</div>
+                    <div class="form-text">Required untuk membuat journal otomatis ke GL.</div>
                 </div>
             </div>
 
@@ -88,8 +102,41 @@
                     <i class="bx bx-save me-1"></i> Post Entry
                 </button>
                 <a href="<?= site_url('cash-bank/accounts') ?>" class="btn btn-light">Cash Bank ID</a>
+                <a href="<?= site_url('cash-bank/rates') ?>" class="btn btn-light">Rate Master</a>
             </div>
         </div>
     </div>
 </form>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const accountSelect = document.getElementById('cashBankCode');
+    const currencyInput = document.getElementById('entryCurrency');
+    const balanceHint = document.getElementById('cashBankBalanceHint');
+
+    function formatNumber(value) {
+        const parsed = parseFloat(value || '0');
+        return Number.isFinite(parsed) ? parsed.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+    }
+
+    function syncAccountCurrency() {
+        if (!accountSelect) return;
+        const option = accountSelect.options[accountSelect.selectedIndex];
+        const currency = option ? (option.getAttribute('data-currency') || 'IDR') : 'IDR';
+        const balance = option ? (option.getAttribute('data-balance') || '0') : '0';
+        if (currencyInput) currencyInput.value = currency;
+        if (balanceHint) balanceHint.textContent = option && option.value
+            ? 'Currency: ' + currency + ' | Current Balance: ' + formatNumber(balance)
+            : 'Select account to see currency and balance.';
+    }
+
+    if (accountSelect) {
+        accountSelect.addEventListener('change', syncAccountCurrency);
+    }
+    if (window.jQuery && jQuery.fn.select2) {
+        jQuery('.select2').select2({ width: '100%' });
+        jQuery('#cashBankCode').on('select2:select change', syncAccountCurrency);
+    }
+    syncAccountCurrency();
+});
+</script>
 <?= $this->endSection() ?>
