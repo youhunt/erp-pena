@@ -121,9 +121,9 @@ class ErpMenu extends BaseConfig
             ]),
             $this->group('Cash Bank', 'bx-wallet', 120, [
                 $this->leaf('Cash Bank ID', 'cash-bank/accounts', 'cashbank.view'),
-                $this->leaf('Currency', $this->placeholderRoute('Currency'), 'cashbank.view'),
-                $this->leaf('Employee ID', $this->placeholderRoute('Employee ID'), 'cashbank.view'),
-                $this->leaf('Rate Master', $this->placeholderRoute('Rate Master'), 'cashbank.view'),
+                $this->leaf('Currency', 'cash-bank/currencies', 'cashbank.view'),
+                $this->leaf('Employee ID', 'cash-bank/employees', 'cashbank.view'),
+                $this->leaf('Rate Master', 'cash-bank/rates', 'cashbank.view'),
                 $this->leaf('Cash Entry', 'cash-bank/cash-entries', 'cashbank.view'),
                 $this->leaf('Bank Entry', 'cash-bank/bank-entries', 'cashbank.view'),
                 $this->leaf('Bank Statement Import', 'cash-bank/statements', 'cashbank.view'),
