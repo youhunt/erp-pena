@@ -56,6 +56,11 @@ class CashBankService
             (new CashBankIntegrityGuard())->assertCurrency($currencyCode, (string) ($data['currency_code'] ?? ''));
             $this->assertUniqueEntryNo($companyId, $entryNo);
 
+            $baseCurrency = $this->baseCurrency($companyId);
+            $rateType = trim((string) ($data['rate_type'] ?? 'BI')) ?: 'BI';
+            $exchangeRate = $this->resolveExchangeRate($companyId, $currencyCode, $baseCurrency, $entryDate, $rateType, (float) ($data['exchange_rate'] ?? 0));
+            $baseAmount = round($amount * $exchangeRate, 2);
+
             $isIn = str_ends_with($entryType, '_in');
             $newBalance = (float) $account['current_balance'] + ($isIn ? $amount : -$amount);
             if ($newBalance < 0) {
@@ -75,6 +80,10 @@ class CashBankService
                 'entry_type' => $entryType,
                 'cash_bank_code' => $account['cash_bank_code'],
                 'currency_code' => $currencyCode,
+                'rate_type' => $rateType,
+                'exchange_rate' => $exchangeRate,
+                'base_currency' => $baseCurrency,
+                'base_amount' => $baseAmount,
                 'amount' => $amount,
                 'counter_account_no' => $counterAccountNo,
                 'reference_no' => $data['reference_no'] ?? null,
@@ -98,11 +107,13 @@ class CashBankService
                 'entry_date' => $entryDate,
                 'entry_type' => $entryType,
                 'amount' => $amount,
+                'base_amount' => $baseAmount,
                 'cash_bank_gl_account_no' => $cashBankGlAccount !== '' ? $cashBankGlAccount : (new PostingProfileService())->account($companyId, 'cashbank', 'cash_bank', '1100'),
                 'cash_bank_name' => $account['cash_bank_name'] ?? $account['cash_bank_code'],
                 'currency_code' => $currencyCode,
+                'base_currency' => $baseCurrency,
             ], $entryId, $userId);
-            (new PostingIntegrityGuard())->assertGlEntryForAmount($amount, $glEntryId, 'Cash/Bank entry');
+            (new PostingIntegrityGuard())->assertGlEntryForAmount($baseAmount, $glEntryId, 'Cash/Bank entry');
 
             if ($glEntryId !== null) {
                 $entryModel->update($entryId, ['gl_entry_id' => $glEntryId]);
@@ -122,7 +133,7 @@ class CashBankService
                 'record_id' => $entryId,
                 'record_code' => $entryNo,
                 'description' => 'Cash/Bank entry posted.',
-                'new_values' => ['entry' => $data, 'new_balance' => $newBalance, 'gl_entry_id' => $glEntryId],
+                'new_values' => ['entry' => $data, 'new_balance' => $newBalance, 'exchange_rate' => $exchangeRate, 'base_amount' => $baseAmount, 'gl_entry_id' => $glEntryId],
             ]);
 
             return $entryId;
@@ -167,11 +178,74 @@ class CashBankService
         }
     }
 
+    private function baseCurrency(int $companyId): string
+    {
+        $db = Database::connect();
+        if ($db->tableExists('companies') && $db->fieldExists('base_currency', 'companies')) {
+            $row = $db->table('companies')->select('base_currency')->where('id', $companyId)->get(1)->getRowArray();
+            $base = strtoupper(trim((string) ($row['base_currency'] ?? '')));
+            if ($base !== '') {
+                return $base;
+            }
+        }
+
+        return 'IDR';
+    }
+
+    private function resolveExchangeRate(int $companyId, string $fromCurrency, string $toCurrency, string $entryDate, string $rateType, float $manualRate): float
+    {
+        if ($fromCurrency === $toCurrency) {
+            return 1.0;
+        }
+        if ($manualRate > 0) {
+            return $manualRate;
+        }
+
+        $db = Database::connect();
+        if (! $db->tableExists('currency_rates')) {
+            throw new RuntimeException('Currency rate table is not available.');
+        }
+
+        $row = $db->table('currency_rates')
+            ->where('company_id', $companyId)
+            ->where('rate_type', $rateType)
+            ->where('from_currency', $fromCurrency)
+            ->where('to_currency', $toCurrency)
+            ->where('rate_date <=', $entryDate)
+            ->where('is_active', 1)
+            ->where('deleted_at', null)
+            ->orderBy('rate_date', 'DESC')
+            ->get(1)
+            ->getRowArray();
+
+        if ($row === null) {
+            $row = $db->table('currency_rates')
+                ->groupStart()->where('company_id', null)->orWhere('company_id', $companyId)->groupEnd()
+                ->where('rate_type', $rateType)
+                ->where('from_currency', $fromCurrency)
+                ->where('to_currency', $toCurrency)
+                ->where('rate_date <=', $entryDate)
+                ->where('is_active', 1)
+                ->where('deleted_at', null)
+                ->orderBy('company_id', 'DESC')
+                ->orderBy('rate_date', 'DESC')
+                ->get(1)
+                ->getRowArray();
+        }
+
+        $rate = (float) ($row['amount'] ?? 0);
+        if ($rate <= 0) {
+            throw new RuntimeException('Currency rate not found for ' . $fromCurrency . ' to ' . $toCurrency . ' on or before ' . $entryDate . '. Please fill Rate Master first.');
+        }
+
+        return $rate;
+    }
+
     private function postGl(array $data, int $entryId, ?int $userId): ?int
     {
         $cashBankAccount = trim((string) ($data['cash_bank_gl_account_no'] ?? ''));
         $counterAccount = trim((string) ($data['counter_account_no'] ?? ''));
-        $amount = round((float) $data['amount'], 2);
+        $amount = round((float) ($data['base_amount'] ?? $data['amount']), 2);
         $isIn = str_ends_with((string) $data['entry_type'], '_in');
 
         return (new GeneralLedgerService())->post([
@@ -184,7 +258,7 @@ class CashBankService
             'source_id' => $entryId,
             'source_no' => $data['entry_no'] ?? null,
             'description' => $data['description'] ?? 'Cash/Bank posting',
-            'currency_code' => $data['currency_code'] ?? 'IDR',
+            'currency_code' => $data['base_currency'] ?? 'IDR',
         ], [
             [
                 'account_no' => $isIn ? $cashBankAccount : $counterAccount,
