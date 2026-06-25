@@ -175,6 +175,14 @@ document.addEventListener('DOMContentLoaded', function () {
         return Number.isFinite(parsed) ? parsed : 0;
     }
 
+    function notifySelectChanged(select) {
+        if (!select) return;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        if (window.jQuery) {
+            jQuery(select).trigger('change.select2').trigger('change');
+        }
+    }
+
     function recalcReceiveTotal() {
         let total = 0;
         document.querySelectorAll('.receive-now').forEach(function (input) {
@@ -215,10 +223,15 @@ document.addEventListener('DOMContentLoaded', function () {
         const hasPrevious = matching.some(item => item.value === selectedBefore);
         location.value = hasPrevious ? selectedBefore : (matching[0] ? matching[0].value : '');
         location.dataset.selectedLocationId = location.value;
-        location.dispatchEvent(new Event('change', { bubbles: true }));
+        notifySelectChanged(location);
     }
 
-    if (warehouse && location) warehouse.addEventListener('change', rebuildLocations);
+    if (warehouse && location) {
+        warehouse.addEventListener('change', function () {
+            location.dataset.selectedLocationId = '';
+            rebuildLocations();
+        });
+    }
     rebuildLocations();
     recalcReceiveTotal();
 });
