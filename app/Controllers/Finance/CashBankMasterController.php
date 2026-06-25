@@ -12,7 +12,15 @@ class CashBankMasterController extends BaseController
     {
         $db = Database::connect();
         $tenant = new TenantContext(session());
-        if ((string) $this->request->getGet('action') === 'save') {
+        $action = (string) $this->request->getGet('action');
+        $id = (int) ($this->request->getGet('id') ?? 0);
+
+        if ($action === 'delete' && $id > 0) {
+            $this->softDelete('cash_bank_accounts', $id);
+            return redirect()->to('/cash-bank/accounts')->with('message', 'Cash Bank ID deleted / deactivated.');
+        }
+
+        if ($action === 'save') {
             $branch = trim((string) $this->request->getGet('bank_branch'));
             $code = trim((string) $this->request->getGet('bank_code'));
             $curr = trim((string) $this->request->getGet('currency_code'));
@@ -39,24 +47,29 @@ class CashBankMasterController extends BaseController
                 'updated_at' => date('Y-m-d H:i:s'),
             ];
 
-            $existing = $db->table('cash_bank_accounts')
-                ->where('company_id', $tenant->activeCompanyId())
-                ->where('bank_branch', $branch)
-                ->where('deleted_at', null)
-                ->get(1)->getRowArray();
-            if ($existing !== null) {
-                $db->table('cash_bank_accounts')->where('id', (int) $existing['id'])->update($payload);
+            if ($id > 0) {
+                $db->table('cash_bank_accounts')->where('id', $id)->update($payload);
             } else {
-                $payload['current_balance'] = 0;
-                $payload['opening_balance'] = 0;
-                $payload['created_at'] = date('Y-m-d H:i:s');
-                $db->table('cash_bank_accounts')->insert($payload);
+                $existing = $db->table('cash_bank_accounts')
+                    ->where('company_id', $tenant->activeCompanyId())
+                    ->where('bank_branch', $branch)
+                    ->where('deleted_at', null)
+                    ->get(1)->getRowArray();
+                if ($existing !== null) {
+                    $db->table('cash_bank_accounts')->where('id', (int) $existing['id'])->update($payload);
+                } else {
+                    $payload['current_balance'] = 0;
+                    $payload['opening_balance'] = 0;
+                    $payload['created_at'] = date('Y-m-d H:i:s');
+                    $db->table('cash_bank_accounts')->insert($payload);
+                }
             }
             return redirect()->to('/cash-bank/accounts')->with('message', 'Cash Bank ID saved.');
         }
 
         return view('finance/cash_bank/masters/accounts', [
             'title' => 'Cash Bank ID',
+            'editRow' => $this->editRow('cash_bank_accounts'),
             'accounts' => $this->rows('cash_bank_accounts', 'cash_bank_code'),
             'currencies' => $this->currencyOptions(),
         ]);
@@ -66,7 +79,15 @@ class CashBankMasterController extends BaseController
     {
         $db = Database::connect();
         $tenant = new TenantContext(session());
-        if ((string) $this->request->getGet('action') === 'save') {
+        $action = (string) $this->request->getGet('action');
+        $id = (int) ($this->request->getGet('id') ?? 0);
+
+        if ($action === 'delete' && $id > 0) {
+            $this->softDelete('currencies', $id);
+            return redirect()->to('/cash-bank/currencies')->with('message', 'Currency deleted / deactivated.');
+        }
+
+        if ($action === 'save') {
             $code = strtoupper(trim((string) $this->request->getGet('code')));
             $name = trim((string) $this->request->getGet('name'));
             if ($code === '' || $name === '') {
@@ -82,19 +103,24 @@ class CashBankMasterController extends BaseController
                 'updated_by' => auth()->id(),
                 'updated_at' => date('Y-m-d H:i:s'),
             ];
-            $existing = $db->table('currencies')->where('company_id', $tenant->activeCompanyId())->where('code', $code)->where('deleted_at', null)->get(1)->getRowArray();
-            if ($existing !== null) {
-                $db->table('currencies')->where('id', (int) $existing['id'])->update($payload);
+            if ($id > 0) {
+                $db->table('currencies')->where('id', $id)->update($payload);
             } else {
-                $payload['created_by'] = auth()->id();
-                $payload['created_at'] = date('Y-m-d H:i:s');
-                $db->table('currencies')->insert($payload);
+                $existing = $db->table('currencies')->where('company_id', $tenant->activeCompanyId())->where('code', $code)->where('deleted_at', null)->get(1)->getRowArray();
+                if ($existing !== null) {
+                    $db->table('currencies')->where('id', (int) $existing['id'])->update($payload);
+                } else {
+                    $payload['created_by'] = auth()->id();
+                    $payload['created_at'] = date('Y-m-d H:i:s');
+                    $db->table('currencies')->insert($payload);
+                }
             }
             return redirect()->to('/cash-bank/currencies')->with('message', 'Currency saved.');
         }
 
         return view('finance/cash_bank/masters/currencies', [
             'title' => 'Currency',
+            'editRow' => $this->editRow('currencies'),
             'rows' => $this->rows('currencies', 'code'),
         ]);
     }
@@ -103,7 +129,15 @@ class CashBankMasterController extends BaseController
     {
         $db = Database::connect();
         $tenant = new TenantContext(session());
-        if ((string) $this->request->getGet('action') === 'save') {
+        $action = (string) $this->request->getGet('action');
+        $id = (int) ($this->request->getGet('id') ?? 0);
+
+        if ($action === 'delete' && $id > 0) {
+            $this->softDelete('employees', $id);
+            return redirect()->to('/cash-bank/employees')->with('message', 'Employee deleted / deactivated.');
+        }
+
+        if ($action === 'save') {
             $code = trim((string) $this->request->getGet('employee_code'));
             $name = trim((string) $this->request->getGet('name'));
             if ($code === '' || $name === '') {
@@ -122,19 +156,24 @@ class CashBankMasterController extends BaseController
                 'updated_by' => auth()->id(),
                 'updated_at' => date('Y-m-d H:i:s'),
             ];
-            $existing = $db->table('employees')->where('company_id', $tenant->activeCompanyId())->where('employee_code', $code)->where('deleted_at', null)->get(1)->getRowArray();
-            if ($existing !== null) {
-                $db->table('employees')->where('id', (int) $existing['id'])->update($payload);
+            if ($id > 0) {
+                $db->table('employees')->where('id', $id)->update($payload);
             } else {
-                $payload['created_by'] = auth()->id();
-                $payload['created_at'] = date('Y-m-d H:i:s');
-                $db->table('employees')->insert($payload);
+                $existing = $db->table('employees')->where('company_id', $tenant->activeCompanyId())->where('employee_code', $code)->where('deleted_at', null)->get(1)->getRowArray();
+                if ($existing !== null) {
+                    $db->table('employees')->where('id', (int) $existing['id'])->update($payload);
+                } else {
+                    $payload['created_by'] = auth()->id();
+                    $payload['created_at'] = date('Y-m-d H:i:s');
+                    $db->table('employees')->insert($payload);
+                }
             }
             return redirect()->to('/cash-bank/employees')->with('message', 'Employee saved.');
         }
 
         return view('finance/cash_bank/masters/employees', [
             'title' => 'Employee ID',
+            'editRow' => $this->editRow('employees'),
             'rows' => $this->rows('employees', 'employee_code'),
             'sites' => $this->masterRows('sites'),
             'departments' => $this->masterRows('departments'),
@@ -145,7 +184,15 @@ class CashBankMasterController extends BaseController
     {
         $db = Database::connect();
         $tenant = new TenantContext(session());
-        if ((string) $this->request->getGet('action') === 'save') {
+        $action = (string) $this->request->getGet('action');
+        $id = (int) ($this->request->getGet('id') ?? 0);
+
+        if ($action === 'delete' && $id > 0) {
+            $this->softDelete('currency_rates', $id);
+            return redirect()->to('/cash-bank/rates')->with('message', 'Rate deleted / deactivated.');
+        }
+
+        if ($action === 'save') {
             $type = trim((string) $this->request->getGet('rate_type'));
             $from = strtoupper(trim((string) $this->request->getGet('from_currency')));
             $to = strtoupper(trim((string) $this->request->getGet('to_currency')));
@@ -166,26 +213,31 @@ class CashBankMasterController extends BaseController
                 'updated_by' => auth()->id(),
                 'updated_at' => date('Y-m-d H:i:s'),
             ];
-            $existing = $db->table('currency_rates')
-                ->where('company_id', $tenant->activeCompanyId())
-                ->where('rate_type', $type)
-                ->where('from_currency', $from)
-                ->where('to_currency', $to)
-                ->where('rate_date', $date)
-                ->where('deleted_at', null)
-                ->get(1)->getRowArray();
-            if ($existing !== null) {
-                $db->table('currency_rates')->where('id', (int) $existing['id'])->update($payload);
+            if ($id > 0) {
+                $db->table('currency_rates')->where('id', $id)->update($payload);
             } else {
-                $payload['created_by'] = auth()->id();
-                $payload['created_at'] = date('Y-m-d H:i:s');
-                $db->table('currency_rates')->insert($payload);
+                $existing = $db->table('currency_rates')
+                    ->where('company_id', $tenant->activeCompanyId())
+                    ->where('rate_type', $type)
+                    ->where('from_currency', $from)
+                    ->where('to_currency', $to)
+                    ->where('rate_date', $date)
+                    ->where('deleted_at', null)
+                    ->get(1)->getRowArray();
+                if ($existing !== null) {
+                    $db->table('currency_rates')->where('id', (int) $existing['id'])->update($payload);
+                } else {
+                    $payload['created_by'] = auth()->id();
+                    $payload['created_at'] = date('Y-m-d H:i:s');
+                    $db->table('currency_rates')->insert($payload);
+                }
             }
             return redirect()->to('/cash-bank/rates')->with('message', 'Rate saved.');
         }
 
         return view('finance/cash_bank/masters/rates', [
             'title' => 'Rate Master',
+            'editRow' => $this->editRow('currency_rates'),
             'rows' => $this->rows('currency_rates', 'rate_date', 'DESC'),
             'currencies' => $this->currencyOptions(),
         ]);
@@ -209,6 +261,47 @@ class CashBankMasterController extends BaseController
             $builder->where('deleted_at', null);
         }
         return $builder->orderBy($orderBy, $direction)->get(500)->getResultArray();
+    }
+
+    private function editRow(string $table): ?array
+    {
+        $id = (int) ($this->request->getGet('edit_id') ?? 0);
+        if ($id < 1) {
+            return null;
+        }
+        $db = Database::connect();
+        if (! $db->tableExists($table)) {
+            return null;
+        }
+        $builder = $db->table($table)->where('id', $id);
+        if ($db->fieldExists('deleted_at', $table)) {
+            $builder->where('deleted_at', null);
+        }
+        return $builder->get(1)->getRowArray() ?: null;
+    }
+
+    private function softDelete(string $table, int $id): void
+    {
+        $db = Database::connect();
+        if (! $db->tableExists($table)) {
+            return;
+        }
+        $payload = [];
+        if ($db->fieldExists('is_active', $table)) {
+            $payload['is_active'] = 0;
+        }
+        if ($db->fieldExists('deleted_at', $table)) {
+            $payload['deleted_at'] = date('Y-m-d H:i:s');
+        }
+        if ($db->fieldExists('updated_by', $table)) {
+            $payload['updated_by'] = auth()->id();
+        }
+        if ($db->fieldExists('updated_at', $table)) {
+            $payload['updated_at'] = date('Y-m-d H:i:s');
+        }
+        if ($payload !== []) {
+            $db->table($table)->where('id', $id)->update($payload);
+        }
     }
 
     private function currencyOptions(): array
