@@ -58,7 +58,7 @@ class CashBankMasterController extends BaseController
         return view('finance/cash_bank/masters/accounts', [
             'title' => 'Cash Bank ID',
             'accounts' => $this->rows('cash_bank_accounts', 'cash_bank_code'),
-            'currencies' => $this->currencies(),
+            'currencies' => $this->currencyOptions(),
         ]);
     }
 
@@ -187,7 +187,7 @@ class CashBankMasterController extends BaseController
         return view('finance/cash_bank/masters/rates', [
             'title' => 'Rate Master',
             'rows' => $this->rows('currency_rates', 'rate_date', 'DESC'),
-            'currencies' => $this->currencies(),
+            'currencies' => $this->currencyOptions(),
         ]);
     }
 
@@ -211,7 +211,7 @@ class CashBankMasterController extends BaseController
         return $builder->orderBy($orderBy, $direction)->get(500)->getResultArray();
     }
 
-    private function currencies(): array
+    private function currencyOptions(): array
     {
         $rows = $this->rows('currencies', 'code');
         return $rows !== [] ? $rows : [['code' => 'IDR', 'name' => 'Indonesian Rupiah']];
