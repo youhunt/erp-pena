@@ -2,6 +2,7 @@
 
 namespace App\Database\Seeds;
 
+use App\Services\Finance\PostingProfileService;
 use CodeIgniter\Database\Seeder;
 
 class CoreFinanceSeeder extends Seeder
@@ -11,6 +12,7 @@ class CoreFinanceSeeder extends Seeder
         $this->seedTransactionCodes();
         $this->seedCurrencies();
         $this->seedCostTypes();
+        $this->seedPostingProfiles();
     }
 
     private function seedTransactionCodes(): void
@@ -87,5 +89,69 @@ class CoreFinanceSeeder extends Seeder
                 $this->db->table('costing_cost_types')->insert($payload);
             }
         }
+    }
+
+    private function seedPostingProfiles(): void
+    {
+        if (! $this->db->tableExists('gl_posting_profiles')) {
+            return;
+        }
+
+        $companyIds = $this->companyIds();
+        if ($companyIds === []) {
+            $companyIds = [1];
+        }
+
+        foreach ($companyIds as $companyId) {
+            foreach (PostingProfileService::defaults() as $moduleCode => $keys) {
+                foreach ($keys as $postingKey => $accountNo) {
+                    $existing = $this->db->table('gl_posting_profiles')
+                        ->where('company_id', $companyId)
+                        ->where('module_code', $moduleCode)
+                        ->where('posting_key', $postingKey)
+                        ->get(1)
+                        ->getRowArray();
+
+                    $payload = [
+                        'company_id' => $companyId,
+                        'module_code' => $moduleCode,
+                        'posting_key' => $postingKey,
+                        'account_no' => $accountNo,
+                        'description' => PostingProfileService::label($moduleCode, $postingKey),
+                        'is_active' => 1,
+                        'updated_at' => date('Y-m-d H:i:s'),
+                    ];
+
+                    if ($existing) {
+                        if (trim((string) ($existing['account_no'] ?? '')) === '') {
+                            $this->db->table('gl_posting_profiles')->where('id', (int) $existing['id'])->update($payload);
+                        }
+                        continue;
+                    }
+
+                    $payload['created_at'] = date('Y-m-d H:i:s');
+                    $this->db->table('gl_posting_profiles')->insert($payload);
+                }
+            }
+        }
+    }
+
+    /** @return list<int> */
+    private function companyIds(): array
+    {
+        if (! $this->db->tableExists('companies')) {
+            return [];
+        }
+
+        $rows = $this->db->table('companies')->select('id')->get()->getResultArray();
+        $ids = [];
+        foreach ($rows as $row) {
+            $id = (int) ($row['id'] ?? 0);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+
+        return $ids;
     }
 }
