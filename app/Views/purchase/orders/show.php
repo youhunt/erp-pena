@@ -147,6 +147,49 @@ $itemDisplay = static function (array $line): array {
             </div>
         </div>
 
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+                    <div>
+                        <h4 class="card-title mb-1">Related GL Entries</h4>
+                        <p class="text-muted mb-0">PO does not post GL directly. Journals below come from receipt, invoice, payment, or reversal documents linked to this PO.</p>
+                    </div>
+                    <a href="<?= site_url('gl/entries') ?>" class="btn btn-sm btn-outline-secondary">Open GL</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-nowrap align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Source</th>
+                                <th>Document</th>
+                                <th>Date</th>
+                                <th>Role</th>
+                                <th>Journal</th>
+                                <th>Journal Date</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach (($relatedGlEntries ?? []) as $entry): ?>
+                            <tr>
+                                <td><?= esc($entry['module'] ?? '-') ?></td>
+                                <td><a href="<?= esc($entry['document_url']) ?>"><?= esc($entry['document_no'] ?? '-') ?></a></td>
+                                <td><?= esc($entry['document_date'] ?? '-') ?></td>
+                                <td><span class="badge bg-<?= ($entry['role'] ?? '') === 'reversal' ? 'warning' : 'success' ?>"><?= esc($entry['role'] ?? '-') ?></span></td>
+                                <td><a href="<?= esc($entry['gl_url']) ?>"><?= esc($entry['journal_no'] ?? ('#' . ($entry['gl_entry_id'] ?? ''))) ?></a></td>
+                                <td><?= esc($entry['journal_date'] ?? '-') ?></td>
+                                <td><?= esc($entry['status'] ?? '-') ?></td>
+                            </tr>
+                        <?php endforeach ?>
+                        <?php if (($relatedGlEntries ?? []) === []): ?>
+                            <tr><td colspan="7" class="text-center text-muted py-4">No related GL entry yet. GL will appear after receipt, invoice, payment, or reversal posting.</td></tr>
+                        <?php endif ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <?php if (! empty($order['notes']) || ! empty($order['remarks'])): ?>
             <div class="card">
                 <div class="card-body">

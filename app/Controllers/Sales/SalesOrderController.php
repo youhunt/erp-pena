@@ -148,6 +148,7 @@ class SalesOrderController extends BaseController
             'title' => 'Sales Order Detail',
             'order' => $order,
             'lines' => (new SalesOrderLineModel())->where('sales_order_id', $id)->orderBy('line_no', 'ASC')->findAll(),
+            'relatedGlEntries' => $this->relatedGlEntries($id),
         ]);
     }
 
@@ -202,6 +203,81 @@ class SalesOrderController extends BaseController
             $orders->where('site_id', $tenant->activeSiteId());
         }
         return $orders->find($id);
+    }
+
+    private function relatedGlEntries(int $salesOrderId): array
+    {
+        $db = Database::connect();
+        $entries = [];
+
+        $deliveries = $this->documentRows('sales_deliveries', ['sales_order_id' => $salesOrderId]);
+        $this->appendGlRows($entries, 'Delivery / COGS', $deliveries, 'delivery_no', 'delivery_date', 'sales/deliveries');
+
+        $invoices = $this->documentRows('sales_invoices', ['sales_order_id' => $salesOrderId]);
+        $this->appendGlRows($entries, 'Sales Invoice', $invoices, 'invoice_no', 'invoice_date', 'ar/sales-invoices');
+
+        $invoiceIds = array_values(array_filter(array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $invoices)));
+        if ($invoiceIds !== [] && $db->tableExists('ar_receipts')) {
+            $receipts = $db->table('ar_receipts')->whereIn('sales_invoice_id', $invoiceIds);
+            if ($db->fieldExists('deleted_at', 'ar_receipts')) {
+                $receipts->where('deleted_at', null);
+            }
+            $this->appendGlRows($entries, 'A/R Receipt', $receipts->get()->getResultArray(), 'receipt_no', 'receipt_date', 'ar/receipts');
+        }
+
+        usort($entries, static fn (array $a, array $b): int => strcmp((string) ($b['journal_date'] ?? ''), (string) ($a['journal_date'] ?? '')));
+
+        return $entries;
+    }
+
+    private function documentRows(string $table, array $where): array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists($table)) {
+            return [];
+        }
+
+        $builder = $db->table($table)->where($where);
+        if ($db->fieldExists('deleted_at', $table)) {
+            $builder->where('deleted_at', null);
+        }
+
+        return $builder->get()->getResultArray();
+    }
+
+    private function appendGlRows(array &$entries, string $module, array $documents, string $docNoField, string $dateField, string $routePrefix): void
+    {
+        foreach ($documents as $document) {
+            $this->appendGlRow($entries, $module, $document, $docNoField, $dateField, $routePrefix, 'gl_entry_id', 'posting');
+            $this->appendGlRow($entries, $module, $document, $docNoField, $dateField, $routePrefix, 'reversal_gl_entry_id', 'reversal');
+        }
+    }
+
+    private function appendGlRow(array &$entries, string $module, array $document, string $docNoField, string $dateField, string $routePrefix, string $glField, string $role): void
+    {
+        $glEntryId = (int) ($document[$glField] ?? 0);
+        if ($glEntryId < 1) {
+            return;
+        }
+
+        $gl = Database::connect()->table('gl_entries')->where('id', $glEntryId)->get(1)->getRowArray();
+        if ($gl === null) {
+            return;
+        }
+
+        $entries[] = [
+            'module' => $module,
+            'role' => $role,
+            'document_no' => $document[$docNoField] ?? ('#' . ($document['id'] ?? '')),
+            'document_date' => $document[$dateField] ?? '-',
+            'document_url' => site_url($routePrefix . '/' . (int) ($document['id'] ?? 0)),
+            'gl_entry_id' => $glEntryId,
+            'journal_no' => $gl['journal_no'] ?? ('#' . $glEntryId),
+            'journal_date' => $gl['journal_date'] ?? '-',
+            'description' => $gl['description'] ?? '',
+            'status' => $gl['status'] ?? '-',
+            'gl_url' => site_url('gl/entries/' . $glEntryId),
+        ];
     }
 
     private function postedHeader(TenantContext $tenant, array $existing = []): array

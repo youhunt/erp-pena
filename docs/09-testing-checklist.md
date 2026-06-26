@@ -31,10 +31,12 @@
 ## Core ERP Smoke
 
 - Purchase Order can be created and approved
+- Purchase Order detail shows related GL entries from receipt, invoice, payment, and reversal documents
 - Purchase Receipt can be created from PO and posted
 - Purchase Invoice can be created from receipt and opens A/P payable
 - A/P Payment can be posted and reduces payable outstanding
 - Sales Order can be created and approved
+- Sales Order detail shows related GL entries from delivery/COGS, invoice, receipt, and reversal documents
 - Allocation Order can reserve stock from SO
 - Delivery Order can be posted and reduces stock
 - Sales Invoice can be created from delivery and opens A/R receivable
