@@ -5,12 +5,17 @@
 -- 1. Pilih database ERP dari sidebar kiri terlebih dahulu.
 -- 2. Baru jalankan file ini.
 -- 3. File ini sengaja TIDAK memakai USE `nama_database` karena nama DB hosting bisa berbeda-beda.
+--
+-- File ini adalah fallback hosting dari:
+-- app/Database/Migrations/*
+-- app/Database/Seeds/CoreFinanceSeeder.php
 
 SET @db := DATABASE();
 SELECT @db AS selected_database;
 
 -- =========================================================
 -- 1. Transaction codes required by document numbering
+-- Mirrors CoreFinanceSeeder::seedTransactionCodes()
 -- =========================================================
 CREATE TABLE IF NOT EXISTS transaction_codes (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -43,6 +48,7 @@ UPDATE transaction_codes SET is_active = 1, updated_at = NOW() WHERE code IN ('P
 
 -- =========================================================
 -- 2. Currency master compatibility
+-- Mirrors CoreFinanceCashBankMigration + CoreFinanceSeeder::seedCurrencies()
 -- =========================================================
 CREATE TABLE IF NOT EXISTS currencies (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -77,6 +83,7 @@ SELECT NULL, 'USD', 'US Dollar', 0.01, 1, NOW(), NOW() WHERE NOT EXISTS (SELECT 
 
 -- =========================================================
 -- 3. Cash Bank master, employee, and rate foundation
+-- Mirrors CoreFinanceCashBankMigration
 -- =========================================================
 ALTER TABLE cash_bank_accounts
     ADD COLUMN IF NOT EXISTS bank_branch VARCHAR(50) NULL AFTER site_id,
@@ -138,6 +145,7 @@ SET exchange_rate = CASE WHEN exchange_rate IS NULL OR exchange_rate = 0 THEN 1 
 
 -- =========================================================
 -- 4. Item import mapping foundation
+-- Mirrors CoreFinanceCashBankMigration
 -- =========================================================
 CREATE TABLE IF NOT EXISTS item_import_mappings (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -164,6 +172,7 @@ CREATE TABLE IF NOT EXISTS item_import_mappings (
 
 -- =========================================================
 -- 5. Planning / MRP foundation
+-- Mirrors active production/MRP fallback structure
 -- =========================================================
 CREATE TABLE IF NOT EXISTS production_forecasts (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -258,6 +267,7 @@ CREATE TABLE IF NOT EXISTS production_mrp_planned_orders (
 
 -- =========================================================
 -- 6. Costing foundation
+-- Mirrors CoreFinanceSeeder::seedCostTypes()
 -- =========================================================
 CREATE TABLE IF NOT EXISTS costing_cost_types (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -324,14 +334,99 @@ INSERT INTO costing_cost_types (company_id, type, description, cost_group, is_ac
 SELECT NULL, 'Bensin', 'Biaya bensin', 'Overhead', 1, NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM costing_cost_types WHERE company_id IS NULL AND type = 'Bensin');
 
 -- =========================================================
--- 7. Warehouse helper index, safe with existing foreign keys
+-- 7. GL Posting Profile defaults
+-- Mirrors CoreFinanceSeeder::seedPostingProfiles()
+-- =========================================================
+CREATE TABLE IF NOT EXISTS gl_posting_profiles (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    company_id INT NOT NULL,
+    module_code VARCHAR(40) NOT NULL,
+    posting_key VARCHAR(80) NOT NULL,
+    account_no VARCHAR(80) NOT NULL,
+    description VARCHAR(255) NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_by INT NULL,
+    updated_by INT NULL,
+    created_at DATETIME NULL,
+    updated_at DATETIME NULL,
+    deleted_at DATETIME NULL,
+    PRIMARY KEY (id),
+    KEY idx_gl_posting_profiles_scope (company_id, module_code, posting_key),
+    KEY idx_gl_posting_profiles_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO gl_posting_profiles (company_id, module_code, posting_key, account_no, description, is_active, created_at, updated_at)
+SELECT c.company_id, p.module_code, p.posting_key, p.account_no, p.description, 1, NOW(), NOW()
+FROM (
+    SELECT id AS company_id FROM companies
+    UNION
+    SELECT 1 AS company_id WHERE NOT EXISTS (SELECT 1 FROM companies)
+) c
+JOIN (
+    SELECT 'ap' AS module_code, 'payable' AS posting_key, '2100' AS account_no, 'Accounts Payable' AS description UNION ALL
+    SELECT 'ap', 'grni', '2300', 'Goods Received Not Invoiced' UNION ALL
+    SELECT 'ap', 'manual_expense', '6200', 'Manual A/P Expense' UNION ALL
+    SELECT 'ap', 'inventory', '1300', 'Purchased Inventory' UNION ALL
+    SELECT 'ap', 'input_vat', '1400', 'Input VAT' UNION ALL
+    SELECT 'ar', 'receivable', '1200', 'Accounts Receivable' UNION ALL
+    SELECT 'ar', 'sales_revenue', '4100', 'Sales Revenue' UNION ALL
+    SELECT 'ar', 'output_vat', '2200', 'Output VAT' UNION ALL
+    SELECT 'sales', 'cogs', '5000', 'Cost of Goods Sold' UNION ALL
+    SELECT 'sales', 'inventory', '1300', 'Inventory' UNION ALL
+    SELECT 'inventory', 'inventory', '1300', 'Inventory' UNION ALL
+    SELECT 'inventory', 'adjustment_gain', '7000', 'Inventory Adjustment Gain' UNION ALL
+    SELECT 'inventory', 'adjustment_loss', '8000', 'Inventory Adjustment Loss' UNION ALL
+    SELECT 'cashbank', 'cash_bank', '1100', 'Cash and Bank'
+) p
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM gl_posting_profiles gp
+    WHERE gp.company_id = c.company_id
+      AND gp.module_code = p.module_code
+      AND gp.posting_key = p.posting_key
+);
+
+UPDATE gl_posting_profiles gp
+JOIN (
+    SELECT c.company_id, p.module_code, p.posting_key, p.account_no, p.description
+    FROM (
+        SELECT id AS company_id FROM companies
+        UNION
+        SELECT 1 AS company_id WHERE NOT EXISTS (SELECT 1 FROM companies)
+    ) c
+    JOIN (
+        SELECT 'ap' AS module_code, 'payable' AS posting_key, '2100' AS account_no, 'Accounts Payable' AS description UNION ALL
+        SELECT 'ap', 'grni', '2300', 'Goods Received Not Invoiced' UNION ALL
+        SELECT 'ap', 'manual_expense', '6200', 'Manual A/P Expense' UNION ALL
+        SELECT 'ap', 'inventory', '1300', 'Purchased Inventory' UNION ALL
+        SELECT 'ap', 'input_vat', '1400', 'Input VAT' UNION ALL
+        SELECT 'ar', 'receivable', '1200', 'Accounts Receivable' UNION ALL
+        SELECT 'ar', 'sales_revenue', '4100', 'Sales Revenue' UNION ALL
+        SELECT 'ar', 'output_vat', '2200', 'Output VAT' UNION ALL
+        SELECT 'sales', 'cogs', '5000', 'Cost of Goods Sold' UNION ALL
+        SELECT 'sales', 'inventory', '1300', 'Inventory' UNION ALL
+        SELECT 'inventory', 'inventory', '1300', 'Inventory' UNION ALL
+        SELECT 'inventory', 'adjustment_gain', '7000', 'Inventory Adjustment Gain' UNION ALL
+        SELECT 'inventory', 'adjustment_loss', '8000', 'Inventory Adjustment Loss' UNION ALL
+        SELECT 'cashbank', 'cash_bank', '1100', 'Cash and Bank'
+    ) p
+) d ON d.company_id = gp.company_id AND d.module_code = gp.module_code AND d.posting_key = gp.posting_key
+SET gp.account_no = d.account_no,
+    gp.description = COALESCE(NULLIF(gp.description, ''), d.description),
+    gp.is_active = 1,
+    gp.updated_at = NOW()
+WHERE gp.account_no IS NULL OR TRIM(gp.account_no) = '';
+
+-- =========================================================
+-- 8. Warehouse helper index, safe with existing foreign keys
+-- Mirrors FixWarehouseUniqueScope migration
 -- =========================================================
 SET @has_wh_idx := (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='warehouses' AND INDEX_NAME='idx_warehouses_company_site_dept_code');
 SET @sql := IF(@has_wh_idx=0,'ALTER TABLE warehouses ADD INDEX idx_warehouses_company_site_dept_code (company_id, site_id, department_id, code)','SELECT ''warehouse helper index exists'' AS info');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- =========================================================
--- 8. Menu route finalization
+-- 9. Menu route finalization
 -- =========================================================
 UPDATE menu_items SET route = 'cash-bank/accounts', updated_at = NOW() WHERE label = 'Cash Bank ID';
 UPDATE menu_items SET route = 'cash-bank/currencies', updated_at = NOW() WHERE label = 'Currency';
@@ -343,16 +438,16 @@ UPDATE menu_items SET route = 'production/mrp', updated_at = NOW() WHERE label =
 UPDATE menu_items SET route = 'production/planned-released', updated_at = NOW() WHERE label = 'Planned Released';
 
 -- =========================================================
--- 9. Final check
+-- 10. Final check
 -- =========================================================
 SELECT DATABASE() AS selected_database;
 
-SELECT 'ERP_CORE_REQUIRED_TABLES_READY' AS check_name, COUNT(*) AS ready_count, 35 AS expected_count
+SELECT 'ERP_CORE_REQUIRED_TABLES_READY' AS check_name, COUNT(*) AS ready_count, 36 AS expected_count
 FROM information_schema.TABLES
 WHERE TABLE_SCHEMA = DATABASE()
   AND TABLE_NAME IN (
     'companies','sites','departments','warehouses','locations','items','uoms',
-    'transaction_codes','document_number_sequences','chart_accounts','gl_entries','gl_entry_lines',
+    'transaction_codes','document_number_sequences','chart_accounts','gl_entries','gl_entry_lines','gl_posting_profiles',
     'inventory_stock_balances','cash_bank_accounts','cash_bank_entries','currencies','currency_rates','employees',
     'purchase_orders','purchase_order_lines','purchase_receipts','sales_orders','sales_order_lines',
     'production_boms','production_bom_lines','production_forecasts','production_mrp_runs','production_mrp_lines','production_mrp_planned_orders',
@@ -368,3 +463,9 @@ WHERE TABLE_SCHEMA = DATABASE()
 SELECT 'DOCUMENT_NUMBERING_REQUIRED_CODES_READY' AS check_name, COUNT(*) AS ready_count, 7 AS expected_count
 FROM transaction_codes
 WHERE code IN ('PO','PR','SO','SD','SI','PI','JV') AND COALESCE(is_active,1) = 1;
+
+SELECT 'GL_POSTING_PROFILE_DEFAULTS_READY' AS check_name, COUNT(*) AS ready_count, 14 AS expected_count
+FROM gl_posting_profiles
+WHERE module_code IN ('ap','ar','sales','inventory','cashbank')
+  AND posting_key IN ('payable','grni','manual_expense','inventory','input_vat','receivable','sales_revenue','output_vat','cogs','adjustment_gain','adjustment_loss','cash_bank')
+  AND COALESCE(is_active,1) = 1;
