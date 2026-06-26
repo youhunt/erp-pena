@@ -64,11 +64,7 @@ class WarehouseModel extends Model
             throw new RuntimeException('Department master table does not exist.');
         }
 
-        $department = $db->table('departments')
-            ->where('id', (int) $data['department_id'])
-            ->get()
-            ->getRowArray();
-
+        $department = $db->table('departments')->where('id', (int) $data['department_id'])->get()->getRowArray();
         if ($department === null) {
             throw new RuntimeException('Selected department is not valid.');
         }
@@ -110,6 +106,9 @@ class WarehouseModel extends Model
         if (array_key_exists('site_id', $data) && $db->fieldExists('site_id', $this->table)) {
             empty($data['site_id']) ? $builder->where('site_id', null) : $builder->where('site_id', (int) $data['site_id']);
         }
+        if (array_key_exists('department_id', $data) && $db->fieldExists('department_id', $this->table)) {
+            empty($data['department_id']) ? $builder->where('department_id', null) : $builder->where('department_id', (int) $data['department_id']);
+        }
         $id = $payload['id'] ?? null;
         if (is_array($id)) {
             $id = reset($id);
@@ -118,7 +117,7 @@ class WarehouseModel extends Model
             $builder->where('id !=', (int) $id);
         }
         if ($builder->countAllResults() > 0) {
-            throw new RuntimeException('Duplicate warehouse code: ' . $code);
+            throw new RuntimeException('Duplicate warehouse code in this scope: ' . $code);
         }
         return $payload;
     }
