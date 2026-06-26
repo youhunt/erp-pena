@@ -153,6 +153,9 @@ $itemDisplay = static function (array $line): array {
         </div>
     </div>
 </form>
+<?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const warehouse = document.getElementById('receiptWarehouse');
