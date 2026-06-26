@@ -3,6 +3,7 @@
 <?= $this->section('content') ?>
 <?php
 $status = (string) ($order['document_status'] ?? $order['status'] ?? 'draft');
+$poNo = trim((string) ($order['po_no'] ?? '-'));
 $hasReceivedLine = false;
 foreach ($lines as $line) {
     if ((float) ($line['qty_received'] ?? 0) > 0) {
@@ -16,6 +17,42 @@ $discountPercent = (float) ($order['discount_percent'] ?? 0);
 $discountPercentAmount = round($subtotal * $discountPercent / 100, 2);
 $manualDiscountAmount = (float) ($order['discount_amount'] ?? 0);
 $totalDiscountAmount = round($discountPercentAmount + $manualDiscountAmount, 2);
+$db = \Config\Database::connect();
+$formatCodeName = static function (?string $code, ?string $name): string {
+    $code = trim((string) $code);
+    $name = trim((string) $name);
+    if ($code !== '' && $name !== '') {
+        return $code . ' - ' . $name;
+    }
+    return $code !== '' ? $code : ($name !== '' ? $name : '-');
+};
+$masterDisplay = static function (string $table, mixed $id, mixed $storedValue, string $codeField = 'code', string $nameField = 'name') use ($db, $formatCodeName): string {
+    $storedValue = trim((string) ($storedValue ?? ''));
+    $id = (int) ($id ?? 0);
+
+    if ($db->tableExists($table)) {
+        $row = null;
+        if ($id > 0) {
+            $row = $db->table($table)->where('id', $id)->get(1)->getRowArray();
+        }
+        if ($row === null && $storedValue !== '' && ! is_numeric($storedValue) && $db->fieldExists($codeField, $table)) {
+            $row = $db->table($table)->where($codeField, $storedValue)->get(1)->getRowArray();
+        }
+        if ($row !== null) {
+            return $formatCodeName((string) ($row[$codeField] ?? ''), (string) ($row[$nameField] ?? ''));
+        }
+    }
+
+    if ($storedValue !== '' && ! is_numeric($storedValue)) {
+        return $storedValue;
+    }
+    return $id > 0 ? '#' . $id : '-';
+};
+$supplierCode = trim((string) ($order['supplier_code'] ?? $order['supplier'] ?? ''));
+$supplierName = trim((string) ($order['supplier_name'] ?? ''));
+$supplierDisplay = $formatCodeName($supplierCode, $supplierName);
+$companyDisplay = $masterDisplay('companies', $order['company_id'] ?? null, $order['company'] ?? null, 'code', 'name');
+$siteDisplay = $masterDisplay('sites', $order['site_id'] ?? null, $order['site'] ?? null, 'code', 'name');
 $itemDisplay = static function (array $line): array {
     $code = trim((string) ($line['item_code'] ?? $line['item'] ?? $line['item_no'] ?? ''));
     $name = trim((string) ($line['item_name'] ?? $line['description'] ?? ''));
@@ -33,24 +70,24 @@ $itemDisplay = static function (array $line): array {
                 <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
                     <div>
                         <h4 class="card-title mb-1">Purchase Order</h4>
-                        <p class="text-muted mb-0"><?= esc($order['po_no']) ?></p>
+                        <p class="text-muted mb-0 font-monospace"><?= esc($poNo) ?></p>
                     </div>
                     <span class="badge bg-<?= match ($status) { 'draft' => 'secondary', 'submitted' => 'info', 'approved' => 'success', 'partial_received' => 'warning', 'received' => 'primary', 'closed' => 'dark', 'cancelled' => 'danger', default => 'secondary' } ?>"><?= esc($status) ?></span>
                 </div>
 
                 <table class="table table-sm mb-0">
                     <tbody>
-                        <tr><th>PO No</th><td><?= esc($order['po_no']) ?></td></tr>
+                        <tr><th>PO No</th><td class="font-monospace"><?= esc($poNo) ?></td></tr>
                         <tr><th>Date</th><td><?= esc($order['po_date']) ?></td></tr>
                         <tr><th>Delivery</th><td><?= esc($order['delivery_date'] ?? '-') ?></td></tr>
                         <tr><th>Arrive</th><td><?= esc($order['arrive_date'] ?? '-') ?></td></tr>
-                        <tr><th>Supplier</th><td><?= esc(($order['supplier_code'] ?? $order['supplier'] ?? '-') . ' ' . ($order['supplier_name'] ?? '')) ?></td></tr>
+                        <tr><th>Supplier</th><td><?= esc($supplierDisplay) ?></td></tr>
                         <tr><th>Terms</th><td><?= esc($order['terms_code'] ?? '-') ?></td></tr>
                         <tr><th>Currency</th><td><?= esc($order['currency_code']) ?></td></tr>
                         <tr><th>VAT Code</th><td><?= esc($order['vat_code'] ?? '-') ?></td></tr>
                         <tr><th>WHT Code</th><td><?= esc($order['wht_code'] ?? '-') ?></td></tr>
-                        <tr><th>Company</th><td><?= esc($order['company'] ?? $order['company_id']) ?></td></tr>
-                        <tr><th>Site</th><td><?= esc($order['site'] ?? $order['site_id'] ?? '-') ?></td></tr>
+                        <tr><th>Company</th><td><?= esc($companyDisplay) ?></td></tr>
+                        <tr><th>Site</th><td><?= esc($siteDisplay) ?></td></tr>
                         <tr><th>Submitted</th><td><?= esc($order['submitted_at'] ?? '-') ?></td></tr>
                         <tr><th>Approved</th><td><?= esc($order['approved_at'] ?? '-') ?></td></tr>
                     </tbody>
