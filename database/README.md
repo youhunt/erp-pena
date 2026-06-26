@@ -24,11 +24,23 @@ app/Database/Seeds
 
 Gunakan ini kalau tidak bisa menjalankan CLI.
 
-Jalankan satu file ini saja:
+Langkahnya:
+
+1. Buka phpMyAdmin.
+2. Klik/pilih database ERP dari sidebar kiri.
+3. Jalankan satu file ini saja:
 
 ```text
 database/sql/00_RUN_THIS_ON_HOSTING.sql
 ```
+
+File SQL hosting sengaja **tidak memakai** perintah seperti:
+
+```sql
+USE `dberp_pena`;
+```
+
+Alasannya: nama database hosting bisa berbeda-beda. Script akan memakai database yang sedang dipilih di phpMyAdmin melalui `DATABASE()`.
 
 Setelah itu, kalau ada kebutuhan data fix khusus testing/demo, baru jalankan:
 
@@ -47,4 +59,20 @@ Migration + Seeder = utama
 Database SQL       = fallback hosting
 ```
 
-Jangan menjalankan file SQL patch lama satu per satu kecuali ada instruksi khusus.
+Jangan menjalankan file SQL patch lama satu per satu.
+
+## Kalau setelah git pull file lama masih kelihatan
+
+Kemungkinan file tersebut adalah file lokal yang sudah tidak dilacak Git. Cek dengan:
+
+```bash
+git status --short database
+```
+
+Kalau muncul file lama sebagai untracked dan memang tidak dibutuhkan lagi, bersihkan dengan:
+
+```bash
+git clean -fd database/hosting
+```
+
+Atau hapus manual folder `database/hosting` dari komputer lokal.
