@@ -205,6 +205,7 @@ class PaymentController extends BaseController
 
         $accountType = strtolower($method) === 'cash' ? 'cash' : 'bank';
         $openingBalance = max(0, round($minimumBalance, 2));
+        $glAccountNo = $accountType === 'cash' ? '1110' : '1120';
 
         $model->insert([
             'company_id' => $companyId,
@@ -213,7 +214,7 @@ class PaymentController extends BaseController
             'cash_bank_name' => $code . ' - Auto Created',
             'account_type' => $accountType,
             'currency_code' => 'IDR',
-            'gl_account_no' => null,
+            'gl_account_no' => $glAccountNo,
             'opening_balance' => $openingBalance,
             'current_balance' => $openingBalance,
             'is_active' => 1,
