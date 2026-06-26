@@ -10,16 +10,17 @@ Memastikan alur berikut berjalan end-to-end dengan urutan master data yang benar
 2. Setup COA
 3. Setup GL Posting Profile
 4. Setup UOM
-5. Setup Warehouse + Location
-6. Setup Item Master
-7. Create PO baru pakai item valid
-8. Submit PO
-9. Approve PO
-10. Receive PO
-11. Cek Stock Balance
-12. Cek GL Entry
+5. Setup Department
+6. Setup Warehouse + Location
+7. Setup Item Master
+8. Create PO baru pakai item valid
+9. Submit PO
+10. Approve PO
+11. Receive PO
+12. Cek Stock Balance
+13. Cek GL Entry
 
-> Catatan penting: Warehouse, Location, dan UOM harus disiapkan sebelum Item Master karena form Item Master membutuhkan lookup Stock UoM, Purchase UoM, dan Warehouse.
+> Catatan penting: Department harus dibuat sebelum Warehouse. Warehouse harus dibuat sebelum Location. UOM, Warehouse, dan Location harus tersedia sebelum Item Master karena form Item Master membutuhkan lookup Stock UoM, Purchase UoM, dan Warehouse.
 
 ## Data Testing Standar
 
@@ -37,6 +38,8 @@ Gunakan data ini supaya hasil test konsisten.
 | COA | AP | 2100 - Accounts Payable |
 | COA | GRNI | 2300 - Goods Received Not Invoiced |
 | UOM | Stock UoM | PCS - Pieces |
+| Department | Code | DPT-E2E |
+| Department | Name | Department E2E |
 | Warehouse | Code | WH-E2E |
 | Warehouse | Name | Warehouse E2E |
 | Location | Code | LOC-E2E |
@@ -298,7 +301,62 @@ Expected minimal ada `PCS`.
 
 ---
 
-# Test Case E2E-005: Setup Warehouse + Location
+# Test Case E2E-005: Setup Department
+
+## Kenapa Department sebelum Warehouse?
+
+Warehouse memiliki relasi ke Department. Jadi Department harus tersedia dulu supaya saat membuat Warehouse pilihan department tidak kosong dan scope Warehouse benar.
+
+## Langkah
+
+Buka menu:
+
+```text
+Setup > Master Data > Departments
+```
+
+Buat department:
+
+| Field | Value |
+|---|---|
+| Code | DPT-E2E |
+| Name | Department E2E |
+| Company | TST |
+| Site | TST01 jika field tersedia |
+| Active | Yes |
+
+## Expected Result
+
+- Department tersimpan.
+- Department terhubung ke company `TST`.
+- Jika field site tersedia, department terhubung ke site `TST01`.
+- Department muncul di lookup Warehouse.
+
+## Query Verifikasi
+
+```sql
+SELECT d.id, d.code, d.name, d.company_id, d.site_id, d.is_active
+FROM departments d
+JOIN companies c ON c.id = d.company_id
+WHERE c.code = 'TST'
+  AND d.code = 'DPT-E2E';
+```
+
+Jika tabel `departments` belum punya kolom `site_id`, gunakan query aman ini:
+
+```sql
+SELECT d.id, d.code, d.name, d.company_id, d.is_active
+FROM departments d
+JOIN companies c ON c.id = d.company_id
+WHERE c.code = 'TST'
+  AND d.code = 'DPT-E2E';
+```
+
+Expected 1 row.
+
+---
+
+# Test Case E2E-006: Setup Warehouse + Location
 
 ## Kenapa Warehouse + Location sebelum Item Master?
 
@@ -320,7 +378,7 @@ Buat warehouse:
 | Name | Warehouse E2E |
 | Company | TST |
 | Site | TST01 |
-| Department | pilih department valid jika required |
+| Department | DPT-E2E |
 | Active | Yes |
 
 ## Langkah Location
@@ -345,14 +403,16 @@ Buat location:
 ## Expected Result
 
 - Warehouse tersimpan.
+- Warehouse terhubung ke department `DPT-E2E`.
 - Location tersimpan dan link ke warehouse.
 - Warehouse code boleh sama jika department berbeda, tapi dalam department yang sama tetap tidak boleh duplicate.
 
 ## Query Verifikasi
 
 ```sql
-SELECT w.id, w.code, w.name, w.company_id, w.site_id, w.department_id, w.is_active
+SELECT w.id, w.code, w.name, w.company_id, w.site_id, w.department_id, d.code AS department_code, w.is_active
 FROM warehouses w
+LEFT JOIN departments d ON d.id = w.department_id
 WHERE w.code = 'WH-E2E';
 
 SELECT l.id, l.code, l.name, l.warehouse_id, w.code AS warehouse_code, l.is_active
@@ -364,7 +424,7 @@ WHERE w.code = 'WH-E2E'
 
 ---
 
-# Test Case E2E-006: Setup Item Master
+# Test Case E2E-007: Setup Item Master
 
 ## Langkah
 
@@ -417,7 +477,7 @@ Expected 1 row.
 
 ---
 
-# Test Case E2E-007: Create PO Baru Pakai Item Valid
+# Test Case E2E-008: Create PO Baru Pakai Item Valid
 
 ## Langkah
 
@@ -478,7 +538,7 @@ WHERE po.po_no = 'PO_NO_HASIL_TEST';
 
 ---
 
-# Test Case E2E-008: Submit PO
+# Test Case E2E-009: Submit PO
 
 ## Langkah
 
@@ -508,7 +568,7 @@ status/document_status = submitted
 
 ---
 
-# Test Case E2E-009: Approve PO
+# Test Case E2E-010: Approve PO
 
 ## Langkah
 
@@ -538,7 +598,7 @@ status/document_status = approved
 
 ---
 
-# Test Case E2E-010: Receive PO
+# Test Case E2E-011: Receive PO
 
 ## Langkah
 
@@ -581,7 +641,7 @@ WHERE po.po_no = 'PO_NO_HASIL_TEST';
 
 ---
 
-# Test Case E2E-011: Cek Stock Balance
+# Test Case E2E-012: Cek Stock Balance
 
 ## Langkah
 
@@ -641,7 +701,7 @@ reference_no = receipt number
 
 ---
 
-# Test Case E2E-012: Cek GL Entry
+# Test Case E2E-013: Cek GL Entry
 
 ## Langkah
 
@@ -723,7 +783,7 @@ diff = 0
 
 ---
 
-# Negative Test Case E2E-013: PO Receipt dengan Item Tidak Ada di Item Master
+# Negative Test Case E2E-014: PO Receipt dengan Item Tidak Ada di Item Master
 
 ## Tujuan
 
@@ -751,7 +811,7 @@ Ini behavior yang benar. ERP tidak boleh posting stock dan GL dari item yang tid
 
 ---
 
-# Negative Test Case E2E-014: GL Posting Profile Tidak Lengkap
+# Negative Test Case E2E-015: GL Posting Profile Tidak Lengkap
 
 ## Tujuan
 
@@ -792,16 +852,17 @@ Gunakan tabel ini untuk mencatat hasil UAT.
 | E2E-002 Setup COA |  |  |  |  |
 | E2E-003 GL Posting Profile |  |  |  |  |
 | E2E-004 Setup UOM |  |  |  |  |
-| E2E-005 Warehouse + Location |  |  |  |  |
-| E2E-006 Item Master |  |  |  |  |
-| E2E-007 Create PO |  |  |  |  |
-| E2E-008 Submit PO |  |  |  |  |
-| E2E-009 Approve PO |  |  |  |  |
-| E2E-010 Receive PO |  |  |  |  |
-| E2E-011 Stock Balance |  |  |  |  |
-| E2E-012 GL Entry |  |  |  |  |
-| E2E-013 Negative Item Not Found |  |  |  |  |
-| E2E-014 Negative Posting Profile |  |  |  |  |
+| E2E-005 Setup Department |  |  |  |  |
+| E2E-006 Warehouse + Location |  |  |  |  |
+| E2E-007 Item Master |  |  |  |  |
+| E2E-008 Create PO |  |  |  |  |
+| E2E-009 Submit PO |  |  |  |  |
+| E2E-010 Approve PO |  |  |  |  |
+| E2E-011 Receive PO |  |  |  |  |
+| E2E-012 Stock Balance |  |  |  |  |
+| E2E-013 GL Entry |  |  |  |  |
+| E2E-014 Negative Item Not Found |  |  |  |  |
+| E2E-015 Negative Posting Profile |  |  |  |  |
 
 ## Kriteria Lulus E2E Core
 
@@ -814,4 +875,6 @@ Alur dianggap lulus jika:
 5. GL entry terbentuk.
 6. GL line balanced, debit sama dengan credit.
 7. Akun Inventory dan GRNI sesuai Posting Profile.
-8. UOM, Warehouse, dan Location tersedia sebelum Item Master dibuat.
+8. UOM tersedia sebelum Item Master dibuat.
+9. Department tersedia sebelum Warehouse dibuat.
+10. Warehouse dan Location tersedia sebelum Item Master dan Receipt.
