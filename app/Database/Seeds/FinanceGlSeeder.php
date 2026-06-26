@@ -125,7 +125,7 @@ class FinanceGlSeeder extends Seeder
             ['inventory', 'inventory', '1300', 'Inventory'],
             ['inventory', 'adjustment_gain', '7000', 'Inventory Adjustment Gain'],
             ['inventory', 'adjustment_loss', '8000', 'Inventory Adjustment Loss'],
-            ['cashbank', 'cash_bank', '1100', 'Cash and Bank'],
+            ['cashbank', 'cash_bank', '1120', 'Default bank account'],
             ['pos', 'cash_receipt', '1110', 'Default POS cash receipt account'],
             ['pos', 'sales_revenue', '4100', 'Default POS sales revenue account'],
             ['pos', 'output_vat', '2200', 'Default POS output VAT account'],
