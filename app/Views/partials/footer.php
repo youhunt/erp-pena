@@ -19,4 +19,5 @@
 <script src="<?= base_url('assets/skote/libs/node-waves/waves.min.js') ?>"></script>
 <script src="<?= base_url('assets/skote/libs/select2/js/select2.min.js') ?>"></script>
 <script src="<?= base_url('assets/pena/select2-init.js') ?>"></script>
+<script src="<?= base_url('assets/pena/company-currency-select2.js') ?>"></script>
 <script src="<?= base_url('assets/skote/js/app.js') ?>"></script>
