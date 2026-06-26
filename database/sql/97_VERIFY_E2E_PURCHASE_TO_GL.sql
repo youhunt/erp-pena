@@ -5,9 +5,10 @@
 
 SET @po_no := 'PO_NO_HASIL_TEST';
 SET @item_code := 'ITEM-E2E-001';
+SET @supplier_code := 'SUP-E2E';
 SET @db := DATABASE();
 
-SELECT @db AS selected_database, @po_no AS tested_po_no, @item_code AS tested_item_code;
+SELECT @db AS selected_database, @po_no AS tested_po_no, @item_code AS tested_item_code, @supplier_code AS tested_supplier_code;
 
 -- =========================================================
 -- 1. Company / Site basic check
@@ -87,10 +88,18 @@ FROM items
 WHERE item_code = @item_code;
 
 -- =========================================================
--- 8. PO header / lines check
+-- 8. Supplier Master check
+-- =========================================================
+SELECT 'SUPPLIER_MASTER' AS check_name,
+       id, company_id, site_id, supplier, supplierna, is_active
+FROM suppliers
+WHERE supplier = @supplier_code;
+
+-- =========================================================
+-- 9. PO header / lines check
 -- =========================================================
 SELECT 'PO_HEADER' AS check_name,
-       id, po_no, document_status, status, total_amount, submitted_at, approved_at
+       id, po_no, supplier, supplier_code, supplier_name, document_status, status, total_amount, submitted_at, approved_at
 FROM purchase_orders
 WHERE po_no = @po_no;
 
@@ -102,7 +111,7 @@ JOIN purchase_orders po ON po.id = pol.purchase_order_id
 WHERE po.po_no = @po_no;
 
 -- =========================================================
--- 9. Receipt check
+-- 10. Receipt check
 -- =========================================================
 SELECT 'RECEIPT_HEADER' AS check_name,
        pr.id, pr.receipt_no, pr.purchase_order_id, pr.status, pr.receipt_date
@@ -112,7 +121,7 @@ WHERE po.po_no = @po_no
 ORDER BY pr.id DESC;
 
 -- =========================================================
--- 10. Stock balance / movement check
+-- 11. Stock balance / movement check
 -- =========================================================
 SELECT 'STOCK_BALANCE' AS check_name,
        company_id, site_id, warehouse_id, location_id, item_code, batch_no,
@@ -128,7 +137,7 @@ WHERE item_code = @item_code
 ORDER BY id DESC;
 
 -- =========================================================
--- 11. GL header / lines check
+-- 12. GL header / lines check
 -- =========================================================
 SELECT 'GL_HEADER' AS check_name,
        ge.id, ge.journal_no, ge.journal_date, ge.source_module, ge.source_type, ge.source_no, ge.description
@@ -171,7 +180,7 @@ WHERE ge.source_no IN (
 GROUP BY ge.journal_no;
 
 -- =========================================================
--- 12. Summary indicators
+-- 13. Summary indicators
 -- =========================================================
 SELECT 'SUMMARY_MASTER_READY' AS check_name,
        (
@@ -180,9 +189,17 @@ SELECT 'SUMMARY_MASTER_READY' AS check_name,
            (SELECT COUNT(*) FROM departments d JOIN companies c ON c.id = d.company_id WHERE c.code = 'TST' AND d.code = 'DPT-E2E') +
            (SELECT COUNT(*) FROM warehouses WHERE code = 'WH-E2E') +
            (SELECT COUNT(*) FROM locations l JOIN warehouses w ON w.id = l.warehouse_id WHERE w.code = 'WH-E2E' AND l.code = 'LOC-E2E') +
-           (SELECT COUNT(*) FROM items WHERE item_code = @item_code)
+           (SELECT COUNT(*) FROM items WHERE item_code = @item_code) +
+           (SELECT COUNT(*) FROM suppliers WHERE supplier = @supplier_code)
        ) AS ok_count,
-       'Expected >= 6 master records ready' AS expected;
+       'Expected >= 7 master records ready' AS expected;
+
+SELECT 'SUMMARY_PO_HAS_SUPPLIER' AS check_name,
+       COUNT(*) AS ok_count,
+       'Expected >= 1 PO header with supplier SUP-E2E' AS expected
+FROM purchase_orders
+WHERE po_no = @po_no
+  AND (supplier = @supplier_code OR supplier_code = @supplier_code);
 
 SELECT 'SUMMARY_PO_RECEIVED' AS check_name,
        COUNT(*) AS ok_count,
