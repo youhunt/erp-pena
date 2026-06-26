@@ -1,8 +1,13 @@
 -- ERP PENA - OPTIONAL DATA FIXES
 -- Jalankan hanya kalau memang butuh memperbaiki data demo/testing tertentu.
 -- Jangan dijalankan sebagai setup awal database.
+--
+-- PENTING UNTUK PHPMYADMIN / CPANEL:
+-- Pilih database ERP terlebih dahulu dari sidebar kiri.
+-- File ini sengaja TIDAK memakai USE `nama_database` karena nama DB hosting bisa berbeda.
 
-USE `dberp_pena`;
+SET @selected_database := DATABASE();
+SELECT @selected_database AS selected_database;
 
 -- =========================================================
 -- A. Reset PO001 back to draft, only if it has no posted receipt
