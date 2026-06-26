@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Setup\CompanyBootstrapService;
 use CodeIgniter\Model;
 
 class CompanyModel extends Model
@@ -22,4 +23,23 @@ class CompanyModel extends Model
         'updated_by',
     ];
     protected $useTimestamps = true;
+    protected $afterInsert = ['runCoreDefaultsBootstrap'];
+    protected $afterUpdate = ['runCoreDefaultsBootstrap'];
+
+    protected function runCoreDefaultsBootstrap(array $data): array
+    {
+        $ids = $data['id'] ?? [];
+        if (! is_array($ids)) {
+            $ids = [$ids];
+        }
+
+        foreach ($ids as $id) {
+            $companyId = (int) $id;
+            if ($companyId > 0) {
+                (new CompanyBootstrapService())->bootstrapCompany($companyId);
+            }
+        }
+
+        return $data;
+    }
 }
