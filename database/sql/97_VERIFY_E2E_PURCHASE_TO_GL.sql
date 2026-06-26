@@ -42,19 +42,33 @@ WHERE gp.module_code IN ('ap','cashbank')
 ORDER BY gp.module_code, gp.posting_key;
 
 -- =========================================================
--- 4. Item Master check
+-- 4. UOM check
 -- =========================================================
-SELECT 'ITEM_MASTER' AS check_name,
-       id, company_id, site_id, item_code, item_name, item_type, stockuom, is_active
-FROM items
-WHERE item_code = @item_code;
+SELECT 'UOM_REQUIRED' AS check_name,
+       u.company_id, c.code AS company_code, u.code, u.name, u.is_active
+FROM uoms u
+JOIN companies c ON c.id = u.company_id
+WHERE c.code = 'TST'
+  AND u.code IN ('PCS','KG','MTR')
+ORDER BY u.code;
 
 -- =========================================================
--- 5. Warehouse / Location check
+-- 5. Department check
+-- =========================================================
+SELECT 'DEPARTMENT_DPT_E2E' AS check_name,
+       d.id, d.code, d.name, d.company_id, d.site_id, d.is_active
+FROM departments d
+JOIN companies c ON c.id = d.company_id
+WHERE c.code = 'TST'
+  AND d.code = 'DPT-E2E';
+
+-- =========================================================
+-- 6. Warehouse / Location check
 -- =========================================================
 SELECT 'WAREHOUSE_WH_E2E' AS check_name,
-       w.id, w.code, w.name, w.company_id, w.site_id, w.department_id, w.is_active
+       w.id, w.code, w.name, w.company_id, w.site_id, w.department_id, d.code AS department_code, w.is_active
 FROM warehouses w
+LEFT JOIN departments d ON d.id = w.department_id
 WHERE w.code = 'WH-E2E';
 
 SELECT 'LOCATION_LOC_E2E' AS check_name,
@@ -65,7 +79,15 @@ WHERE w.code = 'WH-E2E'
   AND l.code = 'LOC-E2E';
 
 -- =========================================================
--- 6. PO header / lines check
+-- 7. Item Master check
+-- =========================================================
+SELECT 'ITEM_MASTER' AS check_name,
+       id, company_id, site_id, item_code, item_name, item_type, stockuom, is_active
+FROM items
+WHERE item_code = @item_code;
+
+-- =========================================================
+-- 8. PO header / lines check
 -- =========================================================
 SELECT 'PO_HEADER' AS check_name,
        id, po_no, document_status, status, total_amount, submitted_at, approved_at
@@ -80,7 +102,7 @@ JOIN purchase_orders po ON po.id = pol.purchase_order_id
 WHERE po.po_no = @po_no;
 
 -- =========================================================
--- 7. Receipt check
+-- 9. Receipt check
 -- =========================================================
 SELECT 'RECEIPT_HEADER' AS check_name,
        pr.id, pr.receipt_no, pr.purchase_order_id, pr.status, pr.receipt_date
@@ -90,7 +112,7 @@ WHERE po.po_no = @po_no
 ORDER BY pr.id DESC;
 
 -- =========================================================
--- 8. Stock balance / movement check
+-- 10. Stock balance / movement check
 -- =========================================================
 SELECT 'STOCK_BALANCE' AS check_name,
        company_id, site_id, warehouse_id, location_id, item_code, batch_no,
@@ -106,7 +128,7 @@ WHERE item_code = @item_code
 ORDER BY id DESC;
 
 -- =========================================================
--- 9. GL header / lines check
+-- 11. GL header / lines check
 -- =========================================================
 SELECT 'GL_HEADER' AS check_name,
        ge.id, ge.journal_no, ge.journal_date, ge.source_module, ge.source_type, ge.source_no, ge.description
@@ -149,8 +171,19 @@ WHERE ge.source_no IN (
 GROUP BY ge.journal_no;
 
 -- =========================================================
--- 10. Summary indicators
+-- 12. Summary indicators
 -- =========================================================
+SELECT 'SUMMARY_MASTER_READY' AS check_name,
+       (
+           (SELECT COUNT(*) FROM companies WHERE code = 'TST') +
+           (SELECT COUNT(*) FROM sites s JOIN companies c ON c.id = s.company_id WHERE c.code = 'TST' AND s.code = 'TST01') +
+           (SELECT COUNT(*) FROM departments d JOIN companies c ON c.id = d.company_id WHERE c.code = 'TST' AND d.code = 'DPT-E2E') +
+           (SELECT COUNT(*) FROM warehouses WHERE code = 'WH-E2E') +
+           (SELECT COUNT(*) FROM locations l JOIN warehouses w ON w.id = l.warehouse_id WHERE w.code = 'WH-E2E' AND l.code = 'LOC-E2E') +
+           (SELECT COUNT(*) FROM items WHERE item_code = @item_code)
+       ) AS ok_count,
+       'Expected >= 6 master records ready' AS expected;
+
 SELECT 'SUMMARY_PO_RECEIVED' AS check_name,
        COUNT(*) AS ok_count,
        'Expected >= 1 and qty_outstanding = 0 for full receipt' AS expected
