@@ -4,19 +4,22 @@ Dokumen ini dipakai untuk mengetes alur inti ERP PENA dari setup master sampai j
 
 ## Tujuan Testing
 
-Memastikan alur berikut berjalan end-to-end:
+Memastikan alur berikut berjalan end-to-end dengan urutan master data yang benar:
 
 1. Setup Company / Site
 2. Setup COA
 3. Setup GL Posting Profile
-4. Setup Item Master
+4. Setup UOM
 5. Setup Warehouse + Location
-6. Create PO baru pakai item valid
-7. Submit PO
-8. Approve PO
-9. Receive PO
-10. Cek Stock Balance
-11. Cek GL Entry
+6. Setup Item Master
+7. Create PO baru pakai item valid
+8. Submit PO
+9. Approve PO
+10. Receive PO
+11. Cek Stock Balance
+12. Cek GL Entry
+
+> Catatan penting: Warehouse, Location, dan UOM harus disiapkan sebelum Item Master karena form Item Master membutuhkan lookup Stock UoM, Purchase UoM, dan Warehouse.
 
 ## Data Testing Standar
 
@@ -26,19 +29,22 @@ Gunakan data ini supaya hasil test konsisten.
 |---|---|---|
 | Company | Code | TST |
 | Company | Name | Test Company ERP |
+| Company | Base Currency | IDR |
 | Site | Code | TST01 |
 | Site | Name | Test Site 01 |
-| COA | Inventory | 1300 - Inventory |
-| COA | GRNI | 2300 - Goods Received Not Invoiced |
-| COA | AP | 2100 - Accounts Payable |
 | COA | Cash Bank | 1100 - Cash and Bank |
-| Item | Item Code | ITEM-E2E-001 |
-| Item | Item Name | Item E2E Test 001 |
-| Item | UOM | PCS |
+| COA | Inventory | 1300 - Inventory |
+| COA | AP | 2100 - Accounts Payable |
+| COA | GRNI | 2300 - Goods Received Not Invoiced |
+| UOM | Stock UoM | PCS - Pieces |
 | Warehouse | Code | WH-E2E |
 | Warehouse | Name | Warehouse E2E |
 | Location | Code | LOC-E2E |
 | Location | Name | Location E2E |
+| Item | Item Code | ITEM-E2E-001 |
+| Item | Item Name | Item E2E Test 001 |
+| Item | Stock UoM | PCS |
+| Item | Purchase UoM | PCS |
 | Supplier | Code | SUP-E2E |
 | Supplier | Name | Supplier E2E Test |
 | PO Qty | Qty | 10 PCS |
@@ -89,23 +95,25 @@ Expected:
 
 ## Langkah
 
-1. Buka menu Setup / Master Data / Company.
+1. Buka menu `Setup > Master Data > Companies`.
 2. Buat company:
    - Code: `TST`
    - Name: `Test Company ERP`
-   - Base Currency: `IDR` jika field tersedia.
+   - Base Currency: pilih `IDR` dari Select2.
    - Status: Active.
-3. Buka Setup / Master Data / Site.
+3. Buka `Setup > Master Data > Sites`.
 4. Buat site:
    - Company: `TST`
    - Code: `TST01`
    - Name: `Test Site 01`
    - Status: Active.
+5. Pastikan header tenant aktif sudah memilih company `TST` dan site `TST01`.
 
 ## Expected Result
 
 - Company berhasil disimpan.
 - Site berhasil disimpan dan terhubung ke company.
+- Base currency tersimpan sebagai `IDR`.
 - Tidak muncul duplicate error.
 
 ## Query Verifikasi
@@ -126,7 +134,29 @@ WHERE c.code = 'TST'
 
 # Test Case E2E-002: Setup COA
 
-## Langkah
+## Cara Utama via GL Utilities
+
+Buka menu:
+
+```text
+GL > GL Utilities
+```
+
+Klik:
+
+```text
+Initialize Defaults
+```
+
+Fungsi ini boleh dipakai untuk membuat default:
+
+```text
+GL Book
+Chart of Account
+Posting Profile
+```
+
+## Cara Manual jika diperlukan
 
 Buka menu:
 
@@ -143,11 +173,9 @@ Pastikan akun berikut ada dan active:
 | 2100 | Accounts Payable | Credit |
 | 2300 | Goods Received Not Invoiced | Credit |
 
-Jika belum ada, buat manual dari menu COA.
-
 ## Expected Result
 
-- Semua akun tersimpan.
+- Semua akun tersedia.
 - Semua akun active.
 - Account number tidak duplicate.
 
@@ -168,7 +196,7 @@ Expected minimal 4 row.
 
 ## Langkah
 
-Buka menu:
+Setelah `GL > GL Utilities > Initialize Defaults`, buka menu:
 
 ```text
 GL > Posting Profile
@@ -214,48 +242,67 @@ Expected:
 
 ---
 
-# Test Case E2E-004: Setup Item Master
+# Test Case E2E-004: Setup UOM
+
+## Kenapa UOM sebelum Item Master?
+
+Form Item Master membutuhkan lookup:
+
+```text
+Stock UoM
+Purchase UoM
+```
+
+Jadi UOM harus tersedia dulu sebelum item dibuat.
 
 ## Langkah
 
 Buka menu:
 
 ```text
-Setup > Master Data > Items
+Setup > Master Data > Units of Measure
 ```
 
-Buat item:
+Pastikan minimal UOM berikut ada untuk company aktif `TST`:
 
-| Field | Value |
+| Code | Name |
 |---|---|
-| Item Code | ITEM-E2E-001 |
-| Item Name | Item E2E Test 001 |
-| Item Type | Purchased / Raw Material / Inventory Item |
-| Stock UOM | PCS |
-| Company | TST |
-| Site | TST01 jika field tersedia |
-| Active | Yes |
+| PCS | Pieces |
+| KG | Kilogram |
+| MTR | Meter |
+
+Jika kosong, jalankan:
+
+```bash
+php spark db:seed CoreFinanceSeeder
+php spark cache:clear
+```
 
 ## Expected Result
 
-- Item tersimpan.
-- `item_code` tidak kosong.
-- `stockuom` tidak kosong.
-- Item active.
+- UOM `PCS` tersedia.
+- UOM lookup bisa dipakai di Item Master.
+- UOM dibuat per company, bukan per site.
 
 ## Query Verifikasi
 
 ```sql
-SELECT id, company_id, site_id, item_code, item_name, item_type, stockuom, is_active
-FROM items
-WHERE item_code = 'ITEM-E2E-001';
+SELECT u.company_id, c.code AS company_code, u.code, u.name, u.is_active
+FROM uoms u
+JOIN companies c ON c.id = u.company_id
+WHERE c.code = 'TST'
+ORDER BY u.code;
 ```
 
-Expected 1 row.
+Expected minimal ada `PCS`.
 
 ---
 
 # Test Case E2E-005: Setup Warehouse + Location
+
+## Kenapa Warehouse + Location sebelum Item Master?
+
+Pada form Item Master terdapat field `Warehouse`. Karena itu warehouse dan location perlu disiapkan lebih dulu agar pilihan lookup tersedia.
 
 ## Langkah Warehouse
 
@@ -317,7 +364,60 @@ WHERE w.code = 'WH-E2E'
 
 ---
 
-# Test Case E2E-006: Create PO Baru Pakai Item Valid
+# Test Case E2E-006: Setup Item Master
+
+## Langkah
+
+Buka menu:
+
+```text
+Setup > Master Data > Items
+```
+
+Buat item:
+
+| Field | Value |
+|---|---|
+| Item Code | ITEM-E2E-001 |
+| Item Name | Item E2E Test 001 |
+| Item Type | Purchased / Raw Material / Inventory Item |
+| Stock UoM | PCS |
+| Purchase UoM | PCS |
+| Warehouse | WH-E2E jika field tersedia |
+| Company | TST |
+| Site | TST01 jika field tersedia |
+| Active | Yes |
+
+## Expected Result
+
+- Item tersimpan.
+- `item_code` tidak kosong.
+- `stockuom` tidak kosong.
+- `purchaseuom` atau field Purchase UoM terisi jika tersedia.
+- Warehouse/default warehouse terisi jika field tersedia.
+- Item active.
+
+## Query Verifikasi
+
+```sql
+SELECT id, company_id, site_id, item_code, item_name, item_type, stockuom, purchaseuom, warehouse, is_active
+FROM items
+WHERE item_code = 'ITEM-E2E-001';
+```
+
+Jika database belum punya kolom `purchaseuom` atau `warehouse`, gunakan query aman ini:
+
+```sql
+SELECT id, company_id, site_id, item_code, item_name, item_type, stockuom, is_active
+FROM items
+WHERE item_code = 'ITEM-E2E-001';
+```
+
+Expected 1 row.
+
+---
+
+# Test Case E2E-007: Create PO Baru Pakai Item Valid
 
 ## Langkah
 
@@ -378,7 +478,7 @@ WHERE po.po_no = 'PO_NO_HASIL_TEST';
 
 ---
 
-# Test Case E2E-007: Submit PO
+# Test Case E2E-008: Submit PO
 
 ## Langkah
 
@@ -408,7 +508,7 @@ status/document_status = submitted
 
 ---
 
-# Test Case E2E-008: Approve PO
+# Test Case E2E-009: Approve PO
 
 ## Langkah
 
@@ -438,7 +538,7 @@ status/document_status = approved
 
 ---
 
-# Test Case E2E-009: Receive PO
+# Test Case E2E-010: Receive PO
 
 ## Langkah
 
@@ -481,7 +581,7 @@ WHERE po.po_no = 'PO_NO_HASIL_TEST';
 
 ---
 
-# Test Case E2E-010: Cek Stock Balance
+# Test Case E2E-011: Cek Stock Balance
 
 ## Langkah
 
@@ -541,7 +641,7 @@ reference_no = receipt number
 
 ---
 
-# Test Case E2E-011: Cek GL Entry
+# Test Case E2E-012: Cek GL Entry
 
 ## Langkah
 
@@ -623,7 +723,7 @@ diff = 0
 
 ---
 
-# Negative Test Case E2E-012: PO Receipt dengan Item Tidak Ada di Item Master
+# Negative Test Case E2E-013: PO Receipt dengan Item Tidak Ada di Item Master
 
 ## Tujuan
 
@@ -651,7 +751,7 @@ Ini behavior yang benar. ERP tidak boleh posting stock dan GL dari item yang tid
 
 ---
 
-# Negative Test Case E2E-013: GL Posting Profile Tidak Lengkap
+# Negative Test Case E2E-014: GL Posting Profile Tidak Lengkap
 
 ## Tujuan
 
@@ -691,16 +791,17 @@ Gunakan tabel ini untuk mencatat hasil UAT.
 | E2E-001 Setup Company / Site |  |  |  |  |
 | E2E-002 Setup COA |  |  |  |  |
 | E2E-003 GL Posting Profile |  |  |  |  |
-| E2E-004 Item Master |  |  |  |  |
+| E2E-004 Setup UOM |  |  |  |  |
 | E2E-005 Warehouse + Location |  |  |  |  |
-| E2E-006 Create PO |  |  |  |  |
-| E2E-007 Submit PO |  |  |  |  |
-| E2E-008 Approve PO |  |  |  |  |
-| E2E-009 Receive PO |  |  |  |  |
-| E2E-010 Stock Balance |  |  |  |  |
-| E2E-011 GL Entry |  |  |  |  |
-| E2E-012 Negative Item Not Found |  |  |  |  |
-| E2E-013 Negative Posting Profile |  |  |  |  |
+| E2E-006 Item Master |  |  |  |  |
+| E2E-007 Create PO |  |  |  |  |
+| E2E-008 Submit PO |  |  |  |  |
+| E2E-009 Approve PO |  |  |  |  |
+| E2E-010 Receive PO |  |  |  |  |
+| E2E-011 Stock Balance |  |  |  |  |
+| E2E-012 GL Entry |  |  |  |  |
+| E2E-013 Negative Item Not Found |  |  |  |  |
+| E2E-014 Negative Posting Profile |  |  |  |  |
 
 ## Kriteria Lulus E2E Core
 
@@ -713,3 +814,4 @@ Alur dianggap lulus jika:
 5. GL entry terbentuk.
 6. GL line balanced, debit sama dengan credit.
 7. Akun Inventory dan GRNI sesuai Posting Profile.
+8. UOM, Warehouse, dan Location tersedia sebelum Item Master dibuat.
