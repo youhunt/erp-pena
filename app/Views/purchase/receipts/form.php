@@ -175,8 +175,38 @@ document.addEventListener('DOMContentLoaded', function () {
         return Number.isFinite(parsed) ? parsed : 0;
     }
 
-    function notifySelectChanged(select) {
+    function hasSelect2(select) {
+        return !!(
+            select
+            && window.jQuery
+            && window.jQuery.fn
+            && window.jQuery.fn.select2
+            && window.jQuery(select).data('select2')
+        );
+    }
+
+    function destroySelect2(select) {
+        if (hasSelect2(select)) {
+            window.jQuery(select).select2('destroy');
+        }
+    }
+
+    function initSelect2(select) {
+        if (!select || !window.jQuery || !window.jQuery.fn || !window.jQuery.fn.select2) return;
+        if (window.PenaSelect) {
+            window.PenaSelect.init(select.parentElement || document);
+            return;
+        }
+        if (!window.jQuery(select).data('select2')) {
+            window.jQuery(select).select2({ width: '100%' });
+        }
+    }
+
+    function notifySelectChanged(select, reinitSelect2) {
         if (!select) return;
+        if (reinitSelect2) {
+            initSelect2(select);
+        }
         select.dispatchEvent(new Event('change', { bubbles: true }));
         if (window.jQuery) {
             jQuery(select).trigger('change.select2').trigger('change');
@@ -205,6 +235,9 @@ document.addEventListener('DOMContentLoaded', function () {
         const warehouseId = warehouse.value;
         const selectedBefore = location.value || location.dataset.selectedLocationId || '';
         const matching = originalLocations.filter(item => warehouseId !== '' && item.warehouseId === warehouseId);
+        const wasEnhanced = hasSelect2(location);
+
+        destroySelect2(location);
 
         location.innerHTML = '';
         const placeholder = document.createElement('option');
@@ -223,7 +256,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const hasPrevious = matching.some(item => item.value === selectedBefore);
         location.value = hasPrevious ? selectedBefore : (matching[0] ? matching[0].value : '');
         location.dataset.selectedLocationId = location.value;
-        notifySelectChanged(location);
+        notifySelectChanged(location, wasEnhanced);
     }
 
     if (warehouse && location) {
