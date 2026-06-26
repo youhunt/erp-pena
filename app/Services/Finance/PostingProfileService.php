@@ -50,7 +50,8 @@ class PostingProfileService
                 'adjustment_loss' => '8000',
             ],
             'cashbank' => [
-                'cash_bank' => '1100',
+                // 1100 is a COA header/non-postable account. Use the postable bank account by default.
+                'cash_bank' => '1120',
             ],
         ];
     }
