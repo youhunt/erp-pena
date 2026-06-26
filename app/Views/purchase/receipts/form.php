@@ -161,6 +161,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const warehouse = document.getElementById('receiptWarehouse');
     const location = document.getElementById('receiptLocation');
     const totalReceiveNow = document.getElementById('totalReceiveNow');
+    const locationOptionsUrl = '<?= site_url('setup/options/locations') ?>';
     const originalLocations = location
         ? Array.from(location.options).filter(option => option.value !== '').map(option => ({
             value: option.value,
@@ -205,6 +206,70 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function setLocationOptions(options, selectedValue) {
+        if (!location) return;
+        const wasEnhanced = hasSelect2(location);
+
+        destroySelect2(location);
+        location.innerHTML = '';
+
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = options.length ? 'Select Location' : 'No location for selected warehouse';
+        location.appendChild(placeholder);
+
+        options.forEach(function (item) {
+            const option = document.createElement('option');
+            option.value = String(item.value || '');
+            option.textContent = String(item.label || item.text || item.value || '');
+            location.appendChild(option);
+        });
+
+        const fallback = options[0] ? String(options[0].value || '') : '';
+        const selectedExists = options.some(item => String(item.value || '') === String(selectedValue || ''));
+        location.value = selectedExists ? String(selectedValue) : fallback;
+        location.dataset.selectedLocationId = location.value;
+        notifySelectChanged(location, wasEnhanced);
+    }
+
+    function setLocationLoading(text) {
+        if (!location) return;
+        const wasEnhanced = hasSelect2(location);
+        destroySelect2(location);
+        location.innerHTML = '';
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = text;
+        location.appendChild(option);
+        location.value = '';
+        notifySelectChanged(location, wasEnhanced);
+    }
+
+    function fetchLocations() {
+        if (!warehouse || !location) return;
+        const warehouseId = warehouse.value;
+        const selectedBefore = location.value || location.dataset.selectedLocationId || '';
+
+        if (!warehouseId) {
+            setLocationOptions([], '');
+            return;
+        }
+
+        setLocationLoading('Loading locations...');
+        fetch(locationOptionsUrl + '?warehouse_id=' + encodeURIComponent(warehouseId), {
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        })
+            .then(response => response.ok ? response.json() : Promise.reject(new Error('Location request failed')))
+            .then(options => {
+                setLocationOptions(Array.isArray(options) ? options : [], selectedBefore);
+            })
+            .catch(() => {
+                const matching = originalLocations.filter(item => item.warehouseId === warehouseId)
+                    .map(item => ({value: item.value, label: item.text}));
+                setLocationOptions(matching, selectedBefore);
+            });
+    }
+
     function notifySelectChanged(select, reinitSelect2) {
         if (!select) return;
         if (reinitSelect2) {
@@ -233,42 +298,19 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    function rebuildLocations() {
-        if (!warehouse || !location) return;
-        const warehouseId = warehouse.value;
-        const selectedBefore = location.value || location.dataset.selectedLocationId || '';
-        const matching = originalLocations.filter(item => warehouseId !== '' && item.warehouseId === warehouseId);
-        const wasEnhanced = hasSelect2(location);
-
-        destroySelect2(location);
-
-        location.innerHTML = '';
-        const placeholder = document.createElement('option');
-        placeholder.value = '';
-        placeholder.textContent = matching.length ? 'Select Location' : 'No location for selected warehouse';
-        location.appendChild(placeholder);
-
-        matching.forEach(function (item) {
-            const option = document.createElement('option');
-            option.value = item.value;
-            option.textContent = item.text;
-            option.dataset.warehouseId = item.warehouseId;
-            location.appendChild(option);
-        });
-
-        const hasPrevious = matching.some(item => item.value === selectedBefore);
-        location.value = hasPrevious ? selectedBefore : (matching[0] ? matching[0].value : '');
-        location.dataset.selectedLocationId = location.value;
-        notifySelectChanged(location, wasEnhanced);
-    }
-
     if (warehouse && location) {
         warehouse.addEventListener('change', function () {
             location.dataset.selectedLocationId = '';
-            rebuildLocations();
+            fetchLocations();
         });
+        if (window.jQuery) {
+            window.jQuery(warehouse).on('change select2:select', function () {
+                location.dataset.selectedLocationId = '';
+                fetchLocations();
+            });
+        }
     }
-    rebuildLocations();
+    fetchLocations();
     recalcReceiveTotal();
 });
 </script>
