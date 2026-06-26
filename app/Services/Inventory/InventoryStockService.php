@@ -48,6 +48,7 @@ class InventoryStockService
     public function move(array $data, ?int $userId = null): int
     {
         $this->validateMovement($data);
+        $data = $this->enrichItemMaster($data);
         $this->validateLocationScope($data);
         (new PeriodCloseService())->assertOpen(
             'inventory',
@@ -226,6 +227,46 @@ class InventoryStockService
         }
     }
 
+    private function enrichItemMaster(array $data): array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('items')) {
+            throw new RuntimeException('Item master table does not exist.');
+        }
+
+        $itemCode = strtoupper(trim((string) ($data['item_code'] ?? '')));
+        $builder = $db->table('items')->where('item_code', $itemCode);
+        if ($db->fieldExists('company_id', 'items')) {
+            $builder->where('company_id', (int) $data['company_id']);
+        }
+        if ($db->fieldExists('site_id', 'items') && ! empty($data['site_id'])) {
+            $builder->groupStart()
+                ->where('site_id', (int) $data['site_id'])
+                ->orWhere('site_id', null)
+                ->orWhere('site_id', 0)
+                ->groupEnd()
+                ->orderBy('site_id', 'DESC');
+        }
+        if ($db->fieldExists('deleted_at', 'items')) {
+            $builder->where('deleted_at', null);
+        }
+        if ($db->fieldExists('is_active', 'items')) {
+            $builder->where('is_active', 1);
+        }
+
+        $item = $builder->get(1)->getRowArray();
+        if ($item === null) {
+            throw new RuntimeException('Item code ' . $itemCode . ' is not found in Item Master. Please fix item master / imported document before posting.');
+        }
+
+        $data['item_code'] = (string) ($item['item_code'] ?? $itemCode);
+        $data['item_id'] = ! empty($data['item_id']) ? $data['item_id'] : ($item['id'] ?? null);
+        $data['item_name'] = ! empty($data['item_name']) ? $data['item_name'] : ($item['item_name'] ?? $item['name'] ?? null);
+        $data['uom_code'] = ! empty($data['uom_code']) ? $data['uom_code'] : ($item['stockuom'] ?? $item['uom_code'] ?? 'PCS');
+
+        return $data;
+    }
+
     private function validateLocationScope(array $data): void
     {
         $warehouseId = isset($data['warehouse_id']) ? (int) $data['warehouse_id'] : 0;
@@ -367,6 +408,7 @@ class InventoryStockService
             throw new RuntimeException('Company, item code, and reservation quantity are required.');
         }
 
+        $data = $this->enrichItemMaster($data);
         $model = new InventoryStockBalanceModel();
         $balance = $this->findOrCreateBalance($model, $data);
         $reserved = max(0.0, (float) $balance['qty_reserved'] + $delta);
