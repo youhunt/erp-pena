@@ -95,3 +95,66 @@ FROM locations l
 JOIN warehouses w ON w.id = l.warehouse_id
 WHERE w.code IN ('MRJ', 'RMJ')
   AND l.code = 'MRLJ';
+
+-- =========================================================
+-- C. Ensure every active warehouse has at least one location
+-- =========================================================
+INSERT INTO locations (
+    company_id,
+    site_id,
+    warehouse_id,
+    code,
+    name,
+    description,
+    is_active,
+    created_by,
+    updated_by,
+    created_at,
+    updated_at
+)
+SELECT
+    w.company_id,
+    w.site_id,
+    w.id,
+    CASE
+        WHEN existing_code.id IS NULL THEN w.code
+        ELSE CONCAT('LOC', w.id)
+    END,
+    CASE
+        WHEN existing_code.id IS NULL THEN CONCAT(w.code, ' Location')
+        ELSE CONCAT('LOC', w.id, ' Location')
+    END,
+    CONCAT('Default location for ', COALESCE(w.code, CONCAT('warehouse #', w.id))),
+    1,
+    1,
+    1,
+    NOW(),
+    NOW()
+FROM warehouses w
+LEFT JOIN locations l
+    ON l.warehouse_id = w.id
+   AND l.deleted_at IS NULL
+   AND COALESCE(l.is_active, 1) = 1
+LEFT JOIN locations existing_code
+    ON existing_code.company_id = w.company_id
+   AND existing_code.site_id = w.site_id
+   AND existing_code.code = w.code
+   AND existing_code.deleted_at IS NULL
+WHERE w.deleted_at IS NULL
+  AND COALESCE(w.is_active, 1) = 1
+  AND l.id IS NULL;
+
+SELECT
+    w.id AS warehouse_id,
+    w.code AS warehouse_code,
+    COUNT(l.id) AS active_location_count,
+    'WAREHOUSE_LOCATION_READY' AS result
+FROM warehouses w
+LEFT JOIN locations l
+    ON l.warehouse_id = w.id
+   AND l.deleted_at IS NULL
+   AND COALESCE(l.is_active, 1) = 1
+WHERE w.deleted_at IS NULL
+  AND COALESCE(w.is_active, 1) = 1
+GROUP BY w.id, w.code
+ORDER BY w.code;
