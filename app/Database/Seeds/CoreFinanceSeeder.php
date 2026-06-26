@@ -11,6 +11,7 @@ class CoreFinanceSeeder extends Seeder
     {
         $this->seedTransactionCodes();
         $this->seedCurrencies();
+        $this->seedUoms();
         $this->seedCostTypes();
         $this->seedPostingProfiles();
     }
@@ -56,12 +57,58 @@ class CoreFinanceSeeder extends Seeder
 
         foreach ($rows as $row) {
             $existing = $this->db->table('currencies')->where('code', $row['code'])->get(1)->getRowArray();
-            $payload = $row + ['company_id' => null, 'is_active' => 1, 'updated_at' => date('Y-m-d H:i:s')];
+            $payload = $this->filterExistingColumns('currencies', $row + ['company_id' => null, 'is_active' => 1, 'updated_at' => date('Y-m-d H:i:s')]);
             if ($existing) {
                 $this->db->table('currencies')->where('id', (int) $existing['id'])->update($payload);
             } else {
                 $payload['created_at'] = date('Y-m-d H:i:s');
-                $this->db->table('currencies')->insert($payload);
+                $this->db->table('currencies')->insert($this->filterExistingColumns('currencies', $payload));
+            }
+        }
+    }
+
+    private function seedUoms(): void
+    {
+        if (! $this->db->tableExists('uoms')) {
+            return;
+        }
+
+        $companyIds = $this->companyIds();
+        if ($companyIds === []) {
+            return;
+        }
+
+        $rows = [
+            ['code' => 'PCS', 'name' => 'Pieces', 'rate' => 1, 'description' => 'Default stock unit'],
+            ['code' => 'KG', 'name' => 'Kilogram', 'rate' => 1, 'description' => 'Weight unit'],
+            ['code' => 'GR', 'name' => 'Gram', 'rate' => 1, 'description' => 'Weight unit'],
+            ['code' => 'MTR', 'name' => 'Meter', 'rate' => 1, 'description' => 'Length unit'],
+            ['code' => 'LTR', 'name' => 'Liter', 'rate' => 1, 'description' => 'Volume unit'],
+            ['code' => 'BOX', 'name' => 'Box', 'rate' => 1, 'description' => 'Packing unit'],
+            ['code' => 'SET', 'name' => 'Set', 'rate' => 1, 'description' => 'Set unit'],
+        ];
+
+        foreach ($companyIds as $companyId) {
+            foreach ($rows as $row) {
+                $existing = $this->db->table('uoms')
+                    ->where('company_id', $companyId)
+                    ->where('code', $row['code'])
+                    ->get(1)
+                    ->getRowArray();
+
+                $payload = $this->filterExistingColumns('uoms', $row + [
+                    'company_id' => $companyId,
+                    'is_active' => 1,
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+
+                if ($existing) {
+                    $this->db->table('uoms')->where('id', (int) $existing['id'])->update($payload);
+                    continue;
+                }
+
+                $payload['created_at'] = date('Y-m-d H:i:s');
+                $this->db->table('uoms')->insert($this->filterExistingColumns('uoms', $payload));
             }
         }
     }
@@ -81,12 +128,12 @@ class CoreFinanceSeeder extends Seeder
 
         foreach ($rows as $row) {
             $existing = $this->db->table('costing_cost_types')->where('company_id', null)->where('type', $row['type'])->get(1)->getRowArray();
-            $payload = $row + ['company_id' => null, 'is_active' => 1, 'updated_at' => date('Y-m-d H:i:s')];
+            $payload = $this->filterExistingColumns('costing_cost_types', $row + ['company_id' => null, 'is_active' => 1, 'updated_at' => date('Y-m-d H:i:s')]);
             if ($existing) {
                 $this->db->table('costing_cost_types')->where('id', (int) $existing['id'])->update($payload);
             } else {
                 $payload['created_at'] = date('Y-m-d H:i:s');
-                $this->db->table('costing_cost_types')->insert($payload);
+                $this->db->table('costing_cost_types')->insert($this->filterExistingColumns('costing_cost_types', $payload));
             }
         }
     }
@@ -112,7 +159,7 @@ class CoreFinanceSeeder extends Seeder
                         ->get(1)
                         ->getRowArray();
 
-                    $payload = [
+                    $payload = $this->filterExistingColumns('gl_posting_profiles', [
                         'company_id' => $companyId,
                         'module_code' => $moduleCode,
                         'posting_key' => $postingKey,
@@ -120,7 +167,7 @@ class CoreFinanceSeeder extends Seeder
                         'description' => PostingProfileService::label($moduleCode, $postingKey),
                         'is_active' => 1,
                         'updated_at' => date('Y-m-d H:i:s'),
-                    ];
+                    ]);
 
                     if ($existing) {
                         if (trim((string) ($existing['account_no'] ?? '')) === '') {
@@ -130,7 +177,7 @@ class CoreFinanceSeeder extends Seeder
                     }
 
                     $payload['created_at'] = date('Y-m-d H:i:s');
-                    $this->db->table('gl_posting_profiles')->insert($payload);
+                    $this->db->table('gl_posting_profiles')->insert($this->filterExistingColumns('gl_posting_profiles', $payload));
                 }
             }
         }
@@ -153,5 +200,20 @@ class CoreFinanceSeeder extends Seeder
         }
 
         return $ids;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private function filterExistingColumns(string $table, array $payload): array
+    {
+        foreach (array_keys($payload) as $column) {
+            if (! $this->db->fieldExists($column, $table)) {
+                unset($payload[$column]);
+            }
+        }
+
+        return $payload;
     }
 }
