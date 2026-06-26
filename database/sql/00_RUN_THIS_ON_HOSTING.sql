@@ -1,10 +1,13 @@
 -- ERP PENA - ONE FILE HOSTING SETUP
--- Jalankan file ini di phpMyAdmin/cPanel kalau server tidak bisa menjalankan php spark migrate + seeder.
--- Untuk development/local, gunakan migration + seeder, bukan file ini.
-
-USE `dberp_pena`;
+-- Jalankan file ini di phpMyAdmin/cPanel hanya kalau server tidak bisa menjalankan php spark migrate + seeder.
+--
+-- PENTING UNTUK PHPMYADMIN / CPANEL:
+-- 1. Pilih database ERP dari sidebar kiri terlebih dahulu.
+-- 2. Baru jalankan file ini.
+-- 3. File ini sengaja TIDAK memakai USE `nama_database` karena nama DB hosting bisa berbeda-beda.
 
 SET @db := DATABASE();
+SELECT @db AS selected_database;
 
 -- =========================================================
 -- 1. Transaction codes required by document numbering
@@ -36,11 +39,10 @@ INSERT INTO transaction_codes (code, name, description, is_active, created_at, u
 SELECT 'PI', 'Purchase Invoice', 'Purchase invoice document numbering', 1, NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM transaction_codes WHERE code = 'PI');
 INSERT INTO transaction_codes (code, name, description, is_active, created_at, updated_at)
 SELECT 'JV', 'Journal Voucher', 'General ledger journal voucher numbering', 1, NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM transaction_codes WHERE code = 'JV');
-
 UPDATE transaction_codes SET is_active = 1, updated_at = NOW() WHERE code IN ('PO','PR','SO','SD','SI','PI','JV');
 
 -- =========================================================
--- 2. Existing currencies table compatibility
+-- 2. Currency master compatibility
 -- =========================================================
 CREATE TABLE IF NOT EXISTS currencies (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -74,7 +76,7 @@ INSERT INTO currencies (company_id, code, name, rounding, is_active, created_at,
 SELECT NULL, 'USD', 'US Dollar', 0.01, 1, NOW(), NOW() WHERE NOT EXISTS (SELECT 1 FROM currencies WHERE code = 'USD');
 
 -- =========================================================
--- 3. Cash Bank master / entry rate fields
+-- 3. Cash Bank master, employee, and rate foundation
 -- =========================================================
 ALTER TABLE cash_bank_accounts
     ADD COLUMN IF NOT EXISTS bank_branch VARCHAR(50) NULL AFTER site_id,
@@ -161,7 +163,7 @@ CREATE TABLE IF NOT EXISTS item_import_mappings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =========================================================
--- 5. MRP / Planning foundation
+-- 5. Planning / MRP foundation
 -- =========================================================
 CREATE TABLE IF NOT EXISTS production_forecasts (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
