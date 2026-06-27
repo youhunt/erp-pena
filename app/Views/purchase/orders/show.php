@@ -12,6 +12,7 @@ foreach ($lines as $line) {
     }
 }
 $canEditPo = $status === 'draft' && ! $hasReceivedLine;
+$canReturnToDraft = in_array($status, ['submitted', 'approved'], true) && ! $hasReceivedLine;
 $subtotal = (float) ($order['subtotal_amount'] ?? 0);
 $discountPercent = (float) ($order['discount_percent'] ?? 0);
 $discountPercentAmount = round($subtotal * $discountPercent / 100, 2);
@@ -103,6 +104,12 @@ $itemDisplay = static function (array $line): array {
                         <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/activate') ?>">
                             <?= csrf_field() ?>
                             <button class="btn btn-success" onclick="return confirm('Activate this PO? Closed PO will return to received/partial status based on receipt qty.')"><i class="bx bx-reset me-1"></i> Activate</button>
+                        </form>
+                    <?php endif ?>
+                    <?php if ($canReturnToDraft): ?>
+                        <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/activate') ?>">
+                            <?= csrf_field() ?>
+                            <button class="btn btn-warning" onclick="return confirm('Return this PO to draft so it can be edited?')"><i class="bx bx-undo me-1"></i> Return to Draft</button>
                         </form>
                     <?php endif ?>
                     <?php if ($status === 'draft'): ?>
