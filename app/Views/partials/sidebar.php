@@ -11,7 +11,9 @@ $isActiveRoute = static function (?string $route) use ($current): bool {
         return false;
     }
 
-    return $current === $route || str_starts_with($current, $route . '/');
+    // Exact match only. Prefix matching made sibling menus light up together,
+    // for example production/work-orders also activating allocation/in/out menus.
+    return $current === $route;
 };
 
 $hasActiveChild = static function (array $item) use (&$hasActiveChild, $isActiveRoute): bool {
