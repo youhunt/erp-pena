@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\Setup\CompanyBootstrapService;
+use App\Services\Setup\SiteBootstrapService;
 use CodeIgniter\Model;
 
 class SiteModel extends Model
@@ -21,12 +22,13 @@ class SiteModel extends Model
         'updated_by',
     ];
     protected $useTimestamps = true;
-    protected $afterInsert = ['runCompanyBootstrap'];
-    protected $afterUpdate = ['runCompanyBootstrap'];
+    protected $afterInsert = ['runCompanyAndSiteBootstrap'];
+    protected $afterUpdate = ['runCompanyAndSiteBootstrap'];
 
-    protected function runCompanyBootstrap(array $data): array
+    protected function runCompanyAndSiteBootstrap(array $data): array
     {
         $companyIds = [];
+        $siteIds = [];
         if (! empty($data['data']['company_id'])) {
             $companyIds[] = (int) $data['data']['company_id'];
         }
@@ -41,6 +43,7 @@ class SiteModel extends Model
             if ($siteId < 1) {
                 continue;
             }
+            $siteIds[] = $siteId;
             $row = $this->builder()->where('id', $siteId)->get(1)->getRowArray();
             if (! empty($row['company_id'])) {
                 $companyIds[] = (int) $row['company_id'];
@@ -49,6 +52,10 @@ class SiteModel extends Model
 
         foreach (array_unique(array_filter($companyIds)) as $companyId) {
             (new CompanyBootstrapService())->bootstrapCompany((int) $companyId);
+        }
+
+        foreach (array_unique(array_filter($siteIds)) as $siteId) {
+            (new SiteBootstrapService())->bootstrapSite((int) $siteId);
         }
 
         return $data;
