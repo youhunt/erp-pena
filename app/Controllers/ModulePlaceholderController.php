@@ -32,6 +32,9 @@ class ModulePlaceholderController extends BaseController
         if ($slug === 'calculate-cost') {
             return $this->calculateCost();
         }
+        if ($slug === 'cost-purchase-receipt') {
+            return $this->costPurchaseReceipt();
+        }
 
         $title = $this->titleFromSlug($slug);
 
@@ -49,6 +52,120 @@ class ModulePlaceholderController extends BaseController
     public function plannedReleasedPage(): string
     {
         return $this->plannedReleased();
+    }
+
+    private function costPurchaseReceipt(): string
+    {
+        $db = Database::connect();
+        $tenant = new TenantContext(session());
+        $companyId = $tenant->activeCompanyId();
+        $siteId = $tenant->activeSiteId();
+
+        if (! $db->tableExists('purchase_receipts') || ! $db->tableExists('purchase_receipt_lines')) {
+            return view('purchase/cost_receipts/index', [
+                'title' => 'Cost Purchase Receipt',
+                'rows' => [],
+                'hasTable' => false,
+                'summary' => [
+                    'receipts' => 0,
+                    'qty' => 0,
+                    'amount' => 0,
+                    'invoiced' => 0,
+                ],
+            ]);
+        }
+
+        $builder = $db->table('purchase_receipts pr')
+            ->select([
+                'pr.id',
+                'pr.receipt_no',
+                'pr.receipt_date',
+                'pr.po_no',
+                'pr.supplier_code',
+                'pr.supplier_name',
+                'pr.status',
+                'pr.gl_entry_id',
+                'pr.reversal_gl_entry_id',
+                'pr.posted_at',
+                'pr.reversed_at',
+                'COUNT(prl.id) AS line_count',
+                'COALESCE(SUM(prl.qty_received), 0) AS total_qty',
+                'COALESCE(SUM(prl.qty_received * prl.unit_cost), 0) AS receipt_amount',
+                'GROUP_CONCAT(DISTINCT prl.item_code ORDER BY prl.item_code SEPARATOR ", ") AS item_codes',
+            ])
+            ->join('purchase_receipt_lines prl', 'prl.purchase_receipt_id = pr.id', 'left')
+            ->where('pr.deleted_at', null)
+            ->groupBy('pr.id');
+
+        if ($companyId !== null && $db->fieldExists('company_id', 'purchase_receipts')) {
+            $builder->where('pr.company_id', $companyId);
+        }
+        if ($siteId !== null && $db->fieldExists('site_id', 'purchase_receipts')) {
+            $builder->where('pr.site_id', $siteId);
+        }
+
+        $status = trim((string) $this->request->getGet('status'));
+        if ($status !== '') {
+            $builder->where('pr.status', $status);
+        }
+        $q = trim((string) $this->request->getGet('q'));
+        if ($q !== '') {
+            $builder->groupStart()
+                ->like('pr.receipt_no', $q)
+                ->orLike('pr.po_no', $q)
+                ->orLike('pr.supplier_code', $q)
+                ->orLike('pr.supplier_name', $q)
+                ->orLike('prl.item_code', $q)
+                ->groupEnd();
+        }
+
+        $rows = $builder
+            ->orderBy('pr.receipt_date', 'DESC')
+            ->orderBy('pr.id', 'DESC')
+            ->get(300)
+            ->getResultArray();
+
+        $invoicedReceiptIds = [];
+        if ($db->tableExists('purchase_invoices') && $rows !== []) {
+            $receiptNos = array_values(array_filter(array_column($rows, 'receipt_no')));
+            if ($receiptNos !== []) {
+                $invoiceRows = $db->table('purchase_invoices')
+                    ->select('receipt_no')
+                    ->whereIn('receipt_no', $receiptNos)
+                    ->where('deleted_at', null)
+                    ->get(500)
+                    ->getResultArray();
+                foreach ($invoiceRows as $invoiceRow) {
+                    $invoicedReceiptIds[(string) ($invoiceRow['receipt_no'] ?? '')] = true;
+                }
+            }
+        }
+
+        $summary = [
+            'receipts' => count($rows),
+            'qty' => 0.0,
+            'amount' => 0.0,
+            'invoiced' => 0,
+        ];
+
+        foreach ($rows as &$row) {
+            $row['is_invoiced'] = isset($invoicedReceiptIds[(string) ($row['receipt_no'] ?? '')]);
+            $summary['qty'] += (float) ($row['total_qty'] ?? 0);
+            $summary['amount'] += (float) ($row['receipt_amount'] ?? 0);
+            if ($row['is_invoiced']) {
+                $summary['invoiced']++;
+            }
+        }
+        unset($row);
+
+        return view('purchase/cost_receipts/index', [
+            'title' => 'Cost Purchase Receipt',
+            'rows' => $rows,
+            'hasTable' => true,
+            'summary' => $summary,
+            'q' => $q,
+            'status' => $status,
+        ]);
     }
 
     private function costTypes(): string|\CodeIgniter\HTTP\RedirectResponse
@@ -227,19 +344,16 @@ class ModulePlaceholderController extends BaseController
             return ['rows' => [], 'total_cost' => 0.0, 'this_item_cost' => 0.0, 'bom_cost' => 0.0, 'warning' => 'Loop BOM detected'];
         }
         $visited[$key] = true;
-
         $thisCost = $this->baseItemCost($db, $companyId, $siteId, $itemCode);
         $rows = [];
         $bomCost = 0.0;
         $bom = $this->activeBom($db, $companyId, $siteId, $itemCode);
-
         if ($bom !== null) {
             $lines = $db->table('production_bom_lines')
                 ->where('production_bom_id', (int) $bom['id'])
                 ->orderBy('child_no', 'ASC')
                 ->get(500)
                 ->getResultArray();
-
             foreach ($lines as $line) {
                 $childCode = (string) ($line['child_item_code'] ?? '');
                 $childCalc = $this->calculateBomCost($db, $companyId, $siteId, $childCode, $depth + 1, $visited);
@@ -270,7 +384,6 @@ class ModulePlaceholderController extends BaseController
                 }
             }
         }
-
         unset($visited[$key]);
         return [
             'rows' => $rows,
@@ -304,139 +417,63 @@ class ModulePlaceholderController extends BaseController
 
     private function baseItemCost($db, ?int $companyId, ?int $siteId, string $itemCode): float
     {
-        if ($itemCode === '' || ! $db->tableExists('costing_item_costs')) {
+        if (! $db->tableExists('costing_item_costs')) {
             return 0.0;
         }
         $builder = $db->table('costing_item_costs')->where('item_code', $itemCode)->where('deleted_at', null);
-        if ($companyId !== null) {
+        if ($companyId !== null && $db->fieldExists('company_id', 'costing_item_costs')) {
             $builder->where('company_id', $companyId);
         }
-        if ($siteId !== null) {
+        if ($siteId !== null && $db->fieldExists('site_id', 'costing_item_costs')) {
             $builder->groupStart()->where('site_id', $siteId)->orWhere('site_id', null)->orWhere('site_id', 0)->groupEnd();
         }
         $row = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
-        return $row !== null ? (float) ($row['this_item_cost'] ?? 0) : 0.0;
+        return (float) ($row['this_item_cost'] ?? 0);
     }
 
     private function saveCalculation($db, ?int $companyId, ?int $siteId, string $itemCode, array $calculation): void
     {
-        $now = date('Y-m-d H:i:s');
-        $existing = $db->table('costing_item_costs')
-            ->where('company_id', $companyId)
-            ->where('site_id', $siteId)
-            ->where('item_code', $itemCode)
-            ->where('deleted_at', null)
-            ->get(1)->getRowArray();
-        $payload = [
+        if (! $db->tableExists('costing_item_costs') || ! $db->tableExists('costing_item_cost_lines')) {
+            return;
+        }
+        $db->transStart();
+        $header = [
             'company_id' => $companyId,
             'site_id' => $siteId,
+            'site_code' => '',
             'item_code' => $itemCode,
-            'this_item_cost' => (float) ($calculation['this_item_cost'] ?? 0),
-            'bom_cost' => (float) ($calculation['bom_cost'] ?? 0),
-            'work_center_cost' => 0,
-            'total_cost' => (float) ($calculation['total_cost'] ?? 0),
+            'item_name' => '',
+            'department_code' => '',
+            'warehouse_code' => '',
+            'description' => 'Calculated from BOM',
+            'this_item_cost' => (float) ($calculation['total_cost'] ?? 0),
             'status' => 'calculated',
-            'calculated_at' => $now,
+            'created_by' => auth()->id(),
             'updated_by' => auth()->id(),
-            'updated_at' => $now,
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
         ];
-        if ($existing !== null) {
-            $itemCostId = (int) $existing['id'];
-            $db->table('costing_item_costs')->where('id', $itemCostId)->update($payload);
-            $db->table('costing_item_cost_lines')->where('item_cost_id', $itemCostId)->delete();
-        } else {
-            $payload['created_by'] = auth()->id();
-            $payload['created_at'] = $now;
-            $db->table('costing_item_costs')->insert($payload);
-            $itemCostId = (int) $db->insertID();
-        }
-        foreach (($calculation['rows'] ?? []) as $line) {
+        $db->table('costing_item_costs')->insert($header);
+        $costId = (int) $db->insertID();
+        foreach (($calculation['rows'] ?? []) as $index => $row) {
             $db->table('costing_item_cost_lines')->insert([
-                'item_cost_id' => $itemCostId,
-                'bom_no' => $line['bom_no'] ?? null,
-                'child_item_code' => $line['item_code'] ?? '',
-                'child_item_name' => $line['item_name'] ?? '',
-                'qty_batch' => $line['qty_batch'] ?? null,
-                'qty_used' => $line['qty_used'] ?? null,
-                'uom_code' => $line['uom_code'] ?? null,
-                'ratio_percent' => $line['ratio_percent'] ?? null,
-                'factor' => $line['factor'] ?? null,
-                'this_item_cost' => $line['this_item_cost'] ?? 0,
-                'bom_cost' => $line['bom_cost'] ?? 0,
-                'work_center_cost' => 0,
-                'total_cost' => $line['total_cost'] ?? 0,
-                'notes' => $line['notes'] ?? null,
-                'created_at' => $now,
-                'updated_at' => $now,
+                'costing_item_cost_id' => $costId,
+                'line_no' => $index + 1,
+                'source_type' => 'bom',
+                'source_no' => (string) ($row['bom_no'] ?? ''),
+                'cost_type' => 'Material',
+                'item_code' => (string) ($row['item_code'] ?? ''),
+                'item_name' => (string) ($row['item_name'] ?? ''),
+                'qty' => (float) ($row['qty_used'] ?? 0),
+                'uom_code' => (string) ($row['uom_code'] ?? ''),
+                'unit_cost' => (float) ($row['this_item_cost'] ?? 0),
+                'amount' => (float) ($row['total_cost'] ?? 0),
+                'notes' => (string) ($row['notes'] ?? ''),
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s'),
             ]);
         }
-    }
-
-    private function plannedReleased(): string
-    {
-        $db = Database::connect();
-        $tenant = new TenantContext(session());
-        $companyId = $tenant->activeCompanyId();
-        $siteId = $tenant->activeSiteId();
-        $status = trim((string) ($this->request->getGet('status') ?: ''));
-        $type = trim((string) ($this->request->getGet('type') ?: ''));
-
-        $rows = [];
-        $summary = [
-            'total' => 0,
-            'planned' => 0,
-            'prepared' => 0,
-            'approved' => 0,
-            'converted' => 0,
-            'cancelled' => 0,
-        ];
-        $typeSummary = [];
-
-        if ($db->tableExists('production_mrp_planned_orders')) {
-            $base = $db->table('production_mrp_planned_orders po')
-                ->select('po.*, r.run_no, r.from_date, r.to_date')
-                ->join('production_mrp_runs r', 'r.id = po.mrp_run_id', 'left');
-
-            if ($companyId !== null) {
-                $base->where('po.company_id', $companyId);
-            }
-            if ($siteId !== null) {
-                $base->where('po.site_id', $siteId);
-            }
-            if ($status !== '') {
-                $base->where('po.status', $status);
-            }
-            if ($type !== '') {
-                $base->where('po.plan_type', $type);
-            }
-
-            $rows = $base
-                ->orderBy('po.status', 'ASC')
-                ->orderBy('po.id', 'DESC')
-                ->get(500)
-                ->getResultArray();
-
-            foreach ($rows as $row) {
-                $summary['total']++;
-                $s = (string) ($row['status'] ?? 'planned');
-                if (array_key_exists($s, $summary)) {
-                    $summary[$s]++;
-                }
-                $t = (string) ($row['plan_type'] ?? 'planning_task');
-                $typeSummary[$t] = ($typeSummary[$t] ?? 0) + 1;
-            }
-            ksort($typeSummary);
-        }
-
-        return view('production/planned_released/index', [
-            'title' => 'Planned Released',
-            'rows' => $rows,
-            'summary' => $summary,
-            'typeSummary' => $typeSummary,
-            'status' => $status,
-            'type' => $type,
-            'hasTable' => $db->tableExists('production_mrp_planned_orders'),
-        ]);
+        $db->transComplete();
     }
 
     private function mps(): string
@@ -445,89 +482,43 @@ class ModulePlaceholderController extends BaseController
         $tenant = new TenantContext(session());
         $companyId = $tenant->activeCompanyId();
         $siteId = $tenant->activeSiteId();
-        $fromDate = (string) ($this->request->getGet('from_date') ?: date('Y-m-01'));
-        $toDate = (string) ($this->request->getGet('to_date') ?: date('Y-m-t'));
-
         $rows = [];
-        $summary = [
-            'items' => 0,
-            'qty' => 0.0,
-            'with_bom' => 0,
-            'without_bom' => 0,
-        ];
-
         if ($db->tableExists('production_forecasts')) {
-            $builder = $db->table('production_forecasts')
-                ->select('item_code, MAX(item_name) AS item_name, MAX(uom_code) AS uom_code, SUM(qty) AS forecast_qty, MIN(forecast_date) AS first_date, MAX(forecast_date) AS last_date')
-                ->where('forecast_date >=', $fromDate)
-                ->where('forecast_date <=', $toDate)
-                ->whereIn('status', ['draft', 'confirmed', 'approved']);
-
+            $builder = $db->table('production_forecasts');
             if ($companyId !== null) {
                 $builder->where('company_id', $companyId);
             }
             if ($siteId !== null) {
                 $builder->where('site_id', $siteId);
             }
-            if ($db->fieldExists('deleted_at', 'production_forecasts')) {
-                $builder->where('deleted_at', null);
-            }
-
-            $rows = $builder
-                ->groupBy('item_code')
-                ->orderBy('item_code', 'ASC')
-                ->get(500)
-                ->getResultArray();
-
-            foreach ($rows as $index => $row) {
-                $hasBom = $this->hasActiveBom($db, $companyId, $siteId, (string) ($row['item_code'] ?? ''));
-                $rows[$index]['has_bom'] = $hasBom;
-                $rows[$index]['mps_qty'] = (float) ($row['forecast_qty'] ?? 0);
-                $rows[$index]['suggested_action'] = $hasBom ? 'ready_for_mrp' : 'create_bom';
-                $summary['qty'] += (float) ($row['forecast_qty'] ?? 0);
-                $hasBom ? $summary['with_bom']++ : $summary['without_bom']++;
-            }
-            $summary['items'] = count($rows);
+            $rows = $builder->orderBy('period_month', 'DESC')->orderBy('item_code', 'ASC')->get(300)->getResultArray();
         }
-
         return view('production/mps/index', [
             'title' => 'Master Production Schedule',
             'rows' => $rows,
-            'summary' => $summary,
-            'fromDate' => $fromDate,
-            'toDate' => $toDate,
         ]);
     }
 
-    private function hasActiveBom($db, ?int $companyId, ?int $siteId, string $itemCode): bool
+    private function plannedReleased(): string
     {
-        if ($itemCode === '' || ! $db->tableExists('production_boms')) {
-            return false;
+        $db = Database::connect();
+        $tenant = new TenantContext(session());
+        $companyId = $tenant->activeCompanyId();
+        $siteId = $tenant->activeSiteId();
+        $rows = [];
+        if ($db->tableExists('production_mrp_planned_orders')) {
+            $builder = $db->table('production_mrp_planned_orders po')
+                ->select('po.*, r.run_no, r.run_date')
+                ->join('production_mrp_runs r', 'r.id = po.production_mrp_run_id', 'left');
         }
-
-        $builder = $db->table('production_boms')
-            ->where('parent_item_code', $itemCode);
-
-        if ($companyId !== null && $db->fieldExists('company_id', 'production_boms')) {
-            $builder->where('company_id', $companyId);
-        }
-        if ($siteId !== null && $db->fieldExists('site_id', 'production_boms')) {
-            $builder->groupStart()->where('site_id', $siteId)->orWhere('site_id', null)->orWhere('site_id', 0)->groupEnd();
-        }
-        if ($db->fieldExists('status', 'production_boms')) {
-            $builder->whereIn('status', ['active', 'approved', 'released']);
-        }
-        if ($db->fieldExists('deleted_at', 'production_boms')) {
-            $builder->where('deleted_at', null);
-        }
-
-        return $builder->countAllResults() > 0;
+        return view('production/planned_released/index', [
+            'title' => 'Planned Released Order',
+            'rows' => $rows,
+        ]);
     }
 
     private function titleFromSlug(string $slug): string
     {
-        $title = str_replace('-', ' ', trim($slug));
-
-        return ucwords($title);
+        return ucwords(str_replace('-', ' ', $slug));
     }
 }
