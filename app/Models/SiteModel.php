@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Services\Setup\CompanyBootstrapService;
+use App\Services\Setup\CompanyAutoSetupService;
 use App\Services\Setup\SiteBootstrapService;
 use CodeIgniter\Model;
 
@@ -50,12 +50,13 @@ class SiteModel extends Model
             }
         }
 
+        $userId = isset($data['data']['updated_by']) ? (int) $data['data']['updated_by'] : null;
         foreach (array_unique(array_filter($companyIds)) as $companyId) {
-            (new CompanyBootstrapService())->bootstrapCompany((int) $companyId);
+            (new CompanyAutoSetupService())->run((int) $companyId, $userId);
         }
 
         foreach (array_unique(array_filter($siteIds)) as $siteId) {
-            (new SiteBootstrapService())->bootstrapSite((int) $siteId);
+            (new SiteBootstrapService())->bootstrapSite((int) $siteId, $userId);
         }
 
         return $data;
