@@ -1,4 +1,5 @@
 <?php
+
 use App\Services\TenantContext;
 
 $tenantContext = new TenantContext(session());
@@ -36,21 +37,21 @@ $tenantLabel = trim(($activeCompanyCode ?: 'Company') . ($activeSiteCode !== '' 
     <div class="navbar-header">
         <div class="d-flex">
             <div class="navbar-brand-box">
-                <a href="<?= site_url('dashboard') ?>" class="logo logo-dark">
+                <a href="<?= site_url('dashboard') ?>" class="logo logo-light">
                     <span class="logo-sm">
-                        <img src="<?= base_url('assets/skote/images/logo-sm-dark.png') ?>" alt="PENA ERP" height="22">
+                        <img src="<?= base_url('assets/skote/images/logo-sm-dark.png') ?>" alt="LENTERRA ERP" height="52">
                     </span>
                     <span class="logo-lg">
-                        <img src="<?= base_url('assets/skote/images/logo-dark.png') ?>" alt="Pena ERP" height="22">
+                        <img src="<?= base_url('assets/skote/images/logo-dark.png') ?>" alt="Pena ERP" height="52">
                     </span>
                 </a>
 
-                <a href="<?= site_url('dashboard') ?>" class="logo logo-light">
+                <a href="<?= site_url('dashboard') ?>" class="logo logo-dark">
                     <span class="logo-sm">
-                        <img src="<?= base_url('assets/skote/images/logo-sm-light.png') ?>" alt="PENA ERP" height="22">
+                        <img src="<?= base_url('assets/skote/images/logo-sm-light.png') ?>" alt="LENTERRA ERP" height="52">
                     </span>
                     <span class="logo-lg">
-                        <img src="<?= base_url('assets/skote/images/logo-light.png') ?>" alt="Pena ERP" height="22">
+                        <img src="<?= base_url('assets/skote/images/logo-light.png') ?>" alt="Pena ERP" height="52">
                     </span>
                 </a>
             </div>
@@ -146,140 +147,140 @@ $tenantLabel = trim(($activeCompanyCode ?: 'Company') . ($activeSiteCode !== '' 
 </header>
 
 <?php if ($companies !== []): ?>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const forms = document.querySelectorAll('.tenant-switch-form');
-    const sitesByCompany = <?= json_encode($sitesByCompany, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const forms = document.querySelectorAll('.tenant-switch-form');
+            const sitesByCompany = <?= json_encode($sitesByCompany, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
-    if (!forms.length) {
-        return;
-    }
+            if (!forms.length) {
+                return;
+            }
 
-    function ensureTenantSelect2(form) {
-        if (!window.jQuery || !jQuery.fn || !jQuery.fn.select2) {
-            return;
-        }
+            function ensureTenantSelect2(form) {
+                if (!window.jQuery || !jQuery.fn || !jQuery.fn.select2) {
+                    return;
+                }
 
-        if (window.PenaSelect && typeof window.PenaSelect.init === 'function') {
-            window.PenaSelect.init(form);
-            return;
-        }
+                if (window.PenaSelect && typeof window.PenaSelect.init === 'function') {
+                    window.PenaSelect.init(form);
+                    return;
+                }
 
-        jQuery(form).find('select.form-select').each(function () {
-            const $select = jQuery(this);
-            if (!$select.hasClass('select2-hidden-accessible')) {
-                $select.select2({
-                    width: '100%',
-                    allowClear: !this.required,
-                    placeholder: $select.data('placeholder') || 'Pilih / cari data',
-                    dropdownParent: jQuery(document.body)
+                jQuery(form).find('select.form-select').each(function() {
+                    const $select = jQuery(this);
+                    if (!$select.hasClass('select2-hidden-accessible')) {
+                        $select.select2({
+                            width: '100%',
+                            allowClear: !this.required,
+                            placeholder: $select.data('placeholder') || 'Pilih / cari data',
+                            dropdownParent: jQuery(document.body)
+                        });
+                    }
                 });
             }
-        });
-    }
 
-    function refreshTenantSelect2(form, select) {
-        if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
-            const $select = jQuery(select);
-            if (!$select.hasClass('select2-hidden-accessible')) {
+            function refreshTenantSelect2(form, select) {
+                if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
+                    const $select = jQuery(select);
+                    if (!$select.hasClass('select2-hidden-accessible')) {
+                        ensureTenantSelect2(form);
+                    }
+                    $select.trigger('change.select2');
+                }
+            }
+
+            function rebuildSites(form, companyId, selectedSiteId) {
+                const siteSelect = form.querySelector('select[name="site_id"]');
+                if (!siteSelect) {
+                    return;
+                }
+
+                form.dataset.rebuildingSites = '1';
+                const sites = sitesByCompany[String(companyId)] || sitesByCompany[companyId] || [];
+                siteSelect.innerHTML = '';
+
+                const allOption = document.createElement('option');
+                allOption.value = '';
+                allOption.textContent = 'All Sites';
+                siteSelect.appendChild(allOption);
+
+                let hasSelectedSite = selectedSiteId === '' || selectedSiteId === null;
+                sites.forEach(function(site) {
+                    const option = document.createElement('option');
+                    option.value = String(site.id);
+                    option.textContent = site.code;
+                    if (String(site.id) === String(selectedSiteId)) {
+                        option.selected = true;
+                        hasSelectedSite = true;
+                    }
+                    siteSelect.appendChild(option);
+                });
+
+                if (!hasSelectedSite) {
+                    siteSelect.value = '';
+                }
+
+                refreshTenantSelect2(form, siteSelect);
+                form.dataset.rebuildingSites = '0';
+            }
+
+            function submitTenantSwitch(form) {
+                if (form.dataset.submittingTenant === '1') {
+                    return;
+                }
+
+                form.dataset.submittingTenant = '1';
+                if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
+                    jQuery(form).find('select.form-select').select2('close');
+                }
+                form.submit();
+            }
+
+            forms.forEach(function(form) {
+                const companySelect = form.querySelector('select[name="company_id"]');
+                const siteSelect = form.querySelector('select[name="site_id"]');
+                const autoSubmit = form.dataset.autoSubmit === '1';
+
+                if (!companySelect || !siteSelect) {
+                    return;
+                }
+
                 ensureTenantSelect2(form);
-            }
-            $select.trigger('change.select2');
-        }
-    }
 
-    function rebuildSites(form, companyId, selectedSiteId) {
-        const siteSelect = form.querySelector('select[name="site_id"]');
-        if (!siteSelect) {
-            return;
-        }
+                if (window.jQuery) {
+                    jQuery(companySelect).off('change.tenantSwitch').on('change.tenantSwitch', function() {
+                        if (form.dataset.rebuildingSites === '1') {
+                            return;
+                        }
+                        rebuildSites(form, companySelect.value, '');
+                        if (autoSubmit) {
+                            submitTenantSwitch(form);
+                        }
+                    });
 
-        form.dataset.rebuildingSites = '1';
-        const sites = sitesByCompany[String(companyId)] || sitesByCompany[companyId] || [];
-        siteSelect.innerHTML = '';
+                    jQuery(siteSelect).off('change.tenantSwitch').on('change.tenantSwitch', function() {
+                        if (form.dataset.rebuildingSites === '1') {
+                            return;
+                        }
+                        if (autoSubmit) {
+                            submitTenantSwitch(form);
+                        }
+                    });
+                } else {
+                    companySelect.addEventListener('change', function() {
+                        rebuildSites(form, companySelect.value, '');
+                        if (autoSubmit) {
+                            submitTenantSwitch(form);
+                        }
+                    });
 
-        const allOption = document.createElement('option');
-        allOption.value = '';
-        allOption.textContent = 'All Sites';
-        siteSelect.appendChild(allOption);
-
-        let hasSelectedSite = selectedSiteId === '' || selectedSiteId === null;
-        sites.forEach(function (site) {
-            const option = document.createElement('option');
-            option.value = String(site.id);
-            option.textContent = site.code;
-            if (String(site.id) === String(selectedSiteId)) {
-                option.selected = true;
-                hasSelectedSite = true;
-            }
-            siteSelect.appendChild(option);
+                    siteSelect.addEventListener('change', function() {
+                        if (autoSubmit) {
+                            submitTenantSwitch(form);
+                        }
+                    });
+                }
+            });
         });
-
-        if (!hasSelectedSite) {
-            siteSelect.value = '';
-        }
-
-        refreshTenantSelect2(form, siteSelect);
-        form.dataset.rebuildingSites = '0';
-    }
-
-    function submitTenantSwitch(form) {
-        if (form.dataset.submittingTenant === '1') {
-            return;
-        }
-
-        form.dataset.submittingTenant = '1';
-        if (window.jQuery && jQuery.fn && jQuery.fn.select2) {
-            jQuery(form).find('select.form-select').select2('close');
-        }
-        form.submit();
-    }
-
-    forms.forEach(function (form) {
-        const companySelect = form.querySelector('select[name="company_id"]');
-        const siteSelect = form.querySelector('select[name="site_id"]');
-        const autoSubmit = form.dataset.autoSubmit === '1';
-
-        if (!companySelect || !siteSelect) {
-            return;
-        }
-
-        ensureTenantSelect2(form);
-
-        if (window.jQuery) {
-            jQuery(companySelect).off('change.tenantSwitch').on('change.tenantSwitch', function () {
-                if (form.dataset.rebuildingSites === '1') {
-                    return;
-                }
-                rebuildSites(form, companySelect.value, '');
-                if (autoSubmit) {
-                    submitTenantSwitch(form);
-                }
-            });
-
-            jQuery(siteSelect).off('change.tenantSwitch').on('change.tenantSwitch', function () {
-                if (form.dataset.rebuildingSites === '1') {
-                    return;
-                }
-                if (autoSubmit) {
-                    submitTenantSwitch(form);
-                }
-            });
-        } else {
-            companySelect.addEventListener('change', function () {
-                rebuildSites(form, companySelect.value, '');
-                if (autoSubmit) {
-                    submitTenantSwitch(form);
-                }
-            });
-
-            siteSelect.addEventListener('change', function () {
-                if (autoSubmit) {
-                    submitTenantSwitch(form);
-                }
-            });
-        }
-    });
-});
-</script>
+    </script>
 <?php endif ?>

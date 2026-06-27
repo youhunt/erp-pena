@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= esc(lang('Auth.login')) ?> | PENA ERP</title>
+    <title><?= esc(lang('Auth.login')) ?> | LENTERRA ERP</title>
     <link rel="shortcut icon" href="<?= base_url('assets/skote/images/Logo.png') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/skote/css/bootstrap.min.css') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/skote/css/icons.min.css') ?>">
@@ -23,11 +23,11 @@
                                 <div class="col-7">
                                     <div class="text-primary p-4">
                                         <h5 class="text-primary">Welcome Back</h5>
-                                        <p>Sign in to continue to PENA ERP.</p>
+                                        <p>Sign in to continue to LENTERRA ERP.</p>
                                     </div>
                                 </div>
                                 <div class="col-5 align-self-end">
-                                    <img src="<?= base_url('assets/skote/images/profile-img.png') ?>" alt="PENA ERP login" class="img-fluid">
+                                    <img src="<?= base_url('assets/skote/images/profile-img.png') ?>" alt="LENTERRA ERP login" class="img-fluid">
                                 </div>
                             </div>
                         </div>
@@ -37,7 +37,7 @@
                                 <a href="<?= site_url('/') ?>" class="auth-logo-light">
                                     <div class="avatar-md profile-user-wid mb-4">
                                         <span class="avatar-title rounded-circle bg-light">
-                                            <img src="<?= base_url('assets/skote/images/logo-sm-light.png') ?>" alt="PENA ERP" class="rounded-circle" height="34">
+                                            <img src="<?= base_url('assets/skote/images/logo-sm-light.png') ?>" alt="LENTERRA ERP" class="rounded-circle" height="34">
                                         </span>
                                     </div>
                                 </a>
@@ -45,7 +45,7 @@
                                 <a href="<?= site_url('/') ?>" class="auth-logo-dark">
                                     <div class="avatar-md profile-user-wid mb-4">
                                         <span class="avatar-title rounded-circle bg-light">
-                                            <img src="<?= base_url('assets/skote/images/logo-sm-dark.png') ?>" alt="PENA ERP" class="rounded-circle" height="34">
+                                            <img src="<?= base_url('assets/skote/images/logo-sm-dark.png') ?>" alt="LENTERRA ERP" class="rounded-circle" height="34">
                                         </span>
                                     </div>
                                 </a>
@@ -140,7 +140,7 @@
                     </div>
 
                     <div class="mt-5 text-center">
-                        <p class="mb-0">&copy; <?= date('Y') ?> PENA ERP. Enterprise ERP Foundation</p>
+                        <p class="mb-0">&copy; <?= date('Y') ?> LENTERRA ERP. Enterprise ERP Foundation</p>
                     </div>
                 </div>
             </div>

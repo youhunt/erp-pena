@@ -13,7 +13,7 @@
                             <h4 class="mb-sm-0 font-size-18"><?= esc($title ?? 'Dashboard') ?></h4>
                             <div class="page-title-right">
                                 <ol class="breadcrumb m-0">
-                                    <li class="breadcrumb-item"><a href="<?= site_url('dashboard') ?>">PENA ERP</a></li>
+                                    <li class="breadcrumb-item"><a href="<?= site_url('dashboard') ?>">LENTERRA ERP</a></li>
                                     <li class="breadcrumb-item active"><?= esc($title ?? 'Dashboard') ?></li>
                                 </ol>
                             </div>
@@ -21,21 +21,21 @@
                     </div>
                 </div>
 
-            <?php if (session('message')): ?>
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                    <?= esc(session('message')) ?>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            <?php endif ?>
+                <?php if (session('message')): ?>
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <?= esc(session('message')) ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                <?php endif ?>
 
-            <?php if (session('error')): ?>
-                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                    <?= esc(session('error')) ?>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            <?php endif ?>
+                <?php if (session('error')): ?>
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <?= esc(session('error')) ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                <?php endif ?>
 
-            <?= $this->renderSection('content') ?>
+                <?= $this->renderSection('content') ?>
             </div>
         </div>
 
@@ -45,4 +45,5 @@
 </div>
 
 </body>
+
 </html>

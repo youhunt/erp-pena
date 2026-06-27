@@ -1,4 +1,4 @@
-# PENA ERP Overview
+# LENTERRA ERP Overview
 
 ## Repository Audit
 

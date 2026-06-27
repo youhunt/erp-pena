@@ -1,6 +1,6 @@
-# PENA ERP
+# LENTERRA ERP
 
-PENA ERP is an enterprise ERP foundation built with CodeIgniter 4, CodeIgniter Shield, MySQL/MariaDB, and a Skote-compatible admin layout structure.
+LENTERRA ERP is an enterprise ERP foundation built with CodeIgniter 4, CodeIgniter Shield, MySQL/MariaDB, and a Skote-compatible admin layout structure.
 
 ## Current Stage
 

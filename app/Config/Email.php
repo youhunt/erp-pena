@@ -7,7 +7,7 @@ use CodeIgniter\Config\BaseConfig;
 class Email extends BaseConfig
 {
     public string $fromEmail  = 'no-reply@pena-erp.local';
-    public string $fromName   = 'PENA ERP';
+    public string $fromName   = 'LENTERRA ERP';
     public string $recipients = '';
 
     /**
