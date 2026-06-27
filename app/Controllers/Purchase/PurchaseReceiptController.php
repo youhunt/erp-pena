@@ -463,7 +463,10 @@ class PurchaseReceiptController extends BaseController
 
     private function issueDocumentNumber(string $transactionCode, string $date, int $companyId, mixed $siteId): string
     {
-        return (new DocumentNumberService())->next($transactionCode, $date, $companyId, $siteId !== null ? (int) $siteId : null);
+        return (new DocumentNumberService())->next($transactionCode, $date, [
+            'company_id' => $companyId,
+            'site_id' => $siteId !== null ? (int) $siteId : null,
+        ]);
     }
 
     private function nullableInt(mixed $value): ?int
