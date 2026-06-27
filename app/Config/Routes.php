@@ -177,7 +177,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
 
     $routes->group('gl', static function (RouteCollection $routes): void {
         $routes->get('books', 'Finance\GeneralLedgerController::books');
-        $routes->get('chart-of-accounts', 'Finance\GeneralLedgerController::chartOfAccounts');
+        $routes->get('chart-of-accounts', 'Finance\GeneralLedgerController::chartAccounts');
         $routes->get('posting-profiles', 'Finance\PostingProfileController::index');
         $routes->get('entries', 'Finance\GeneralLedgerController::entries');
         $routes->get('entries/(:num)', 'Finance\GeneralLedgerController::showEntry/$1');
