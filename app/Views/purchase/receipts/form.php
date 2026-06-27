@@ -4,11 +4,15 @@
 <?php
 $oldQtys = old('qty_received', []);
 $oldBatchNos = old('batch_no', []);
+$oldUnitCosts = old('unit_cost', []);
 if (! is_array($oldQtys)) {
     $oldQtys = [];
 }
 if (! is_array($oldBatchNos)) {
     $oldBatchNos = [];
+}
+if (! is_array($oldUnitCosts)) {
+    $oldUnitCosts = [];
 }
 $selectedWarehouseId = (int) old('warehouse_id', $selectedWarehouseId ?? 0);
 $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
@@ -85,7 +89,7 @@ $itemDisplay = static function (array $line): array {
         <div class="card-body">
             <h4 class="card-title mb-3">Outstanding Lines</h4>
             <div class="alert alert-info py-2">
-                Isi <strong>Receive Now</strong> sesuai qty barang yang benar-benar diterima. Setelah posting berhasil, sistem akan update PO received/outstanding dan stock inventory.
+                Isi <strong>Receive Now</strong> dan koreksi <strong>Unit Cost</strong> jika harga receipt berbeda. Unit Cost akan membentuk stock value dan GL receipt.
             </div>
             <div class="table-responsive">
                 <table class="table table-nowrap align-middle mb-0" id="receiptLinesTable">
@@ -98,6 +102,8 @@ $itemDisplay = static function (array $line): array {
                             <th class="text-end">Received</th>
                             <th class="text-end">Outstanding</th>
                             <th class="text-end" style="min-width:150px;">Receive Now</th>
+                            <th class="text-end" style="min-width:150px;">Unit Cost</th>
+                            <th class="text-end" style="min-width:160px;">Line Cost</th>
                             <th>UoM</th>
                         </tr>
                     </thead>
@@ -107,6 +113,7 @@ $itemDisplay = static function (array $line): array {
                         $outstanding = (float) ($line['qty_outstanding'] ?? $line['qty'] ?? 0);
                         $qtyValue = array_key_exists($index, $oldQtys) ? $oldQtys[$index] : $outstanding;
                         $batchValue = array_key_exists($index, $oldBatchNos) ? $oldBatchNos[$index] : '';
+                        $unitCostValue = array_key_exists($index, $oldUnitCosts) ? $oldUnitCosts[$index] : ($line['unit_price'] ?? 0);
                         [$displayCode, $displayName] = $itemDisplay($line);
                         ?>
                         <tr>
@@ -126,12 +133,22 @@ $itemDisplay = static function (array $line): array {
                                     value="<?= esc((string) $qtyValue) ?>"
                                 >
                             </td>
+                            <td>
+                                <input
+                                    type="text"
+                                    inputmode="decimal"
+                                    name="unit_cost[]"
+                                    class="form-control text-end unit-cost"
+                                    value="<?= esc((string) $unitCostValue) ?>"
+                                >
+                            </td>
+                            <td class="text-end fw-semibold line-cost">0.00</td>
                             <td><?= esc($line['uom_code'] ?? '-') ?></td>
                         </tr>
                     <?php endforeach ?>
 
                     <?php if ($lines === []): ?>
-                        <tr><td colspan="8" class="text-center text-muted py-4">No outstanding line to receive.</td></tr>
+                        <tr><td colspan="10" class="text-center text-muted py-4">No outstanding line to receive.</td></tr>
                     <?php endif ?>
                     </tbody>
                     <?php if ($lines !== []): ?>
@@ -139,6 +156,8 @@ $itemDisplay = static function (array $line): array {
                         <tr>
                             <th colspan="6" class="text-end">Total Receive Now</th>
                             <th class="text-end" id="totalReceiveNow">0.0000</th>
+                            <th class="text-end">Total Cost</th>
+                            <th class="text-end" id="totalReceiptCost">0.00</th>
                             <th></th>
                         </tr>
                     </tfoot>
@@ -147,7 +166,7 @@ $itemDisplay = static function (array $line): array {
             </div>
 
             <div class="d-flex gap-2 mt-4">
-                <button type="submit" class="btn btn-primary" <?= $lines === [] ? 'disabled' : '' ?> onclick="return confirm('Post receipt ini? PO qty dan stock inventory akan langsung bertambah.')"><i class="bx bx-package me-1"></i> Post Receipt & Update Stock</button>
+                <button type="submit" class="btn btn-primary" <?= $lines === [] ? 'disabled' : '' ?> onclick="return confirm('Post receipt ini? Unit cost akan membentuk nilai stock dan GL receipt.')"><i class="bx bx-package me-1"></i> Post Receipt & Update Stock</button>
                 <a href="<?= site_url('purchase/orders/' . $po['id']) ?>" class="btn btn-light">Back to PO</a>
             </div>
         </div>
@@ -161,6 +180,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const warehouse = document.getElementById('receiptWarehouse');
     const location = document.getElementById('receiptLocation');
     const totalReceiveNow = document.getElementById('totalReceiveNow');
+    const totalReceiptCost = document.getElementById('totalReceiptCost');
     const locationOptionsUrl = '<?= site_url('setup/options/locations') ?>';
     const originalLocations = location
         ? Array.from(location.options).filter(option => option.value !== '').map(option => ({
@@ -179,59 +199,61 @@ document.addEventListener('DOMContentLoaded', function () {
         return Number.isFinite(parsed) ? parsed : 0;
     }
 
+    function recalcTotals() {
+        let totalQty = 0;
+        let totalCost = 0;
+        document.querySelectorAll('#receiptLinesTable tbody tr').forEach(function (row) {
+            const qtyInput = row.querySelector('.receive-now');
+            const unitCostInput = row.querySelector('.unit-cost');
+            const lineCostCell = row.querySelector('.line-cost');
+            if (! qtyInput || ! unitCostInput || ! lineCostCell) return;
+            const qty = number(qtyInput.value);
+            const unitCost = number(unitCostInput.value);
+            const lineCost = qty * unitCost;
+            totalQty += qty;
+            totalCost += lineCost;
+            lineCostCell.textContent = lineCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        });
+        if (totalReceiveNow) totalReceiveNow.textContent = totalQty.toLocaleString(undefined, {minimumFractionDigits: 4, maximumFractionDigits: 4});
+        if (totalReceiptCost) totalReceiptCost.textContent = totalCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
     function hasSelect2(select) {
-        return !!(
-            select
-            && window.jQuery
-            && window.jQuery.fn
-            && window.jQuery.fn.select2
-            && window.jQuery(select).data('select2')
-        );
+        return !!(select && window.jQuery && window.jQuery.fn && window.jQuery.fn.select2 && window.jQuery(select).data('select2'));
     }
-
-    function destroySelect2(select) {
-        if (hasSelect2(select)) {
-            window.jQuery(select).select2('destroy');
-        }
-    }
-
+    function destroySelect2(select) { if (hasSelect2(select)) window.jQuery(select).select2('destroy'); }
     function initSelect2(select) {
         if (!select || !window.jQuery || !window.jQuery.fn || !window.jQuery.fn.select2) return;
-        if (window.PenaSelect) {
-            window.PenaSelect.init(select.parentElement || document);
-            return;
-        }
-        if (!window.jQuery(select).data('select2')) {
-            window.jQuery(select).select2({ width: '100%' });
-        }
+        if (window.PenaSelect) { window.PenaSelect.init(select.parentElement || document); return; }
+        if (!window.jQuery(select).data('select2')) window.jQuery(select).select2({ width: '100%' });
     }
-
+    function notifySelectChanged(select, reinitSelect2) {
+        if (!select) return;
+        if (reinitSelect2) initSelect2(select);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        if (window.jQuery) jQuery(select).trigger('change.select2').trigger('change');
+    }
     function setLocationOptions(options, selectedValue) {
         if (!location) return;
         const wasEnhanced = hasSelect2(location);
-
         destroySelect2(location);
         location.innerHTML = '';
-
         const placeholder = document.createElement('option');
         placeholder.value = '';
         placeholder.textContent = options.length ? 'Select Location' : 'No location for selected warehouse';
         location.appendChild(placeholder);
-
         options.forEach(function (item) {
             const option = document.createElement('option');
             option.value = String(item.value || '');
             option.textContent = String(item.label || item.text || item.value || '');
             location.appendChild(option);
         });
-
         const fallback = options[0] ? String(options[0].value || '') : '';
         const selectedExists = options.some(item => String(item.value || '') === String(selectedValue || ''));
         location.value = selectedExists ? String(selectedValue) : fallback;
         location.dataset.selectedLocationId = location.value;
         notifySelectChanged(location, wasEnhanced);
     }
-
     function setLocationLoading(text) {
         if (!location) return;
         const wasEnhanced = hasSelect2(location);
@@ -244,49 +266,19 @@ document.addEventListener('DOMContentLoaded', function () {
         location.value = '';
         notifySelectChanged(location, wasEnhanced);
     }
-
     function fetchLocations() {
         if (!warehouse || !location) return;
         const warehouseId = warehouse.value;
         const selectedBefore = location.value || location.dataset.selectedLocationId || '';
-
-        if (!warehouseId) {
-            setLocationOptions([], '');
-            return;
-        }
-
+        if (!warehouseId) { setLocationOptions([], ''); return; }
         setLocationLoading('Loading locations...');
-        fetch(locationOptionsUrl + '?warehouse_id=' + encodeURIComponent(warehouseId), {
-            headers: {'X-Requested-With': 'XMLHttpRequest'}
-        })
+        fetch(locationOptionsUrl + '?warehouse_id=' + encodeURIComponent(warehouseId), {headers: {'X-Requested-With': 'XMLHttpRequest'}})
             .then(response => response.ok ? response.json() : Promise.reject(new Error('Location request failed')))
-            .then(options => {
-                setLocationOptions(Array.isArray(options) ? options : [], selectedBefore);
-            })
+            .then(options => setLocationOptions(Array.isArray(options) ? options : [], selectedBefore))
             .catch(() => {
-                const matching = originalLocations.filter(item => item.warehouseId === warehouseId)
-                    .map(item => ({value: item.value, label: item.text}));
+                const matching = originalLocations.filter(item => item.warehouseId === warehouseId).map(item => ({value: item.value, label: item.text}));
                 setLocationOptions(matching, selectedBefore);
             });
-    }
-
-    function notifySelectChanged(select, reinitSelect2) {
-        if (!select) return;
-        if (reinitSelect2) {
-            initSelect2(select);
-        }
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        if (window.jQuery) {
-            jQuery(select).trigger('change.select2').trigger('change');
-        }
-    }
-
-    function recalcReceiveTotal() {
-        let total = 0;
-        document.querySelectorAll('.receive-now').forEach(function (input) {
-            total += number(input.value);
-        });
-        if (totalReceiveNow) totalReceiveNow.textContent = total.toLocaleString(undefined, {minimumFractionDigits: 4, maximumFractionDigits: 4});
     }
 
     document.querySelectorAll('.receive-now').forEach(function (input) {
@@ -294,24 +286,19 @@ document.addEventListener('DOMContentLoaded', function () {
             const outstanding = number(input.dataset.outstanding);
             const value = number(input.value);
             input.classList.toggle('is-invalid', value < 0 || value > outstanding);
-            recalcReceiveTotal();
+            recalcTotals();
         });
     });
-
-    if (warehouse && location) {
-        warehouse.addEventListener('change', function () {
-            location.dataset.selectedLocationId = '';
-            fetchLocations();
+    document.querySelectorAll('.unit-cost').forEach(function (input) {
+        input.addEventListener('input', function () {
+            const value = number(input.value);
+            input.classList.toggle('is-invalid', value < 0);
+            recalcTotals();
         });
-        if (window.jQuery) {
-            window.jQuery(warehouse).on('change select2:select', function () {
-                location.dataset.selectedLocationId = '';
-                fetchLocations();
-            });
-        }
-    }
+    });
+    if (warehouse) warehouse.addEventListener('change', fetchLocations);
     fetchLocations();
-    recalcReceiveTotal();
+    recalcTotals();
 });
 </script>
 <?= $this->endSection() ?>
