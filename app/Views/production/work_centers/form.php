@@ -5,6 +5,7 @@
 $workCenter ??= [];
 $machines ??= [];
 $costs ??= [];
+$uoms ??= [];
 $isEdit = (bool) ($isEdit ?? false);
 $action ??= $isEdit ? site_url('production/work-centers/' . (int) ($workCenter['id'] ?? 0)) : site_url('production/work-centers');
 $val = static fn (string $field, mixed $default = ''): string => (string) old($field, $workCenter[$field] ?? $default);
@@ -12,9 +13,77 @@ $machineRows = $machines !== [] ? $machines : [
     ['no' => 10, 'machine' => $val('machine_code'), 'notes1' => $val('notes'), 'speed' => $val('speed', '0'), 'capacity' => $val('capacity_percent', '100'), 'qtylabor' => $val('qty_labor', '0'), 'workhour' => $val('working_hour', '0'), 'length' => $val('max_length', '0'), 'luom' => $val('length_uom', 'CM'), 'width' => $val('max_width', '0'), 'wuom' => $val('width_uom', 'CM'), 'height' => $val('max_height', '0'), 'huom' => $val('height_uom', 'CM'), 'volume' => $val('max_volume', '0'), 'vuom' => $val('volume_uom', 'M3')],
 ];
 $costRows = $costs !== [] ? $costs : [
-    ['costtype' => $val('cost_type', 'Labor'), 'costamount' => $val('cost_amount', '0'), 'costuom' => $val('cost_uom', 'Hour'), 'notes2' => ''],
+    ['costtype' => $val('cost_type', 'Labor'), 'costamount' => $val('cost_amount', '0'), 'costuom' => $val('cost_uom', 'HOUR'), 'notes2' => ''],
 ];
+$uomOptions = static function (string $selected, array $uoms, string $fallback = ''): string {
+    $selected = trim($selected !== '' ? $selected : $fallback);
+    $html = '<option value="">Select</option>';
+    $exists = false;
+    foreach ($uoms as $uom) {
+        $code = (string) ($uom['code'] ?? $uom['uom_code'] ?? '');
+        if ($code === '') {
+            continue;
+        }
+        $name = (string) ($uom['name'] ?? $uom['description'] ?? '');
+        $exists = $exists || strtoupper($code) === strtoupper($selected);
+        $label = trim($code . ($name !== '' ? ' - ' . $name : ''));
+        $html .= '<option value="' . esc($code, 'attr') . '" ' . (strtoupper($selected) === strtoupper($code) ? 'selected' : '') . '>' . esc($label) . '</option>';
+    }
+    if ($selected !== '' && ! $exists) {
+        $html .= '<option value="' . esc($selected, 'attr') . '" selected>' . esc($selected) . '</option>';
+    }
+    return $html;
+};
 ?>
+<style>
+    .wc-detail-wrap {
+        overflow-x: auto;
+        overflow-y: visible;
+        padding-bottom: .5rem;
+    }
+    .wc-machine-table {
+        min-width: 1900px;
+        table-layout: fixed;
+    }
+    .wc-cost-table {
+        min-width: 820px;
+        table-layout: fixed;
+    }
+    .wc-machine-table th,
+    .wc-machine-table td,
+    .wc-cost-table th,
+    .wc-cost-table td {
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+    .wc-machine-table .form-control,
+    .wc-machine-table .form-select,
+    .wc-cost-table .form-control,
+    .wc-cost-table .form-select {
+        min-height: 34px;
+    }
+    .wc-machine-table .select2-container,
+    .wc-cost-table .select2-container {
+        min-width: 120px;
+    }
+    .wc-machine-table th:nth-child(1), .wc-machine-table td:nth-child(1) { width: 78px; }
+    .wc-machine-table th:nth-child(2), .wc-machine-table td:nth-child(2) { width: 170px; }
+    .wc-machine-table th:nth-child(3), .wc-machine-table td:nth-child(3) { width: 260px; }
+    .wc-machine-table th:nth-child(4), .wc-machine-table td:nth-child(4),
+    .wc-machine-table th:nth-child(5), .wc-machine-table td:nth-child(5),
+    .wc-machine-table th:nth-child(6), .wc-machine-table td:nth-child(6),
+    .wc-machine-table th:nth-child(7), .wc-machine-table td:nth-child(7),
+    .wc-machine-table th:nth-child(8), .wc-machine-table td:nth-child(8),
+    .wc-machine-table th:nth-child(10), .wc-machine-table td:nth-child(10),
+    .wc-machine-table th:nth-child(12), .wc-machine-table td:nth-child(12),
+    .wc-machine-table th:nth-child(14), .wc-machine-table td:nth-child(14) { width: 125px; }
+    .wc-machine-table th:nth-child(9), .wc-machine-table td:nth-child(9),
+    .wc-machine-table th:nth-child(11), .wc-machine-table td:nth-child(11),
+    .wc-machine-table th:nth-child(13), .wc-machine-table td:nth-child(13),
+    .wc-machine-table th:nth-child(15), .wc-machine-table td:nth-child(15) { width: 135px; }
+    .wc-machine-table th:nth-child(16), .wc-machine-table td:nth-child(16) { width: 105px; }
+</style>
+
 <form method="post" action="<?= esc($action, 'attr') ?>" id="workCenterForm">
     <?= csrf_field() ?>
     <input type="hidden" name="machine_code" id="machine_code_header" value="<?= esc($val('machine_code')) ?>">
@@ -32,7 +101,7 @@ $costRows = $costs !== [] ? $costs : [
             <div class="row g-3">
                 <div class="col-md-3">
                     <label class="form-label">Site</label>
-                    <select name="site_code" class="form-select" required>
+                    <select name="site_code" class="form-select select2-basic" required>
                         <option value="">Select Site</option>
                         <?php foreach ($sites as $site): ?>
                             <?php $code = (string) ($site['code'] ?? ''); ?>
@@ -42,7 +111,7 @@ $costRows = $costs !== [] ? $costs : [
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Department</label>
-                    <select name="department_code" class="form-select" required>
+                    <select name="department_code" class="form-select select2-basic" required>
                         <option value="">Select Department</option>
                         <?php foreach ($departments as $department): ?>
                             <?php $code = (string) ($department['code'] ?? ''); ?>
@@ -52,7 +121,7 @@ $costRows = $costs !== [] ? $costs : [
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">Warehouse</label>
-                    <select name="warehouse_code" class="form-select" required>
+                    <select name="warehouse_code" class="form-select select2-basic" required>
                         <option value="">Select Warehouse</option>
                         <?php foreach ($warehouses as $warehouse): ?>
                             <?php $code = (string) ($warehouse['code'] ?? ''); ?>
@@ -89,30 +158,30 @@ $costRows = $costs !== [] ? $costs : [
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
                     <h5 class="font-size-15 mb-1">Machine Detail</h5>
-                    <p class="text-muted mb-0">Machine wajib diisi minimal 1 row. Row pertama otomatis menjadi primary machine.</p>
+                    <p class="text-muted mb-0">Scroll ke kanan untuk detail ukuran dan UoM. UoM mengambil dari master UOM.</p>
                 </div>
                 <button type="button" class="btn btn-sm btn-outline-primary" id="addMachineRow"><i class="bx bx-plus me-1"></i> Add Machine</button>
             </div>
-            <div class="table-responsive">
-                <table class="table table-bordered table-sm align-middle mb-0" id="machineTable">
+            <div class="wc-detail-wrap">
+                <table class="table table-bordered table-sm align-middle mb-0 wc-machine-table" id="machineTable">
                     <thead class="table-light">
                         <tr>
-                            <th style="width:70px">No</th>
-                            <th style="min-width:140px">Machine</th>
-                            <th style="min-width:180px">Notes</th>
-                            <th class="text-end" style="width:110px">Speed</th>
-                            <th class="text-end" style="width:110px">% Capacity</th>
-                            <th class="text-end" style="width:110px">Qty Labor</th>
-                            <th class="text-end" style="width:110px">Working Hour</th>
-                            <th class="text-end" style="width:110px">Length</th>
-                            <th style="width:90px">L UoM</th>
-                            <th class="text-end" style="width:110px">Width</th>
-                            <th style="width:90px">W UoM</th>
-                            <th class="text-end" style="width:110px">Height</th>
-                            <th style="width:90px">H UoM</th>
-                            <th class="text-end" style="width:110px">Volume</th>
-                            <th style="width:90px">V UoM</th>
-                            <th style="width:80px">Action</th>
+                            <th>No</th>
+                            <th>Machine</th>
+                            <th>Notes</th>
+                            <th class="text-end">Speed</th>
+                            <th class="text-end">% Capacity</th>
+                            <th class="text-end">Qty Labor</th>
+                            <th class="text-end">Working Hour</th>
+                            <th class="text-end">Length</th>
+                            <th>L UoM</th>
+                            <th class="text-end">Width</th>
+                            <th>W UoM</th>
+                            <th class="text-end">Height</th>
+                            <th>H UoM</th>
+                            <th class="text-end">Volume</th>
+                            <th>V UoM</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -126,13 +195,13 @@ $costRows = $costs !== [] ? $costs : [
                             <td><input type="number" step="0.000001" name="machine_qtylabor[]" class="form-control form-control-sm text-end" value="<?= esc($m['qtylabor'] ?? '0') ?>"></td>
                             <td><input type="number" step="0.001" name="machine_workhour[]" class="form-control form-control-sm text-end" value="<?= esc($m['workhour'] ?? '0') ?>"></td>
                             <td><input type="number" step="0.000001" name="machine_length[]" class="form-control form-control-sm text-end" value="<?= esc($m['length'] ?? '0') ?>"></td>
-                            <td><input name="machine_luom[]" class="form-control form-control-sm" value="<?= esc($m['luom'] ?? 'CM') ?>"></td>
+                            <td><select name="machine_luom[]" class="form-select form-select-sm uom-select"><?= $uomOptions((string) ($m['luom'] ?? 'CM'), $uoms, 'CM') ?></select></td>
                             <td><input type="number" step="0.000001" name="machine_width[]" class="form-control form-control-sm text-end" value="<?= esc($m['width'] ?? '0') ?>"></td>
-                            <td><input name="machine_wuom[]" class="form-control form-control-sm" value="<?= esc($m['wuom'] ?? 'CM') ?>"></td>
+                            <td><select name="machine_wuom[]" class="form-select form-select-sm uom-select"><?= $uomOptions((string) ($m['wuom'] ?? 'CM'), $uoms, 'CM') ?></select></td>
                             <td><input type="number" step="0.000001" name="machine_height[]" class="form-control form-control-sm text-end" value="<?= esc($m['height'] ?? '0') ?>"></td>
-                            <td><input name="machine_huom[]" class="form-control form-control-sm" value="<?= esc($m['huom'] ?? 'CM') ?>"></td>
+                            <td><select name="machine_huom[]" class="form-select form-select-sm uom-select"><?= $uomOptions((string) ($m['huom'] ?? 'CM'), $uoms, 'CM') ?></select></td>
                             <td><input type="number" step="0.000001" name="machine_volume[]" class="form-control form-control-sm text-end" value="<?= esc($m['volume'] ?? '0') ?>"></td>
-                            <td><input name="machine_vuom[]" class="form-control form-control-sm" value="<?= esc($m['vuom'] ?? 'M3') ?>"></td>
+                            <td><select name="machine_vuom[]" class="form-select form-select-sm uom-select"><?= $uomOptions((string) ($m['vuom'] ?? 'M3'), $uoms, 'M3') ?></select></td>
                             <td><button type="button" class="btn btn-sm btn-outline-danger remove-row">Remove</button></td>
                         </tr>
                     <?php endforeach ?>
@@ -151,15 +220,15 @@ $costRows = $costs !== [] ? $costs : [
                 </div>
                 <button type="button" class="btn btn-sm btn-outline-primary" id="addCostRow"><i class="bx bx-plus me-1"></i> Add Cost</button>
             </div>
-            <div class="table-responsive">
-                <table class="table table-bordered table-sm align-middle mb-0" id="costTable">
+            <div class="wc-detail-wrap">
+                <table class="table table-bordered table-sm align-middle mb-0 wc-cost-table" id="costTable">
                     <thead class="table-light">
                         <tr>
-                            <th style="min-width:150px">Cost Type</th>
+                            <th style="width:180px">Cost Type</th>
                             <th class="text-end" style="width:150px">Amount</th>
-                            <th style="width:120px">UoM</th>
-                            <th style="min-width:220px">Notes</th>
-                            <th style="width:80px">Action</th>
+                            <th style="width:160px">UoM</th>
+                            <th>Notes</th>
+                            <th style="width:90px">Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -167,7 +236,7 @@ $costRows = $costs !== [] ? $costs : [
                         <tr>
                             <td><input name="costtype[]" class="form-control form-control-sm" maxlength="12" value="<?= esc($c['costtype'] ?? '') ?>"></td>
                             <td><input type="number" step="0.01" name="costamount[]" class="form-control form-control-sm text-end" value="<?= esc($c['costamount'] ?? '0') ?>"></td>
-                            <td><input name="costuom[]" class="form-control form-control-sm" maxlength="4" value="<?= esc($c['costuom'] ?? 'Hour') ?>"></td>
+                            <td><select name="costuom[]" class="form-select form-select-sm uom-select"><?= $uomOptions((string) ($c['costuom'] ?? 'HOUR'), $uoms, 'HOUR') ?></select></td>
                             <td><input name="cost_notes[]" class="form-control form-control-sm" maxlength="30" value="<?= esc($c['notes2'] ?? '') ?>"></td>
                             <td><button type="button" class="btn btn-sm btn-outline-danger remove-row">Remove</button></td>
                         </tr>
@@ -197,6 +266,15 @@ $costRows = $costs !== [] ? $costs : [
     const costTable = document.querySelector('#costTable tbody');
     const hiddenMachine = document.getElementById('machine_code_header');
 
+    function initSelect2(scope) {
+        if (! window.jQuery || ! jQuery.fn.select2) return;
+        jQuery(scope || document).find('.uom-select, .select2-basic').each(function () {
+            const el = jQuery(this);
+            if (el.data('select2')) return;
+            el.select2({ width: '100%' });
+        });
+    }
+
     function syncPrimaryMachine() {
         const firstMachine = machineTable.querySelector('input[name="machine[]"]');
         hiddenMachine.value = firstMachine ? firstMachine.value.trim() : '';
@@ -212,31 +290,44 @@ $costRows = $costs !== [] ? $costs : [
         syncPrimaryMachine();
     }
 
+    function resetSelect2(row) {
+        if (window.jQuery && jQuery.fn.select2) {
+            jQuery(row).find('.uom-select').each(function () {
+                const el = jQuery(this);
+                if (el.data('select2')) el.select2('destroy');
+            });
+        }
+    }
+
     document.getElementById('addMachineRow').addEventListener('click', function () {
         const first = machineTable.querySelector('tr');
         const row = first.cloneNode(true);
-        row.querySelectorAll('input').forEach(input => {
+        resetSelect2(row);
+        row.querySelectorAll('input, select').forEach(input => {
             if (input.name === 'machine_no[]') input.value = (machineTable.querySelectorAll('tr').length + 1) * 10;
-            else if (input.name.includes('uom') || ['machine_luom[]','machine_wuom[]','machine_huom[]'].includes(input.name)) input.value = 'CM';
-            else if (input.name === 'machine_vuom[]') input.value = 'M3';
             else if (input.name === 'machine_capacity[]') input.value = '100';
+            else if (input.name === 'machine_luom[]' || input.name === 'machine_wuom[]' || input.name === 'machine_huom[]') input.value = 'CM';
+            else if (input.name === 'machine_vuom[]') input.value = 'M3';
             else if (input.type === 'number') input.value = '0';
             else input.value = '';
             input.required = false;
         });
         machineTable.appendChild(row);
         renumberMachineRows();
+        initSelect2(row);
     });
 
     document.getElementById('addCostRow').addEventListener('click', function () {
         const first = costTable.querySelector('tr');
         const row = first.cloneNode(true);
-        row.querySelectorAll('input').forEach(input => {
+        resetSelect2(row);
+        row.querySelectorAll('input, select').forEach(input => {
             if (input.name === 'costamount[]') input.value = '0';
-            else if (input.name === 'costuom[]') input.value = 'Hour';
+            else if (input.name === 'costuom[]') input.value = 'HOUR';
             else input.value = '';
         });
         costTable.appendChild(row);
+        initSelect2(row);
     });
 
     document.addEventListener('input', function (event) {
@@ -248,11 +339,17 @@ $costRows = $costs !== [] ? $costs : [
         const row = event.target.closest('tr');
         const tbody = row.closest('tbody');
         if (tbody.querySelectorAll('tr').length <= 1) {
-            row.querySelectorAll('input').forEach(input => {
+            resetSelect2(row);
+            row.querySelectorAll('input, select').forEach(input => {
                 if (input.type === 'number') input.value = input.name.includes('capacity') ? '100' : '0';
+                else if (input.name === 'machine_luom[]' || input.name === 'machine_wuom[]' || input.name === 'machine_huom[]') input.value = 'CM';
+                else if (input.name === 'machine_vuom[]') input.value = 'M3';
+                else if (input.name === 'costuom[]') input.value = 'HOUR';
                 else input.value = '';
             });
+            initSelect2(row);
         } else {
+            resetSelect2(row);
             row.remove();
         }
         renumberMachineRows();
@@ -263,6 +360,7 @@ $costRows = $costs !== [] ? $costs : [
     });
 
     renumberMachineRows();
+    initSelect2(document);
 })();
 </script>
 <?= $this->endSection() ?>
