@@ -24,6 +24,8 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->group('system', static function (RouteCollection $routes): void {
         $routes->get('development-status', 'System\DevelopmentStatusController::index');
         $routes->get('core-health', 'System\CoreHealthController::index');
+        $routes->get('auto-setup', 'System\AutoSetupController::index');
+        $routes->post('auto-setup/run', 'System\AutoSetupController::run');
         $routes->get('data-import', 'System\DataImportController::index');
         $routes->get('data-import/coa/template', 'System\DataImportController::coaTemplate');
         $routes->get('data-import/coa/import', 'System\DataImportController::coaImportForm');
@@ -175,41 +177,18 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
 
     $routes->group('gl', static function (RouteCollection $routes): void {
         $routes->get('books', 'Finance\GeneralLedgerController::books');
-        $routes->get('columns', 'Finance\GeneralLedgerController::columns');
-        $routes->get('legacy-coa', 'Finance\GeneralLedgerController::legacyCoa');
-        $routes->get('legacy-excel', 'Finance\LegacyGlExcelController::index');
-        $routes->get('legacy-excel/(:segment)/template', 'Finance\LegacyGlExcelController::template/$1');
-        $routes->get('legacy-excel/(:segment)/export', 'Finance\LegacyGlExcelController::export/$1');
-        $routes->get('legacy-excel/(:segment)/import', 'Finance\LegacyGlExcelController::importForm/$1');
-        $routes->post('legacy-excel/(:segment)/import', 'Finance\LegacyGlExcelController::import/$1');
-        $routes->post('legacy-excel/(:segment)/commit', 'Finance\LegacyGlExcelController::commit/$1');
-        $routes->get('legacy-excel/(:segment)/errors/(:segment)', 'Finance\LegacyGlExcelController::downloadErrors/$1/$2');
-        $routes->get('chart-of-accounts', 'Finance\GeneralLedgerController::chartAccounts');
-        $routes->get('posting-profiles', 'Finance\GeneralLedgerController::postingProfiles');
-        $routes->post('posting-profiles', 'Finance\GeneralLedgerController::updatePostingProfiles');
-        $routes->get('recurring', 'Finance\GeneralLedgerController::recurring');
+        $routes->get('chart-of-accounts', 'Finance\GeneralLedgerController::chartOfAccounts');
+        $routes->get('posting-profiles', 'Finance\PostingProfileController::index');
         $routes->get('entries', 'Finance\GeneralLedgerController::entries');
-        $routes->get('entries/export', 'System\CoreAuditExportController::glEntries');
-        $routes->get('entries/unbalanced-export', 'System\GlExceptionExportController::unbalanced');
-        $routes->get('entries/new', 'Finance\GeneralLedgerController::newEntry');
-        $routes->post('entries', 'Finance\GeneralLedgerController::storeEntry');
         $routes->get('entries/(:num)', 'Finance\GeneralLedgerController::showEntry/$1');
         $routes->get('utilities', 'Finance\GeneralLedgerController::utilities');
-        $routes->post('utilities/init-defaults', 'Finance\GeneralLedgerController::initDefaults');
-        $routes->post('utilities/sync-legacy-coa', 'Finance\GeneralLedgerController::syncLegacyCoa');
-        $routes->post('utilities/sync-legacy-books', 'Finance\GeneralLedgerController::syncLegacyBooks');
+        $routes->post('utilities/journal', 'Finance\GeneralLedgerController::postJournal');
+        $routes->get('period-close', 'Finance\PeriodCloseController::dashboard');
+        $routes->post('period-close', 'Finance\PeriodCloseController::close');
+        $routes->get('period-close/(:num)', 'Finance\PeriodCloseController::show/$1');
+        $routes->post('period-close/(:num)/reopen', 'Finance\PeriodCloseController::reopen/$1');
+        $routes->get('period-close/(:segment)', 'Finance\PeriodCloseController::index/$1');
     });
-
-    $routes->get('period-close', 'Finance\PeriodCloseController::index');
-    $routes->get('period-close/export', 'System\PeriodCloseAuditExportController::index');
-    $routes->get('period-close/export/(:segment)', 'System\PeriodCloseAuditExportController::index/$1');
-    $routes->get('period-close/new', 'Finance\PeriodCloseController::create');
-    $routes->get('period-close/new/(:segment)', 'Finance\PeriodCloseController::create/$1');
-    $routes->post('period-close', 'Finance\PeriodCloseController::store');
-    $routes->get('period-close/(:num)/export', 'System\PeriodCloseAuditExportController::show/$1');
-    $routes->get('period-close/(:num)', 'Finance\PeriodCloseController::show/$1');
-    $routes->post('period-close/(:num)/reopen', 'Finance\PeriodCloseController::reopen/$1');
-    $routes->get('period-close/(:segment)', 'Finance\PeriodCloseController::index/$1');
 
     $routes->group('cash-bank', static function (RouteCollection $routes): void {
         $routes->get('accounts', 'Finance\CashBankMasterController::accounts');
