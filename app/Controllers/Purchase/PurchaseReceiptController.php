@@ -12,7 +12,6 @@ use App\Services\Support\DocumentNumberService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use Config\Database;
-use DateTimeImmutable;
 use RuntimeException;
 
 class PurchaseReceiptController extends BaseController
@@ -220,14 +219,20 @@ class PurchaseReceiptController extends BaseController
         $lineIds = (array) $this->request->getPost('purchase_order_line_id');
         $qtys = (array) $this->request->getPost('qty_received');
         $batchNos = (array) $this->request->getPost('batch_no');
+        $unitCosts = (array) $this->request->getPost('unit_cost');
         $lines = [];
         foreach ($lineIds as $index => $lineId) {
             $qty = $this->toNumber($qtys[$index] ?? 0);
             if ((int) $lineId > 0 && $qty > 0) {
+                $unitCost = $this->toNumber($unitCosts[$index] ?? 0);
+                if ($unitCost < 0) {
+                    throw new RuntimeException('Unit cost cannot be negative.');
+                }
                 $lines[] = [
                     'purchase_order_line_id' => (int) $lineId,
                     'qty_received' => $qty,
                     'batch_no' => trim((string) ($batchNos[$index] ?? '')),
+                    'unit_cost' => $unitCost,
                 ];
             }
         }
@@ -258,9 +263,7 @@ class PurchaseReceiptController extends BaseController
                 continue;
             }
 
-            $payload = [
-                'item_code' => $resolved['item_code'],
-            ];
+            $payload = ['item_code' => $resolved['item_code']];
             if (($resolved['item_name'] ?? '') !== '') {
                 $payload['item_name'] = $resolved['item_name'];
             }
@@ -329,33 +332,17 @@ class PurchaseReceiptController extends BaseController
         if ($name === '') {
             return null;
         }
-
         $db = Database::connect();
         if (! $db->tableExists('items')) {
             return null;
         }
-
-        $tenant = new TenantContext(session());
         $builder = $db->table('items');
-        if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', 'items')) {
-            $builder->where('company_id', $tenant->activeCompanyId());
-        }
-        if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', 'items')) {
-            $builder->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->orWhere('site_id', 0)->groupEnd();
-        }
-        if ($db->fieldExists('deleted_at', 'items')) {
-            $builder->where('deleted_at', null);
-        }
-
         $builder->groupStart();
         if ($db->fieldExists('item_name', 'items')) {
             $builder->orWhere('item_name', $name);
         }
         if ($db->fieldExists('name', 'items')) {
             $builder->orWhere('name', $name);
-        }
-        if ($db->fieldExists('description', 'items')) {
-            $builder->orWhere('description', $name);
         }
         if ($db->fieldExists('item_code', 'items')) {
             $builder->orWhere('item_code', $name);
@@ -364,51 +351,51 @@ class PurchaseReceiptController extends BaseController
             $builder->orWhere('code', $name);
         }
         $builder->groupEnd();
-
-        $exact = $builder->orderBy('id', 'ASC')->get(1)->getRowArray();
-        if ($exact !== null) {
-            return $exact;
-        }
-
-        $fallback = $db->table('items');
-        if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', 'items')) {
-            $fallback->where('company_id', $tenant->activeCompanyId());
-        }
-        if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', 'items')) {
-            $fallback->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->orWhere('site_id', 0)->groupEnd();
-        }
-        if ($db->fieldExists('deleted_at', 'items')) {
-            $fallback->where('deleted_at', null);
-        }
-        $fallback->groupStart();
-        if ($db->fieldExists('item_name', 'items')) {
-            $fallback->orLike('item_name', $name);
-        }
-        if ($db->fieldExists('name', 'items')) {
-            $fallback->orLike('name', $name);
-        }
-        if ($db->fieldExists('description', 'items')) {
-            $fallback->orLike('description', $name);
-        }
-        $fallback->groupEnd();
-
-        return $fallback->orderBy('id', 'ASC')->get(1)->getRowArray() ?: null;
+        return $builder->get(1)->getRowArray() ?: null;
     }
 
-    private function itemPayloadFromMaster(array $item, string $existingUom = '', string $fallbackName = ''): array
+    private function itemPayloadFromMaster(array $item, string $fallbackUom = '', string $fallbackName = ''): array
     {
         return [
-            'item_id' => ! empty($item['id']) ? (int) $item['id'] : null,
-            'item_code' => trim((string) ($item['item_code'] ?? $item['code'] ?? $item['item'] ?? $item['item_no'] ?? '')),
-            'item_name' => trim((string) ($item['item_name'] ?? $item['name'] ?? $fallbackName)),
-            'uom_code' => trim((string) ($existingUom ?: ($item['stockuom'] ?? $item['uom_code'] ?? 'PCS'))),
+            'item_id' => (int) ($item['id'] ?? 0) ?: null,
+            'item_code' => (string) ($item['item_code'] ?? $item['code'] ?? ''),
+            'item_name' => (string) ($item['item_name'] ?? $item['name'] ?? $fallbackName),
+            'uom_code' => (string) ($item['uom_code'] ?? $item['base_uom'] ?? $fallbackUom),
         ];
+    }
+
+    private function assertStorageLocation(TenantContext $tenant, ?int $warehouseId, ?int $locationId): void
+    {
+        if ($warehouseId === null || $locationId === null) {
+            throw new RuntimeException('Warehouse and location are required.');
+        }
+        $db = Database::connect();
+        $warehouse = $db->table('warehouses')->where('id', $warehouseId)->get(1)->getRowArray();
+        if ($warehouse === null) {
+            throw new RuntimeException('Warehouse not found.');
+        }
+        $location = $db->table('locations')->where('id', $locationId)->get(1)->getRowArray();
+        if ($location === null) {
+            throw new RuntimeException('Location not found.');
+        }
+        if ((int) ($location['warehouse_id'] ?? 0) !== (int) $warehouseId) {
+            throw new RuntimeException('Selected location does not belong to selected warehouse.');
+        }
+        if ($tenant->activeCompanyId() !== null && (int) ($warehouse['company_id'] ?? 0) !== (int) $tenant->activeCompanyId()) {
+            throw new RuntimeException('Warehouse belongs to another company.');
+        }
+        if ($tenant->activeCompanyId() !== null && (int) ($location['company_id'] ?? 0) !== (int) $tenant->activeCompanyId()) {
+            throw new RuntimeException('Location belongs to another company.');
+        }
     }
 
     private function masterRows(string $table): array
     {
         $tenant = new TenantContext(session());
         $db = Database::connect();
+        if (! $db->tableExists($table)) {
+            return [];
+        }
         $builder = $db->table($table);
         if ($db->fieldExists('deleted_at', $table)) {
             $builder->where('deleted_at', null);
@@ -422,81 +409,30 @@ class PurchaseReceiptController extends BaseController
         if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', $table)) {
             $builder->where('site_id', $tenant->activeSiteId());
         }
-        return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get()->getResultArray();
+        return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get(500)->getResultArray();
     }
 
-    private function oldOrDefaultId(string $field, array $rows): ?int
+    private function oldOrDefaultId(string $field, array $rows): int
     {
-        $old = $this->nullableInt(old($field));
-        if ($old !== null) {
-            return $old;
+        $old = old($field);
+        if ($old !== null && $old !== '') {
+            return (int) $old;
         }
-
-        return isset($rows[0]['id']) ? (int) $rows[0]['id'] : null;
+        return (int) ($rows[0]['id'] ?? 0);
     }
 
-    private function oldOrDefaultLocationId(array $locations, ?int $warehouseId): ?int
+    private function oldOrDefaultLocationId(array $locations, int $warehouseId): int
     {
-        $old = $this->nullableInt(old('location_id'));
-        if ($old !== null && $warehouseId !== null) {
-            foreach ($locations as $location) {
-                if ((int) ($location['id'] ?? 0) === $old && (int) ($location['warehouse_id'] ?? 0) === $warehouseId) {
-                    return $old;
-                }
-            }
+        $old = old('location_id');
+        if ($old !== null && $old !== '') {
+            return (int) $old;
         }
-        if ($old !== null && $warehouseId === null) {
-            return $old;
-        }
-
         foreach ($locations as $location) {
-            if ($warehouseId === null || (int) ($location['warehouse_id'] ?? 0) === $warehouseId) {
-                return isset($location['id']) ? (int) $location['id'] : null;
+            if ((int) ($location['warehouse_id'] ?? 0) === $warehouseId) {
+                return (int) ($location['id'] ?? 0);
             }
         }
-
-        return null;
-    }
-
-    private function assertStorageLocation(TenantContext $tenant, ?int $warehouseId, ?int $locationId): void
-    {
-        if ($warehouseId === null || $locationId === null) {
-            throw new RuntimeException('Warehouse and location are required before posting purchase receipt.');
-        }
-
-        $db = Database::connect();
-        $warehouse = $db->table('warehouses')->where('id', $warehouseId);
-        if ($tenant->activeCompanyId() !== null) {
-            $warehouse->where('company_id', $tenant->activeCompanyId());
-        }
-        if ($tenant->activeSiteId() !== null) {
-            $warehouse->where('site_id', $tenant->activeSiteId());
-        }
-        if ($db->fieldExists('deleted_at', 'warehouses')) {
-            $warehouse->where('deleted_at', null);
-        }
-        $warehouseRow = $warehouse->get()->getRowArray();
-        if ($warehouseRow === null) {
-            throw new RuntimeException('Selected warehouse is not valid for the active company/site.');
-        }
-
-        $location = $db->table('locations')->where('id', $locationId);
-        if ($tenant->activeCompanyId() !== null) {
-            $location->where('company_id', $tenant->activeCompanyId());
-        }
-        if ($tenant->activeSiteId() !== null) {
-            $location->where('site_id', $tenant->activeSiteId());
-        }
-        if ($db->fieldExists('deleted_at', 'locations')) {
-            $location->where('deleted_at', null);
-        }
-        $locationRow = $location->get()->getRowArray();
-        if ($locationRow === null) {
-            throw new RuntimeException('Selected location is not valid for the active company/site.');
-        }
-        if ((int) ($locationRow['warehouse_id'] ?? 0) !== $warehouseId) {
-            throw new RuntimeException('Selected location does not belong to selected warehouse.');
-        }
+        return (int) ($locations[0]['id'] ?? 0);
     }
 
     private function masterLabel(string $table, mixed $id): string
@@ -505,13 +441,29 @@ class PurchaseReceiptController extends BaseController
         if ($id < 1) {
             return '-';
         }
-
-        $row = Database::connect()->table($table)->where('id', $id)->get()->getRowArray();
+        $db = Database::connect();
+        if (! $db->tableExists($table)) {
+            return '#' . $id;
+        }
+        $row = $db->table($table)->where('id', $id)->get(1)->getRowArray();
         if ($row === null) {
             return '#' . $id;
         }
+        return trim((string) ($row['code'] ?? $id) . ' - ' . (string) ($row['name'] ?? ''));
+    }
 
-        return trim((string) (($row['code'] ?? $id) . ' - ' . ($row['name'] ?? '-')));
+    private function previewDocumentNumber(string $transactionCode): string
+    {
+        try {
+            return (new DocumentNumberService())->preview($transactionCode, date('Y-m-d'));
+        } catch (RuntimeException) {
+            return '';
+        }
+    }
+
+    private function issueDocumentNumber(string $transactionCode, string $date, int $companyId, mixed $siteId): string
+    {
+        return (new DocumentNumberService())->next($transactionCode, $date, $companyId, $siteId !== null ? (int) $siteId : null);
     }
 
     private function nullableInt(mixed $value): ?int
@@ -532,31 +484,5 @@ class PurchaseReceiptController extends BaseController
             $value = str_replace(',', '', $value);
         }
         return (float) $value;
-    }
-
-    private function previewDocumentNumber(string $transactionCode): string
-    {
-        try {
-            return (new DocumentNumberService())->preview($transactionCode, new DateTimeImmutable(), [
-                'prefix' => $transactionCode,
-                'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
-                'reset_period' => 'monthly',
-                'padding' => 5,
-            ]);
-        } catch (\Throwable) {
-            return '';
-        }
-    }
-
-    private function issueDocumentNumber(string $transactionCode, string $date, int $companyId, mixed $siteId): string
-    {
-        return (new DocumentNumberService())->next($transactionCode, new DateTimeImmutable($date), [
-            'company_id' => $companyId,
-            'site_id' => ! empty($siteId) ? (int) $siteId : 0,
-            'prefix' => $transactionCode,
-            'format' => '{PREFIX}/{YYYY}{MM}/{SEQ}',
-            'reset_period' => 'monthly',
-            'padding' => 5,
-        ]);
     }
 }
