@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Services\Setup\CompanyBootstrapService;
+use App\Services\Setup\CompanyAutoSetupService;
 use CodeIgniter\Model;
 
 class CompanyModel extends Model
@@ -33,10 +33,11 @@ class CompanyModel extends Model
             $ids = [$ids];
         }
 
+        $userId = isset($data['data']['updated_by']) ? (int) $data['data']['updated_by'] : null;
         foreach ($ids as $id) {
             $companyId = (int) $id;
             if ($companyId > 0) {
-                (new CompanyBootstrapService())->bootstrapCompany($companyId);
+                (new CompanyAutoSetupService())->run($companyId, $userId);
             }
         }
 
