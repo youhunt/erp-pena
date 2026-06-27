@@ -2,7 +2,6 @@
 
 namespace App\Services\Purchase;
 
-use App\Models\GlEntryLineModel;
 use App\Models\InventoryStockMovementModel;
 use App\Models\PurchaseInvoiceModel;
 use App\Models\PurchaseOrderLineModel;
@@ -92,7 +91,7 @@ class PurchaseReceiptService
                 }
 
                 $qtyReceive = $this->toNumber($line['qty_received'] ?? 0);
-                $unitCost = array_key_exists('unit_cost', $line)
+                $unitCost = array_key_exists('unit_cost', $line) && $line['unit_cost'] !== '' && $line['unit_cost'] !== null
                     ? $this->toNumber($line['unit_cost'])
                     : (float) ($poLine['unit_price'] ?? 0);
                 if ($unitCost < 0) {
@@ -152,7 +151,7 @@ class PurchaseReceiptService
                 $postedLineCount++;
 
                 $movement = $movementModel->find($movementId);
-                $totalInventoryValue += (float) ($movement['stock_value'] ?? 0);
+                $totalInventoryValue += (float) ($movement['stock_value'] ?? round($qtyReceive * $unitCost, 2));
             }
 
             if ($postedLineCount < 1) {
@@ -183,9 +182,7 @@ class PurchaseReceiptService
                 'table_name' => 'purchase_receipts',
                 'record_id' => $receiptId,
                 'record_code' => $header['receipt_no'],
-                'description' => $glEntryId !== null
-                    ? 'Purchase receipt posted, stock increased, and inventory/GRNI GL posted.'
-                    : 'Purchase receipt posted and stock increased.',
+                'description' => 'Purchase receipt posted, stock increased, and inventory/GRNI GL posted.',
                 'new_values' => ['header' => $header, 'lines' => $lines, 'gl_entry_id' => $glEntryId],
             ]);
 
@@ -196,5 +193,255 @@ class PurchaseReceiptService
         }
     }
 
-    // existing methods below are unchanged
+    public function reverse(int $receiptId, ?int $userId = null, ?string $reason = null): void
+    {
+        $receiptModel = new PurchaseReceiptModel();
+        $lineModel = new PurchaseReceiptLineModel();
+        $receipt = $receiptModel->find($receiptId);
+        if ($receipt === null) {
+            throw new RuntimeException('Purchase receipt not found.');
+        }
+        if (($receipt['status'] ?? '') === 'reversed') {
+            throw new RuntimeException('Purchase receipt is already reversed.');
+        }
+        if (($receipt['status'] ?? '') !== 'posted') {
+            throw new RuntimeException('Only posted purchase receipt can be reversed.');
+        }
+        if ($this->hasActiveInvoice($receiptId)) {
+            throw new RuntimeException('Purchase receipt already has active invoice. Cancel invoice first before reversing receipt.');
+        }
+
+        $this->assertPeriodOpen('purchase', $receipt, 'receipt_date');
+        $this->assertPeriodOpen('inventory', $receipt, 'receipt_date');
+
+        $db = Database::connect();
+        $db->transBegin();
+        try {
+            $lines = $lineModel->where('purchase_receipt_id', $receiptId)->findAll();
+            $stock = new InventoryStockService();
+            $totalReversalValue = 0.0;
+            $now = date('Y-m-d H:i:s');
+
+            foreach ($lines as $line) {
+                $qty = (float) ($line['qty_received'] ?? 0) - (float) ($line['reversed_qty'] ?? 0);
+                if ($qty <= 0) {
+                    continue;
+                }
+                $unitCost = (float) ($line['unit_cost'] ?? 0);
+                $movementId = $stock->stockOut([
+                    'company_id' => $receipt['company_id'],
+                    'site_id' => $receipt['site_id'] ?? null,
+                    'warehouse_id' => $line['warehouse_id'] ?? $receipt['warehouse_id'] ?? null,
+                    'location_id' => $line['location_id'] ?? $receipt['location_id'] ?? null,
+                    'item_id' => $line['item_id'] ?? null,
+                    'item_code' => $line['item_code'],
+                    'batch_no' => trim((string) ($line['batch_no'] ?? '')),
+                    'item_name' => $line['item_name'] ?? null,
+                    'uom_code' => $line['uom_code'] ?? 'PCS',
+                    'qty' => $qty,
+                    'unit_cost' => $unitCost,
+                    'movement_date' => date('Y-m-d'),
+                    'movement_type' => 'purchase_receipt_reversal',
+                    'reference_type' => 'purchase_receipt_reversal',
+                    'reference_id' => $receiptId,
+                    'reference_no' => $receipt['receipt_no'],
+                    'notes' => 'Reverse purchase receipt ' . ($receipt['receipt_no'] ?? ''),
+                ], $userId);
+
+                $lineModel->update((int) $line['id'], [
+                    'reversed_qty' => (float) ($line['reversed_qty'] ?? 0) + $qty,
+                    'reversal_movement_id' => $movementId,
+                    'reversed_at' => $now,
+                    'reversed_by' => $userId,
+                    'reversal_reason' => $reason,
+                ]);
+                $totalReversalValue += round($qty * $unitCost, 2);
+            }
+
+            $reversalGlEntryId = $this->postReceiptReversalGl($receipt, $receiptId, round($totalReversalValue, 2), $userId);
+            if ($reversalGlEntryId !== null) {
+                (new PostingIntegrityGuard())->assertGlEntryForAmount(round($totalReversalValue, 2), $reversalGlEntryId, 'Purchase receipt reversal');
+            }
+
+            $receiptModel->update($receiptId, [
+                'status' => 'reversed',
+                'reversed_at' => $now,
+                'reversed_by' => $userId,
+                'reversal_reason' => $reason,
+                'reversal_gl_entry_id' => $reversalGlEntryId,
+                'updated_by' => $userId,
+            ]);
+
+            if (! empty($receipt['purchase_order_id'])) {
+                $this->recalculatePoReceiptQuantities((int) $receipt['purchase_order_id'], $userId);
+                $this->refreshPoStatus((int) $receipt['purchase_order_id'], $userId);
+            }
+
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to reverse purchase receipt.');
+            }
+            $db->transCommit();
+        } catch (Throwable $e) {
+            $db->transRollback();
+            throw new RuntimeException($e->getMessage());
+        }
+    }
+
+    private function postReceiptGl(array $header, int $receiptId, float $inventoryValue, ?int $userId): ?int
+    {
+        $inventoryValue = round($inventoryValue, 2);
+        if ($inventoryValue <= 0) {
+            return null;
+        }
+        $companyId = (int) $header['company_id'];
+        $profile = new PostingProfileService();
+        $inventoryAccount = $profile->account($companyId, 'ap', 'inventory', '1300');
+        $grniAccount = $profile->account($companyId, 'ap', 'grni', '2300');
+        $receiptNo = (string) ($header['receipt_no'] ?? ('PR-' . $receiptId));
+
+        return (new GeneralLedgerService())->post([
+            'company_id' => $companyId,
+            'site_id' => $header['site_id'] ?? null,
+            'journal_no' => 'GL-PR-' . $receiptNo,
+            'journal_date' => (string) ($header['receipt_date'] ?? date('Y-m-d')),
+            'source_module' => 'purchase',
+            'source_type' => 'purchase_receipt',
+            'source_id' => $receiptId,
+            'source_no' => $receiptNo,
+            'description' => 'Purchase receipt ' . $receiptNo,
+            'currency_code' => 'IDR',
+        ], [
+            ['account_no' => $inventoryAccount, 'description' => 'Inventory receipt', 'debit' => $inventoryValue, 'credit' => 0],
+            ['account_no' => $grniAccount, 'description' => 'GRNI from purchase receipt', 'debit' => 0, 'credit' => $inventoryValue],
+        ], $userId);
+    }
+
+    private function postReceiptReversalGl(array $receipt, int $receiptId, float $amount, ?int $userId): ?int
+    {
+        $amount = round($amount, 2);
+        if ($amount <= 0) {
+            return null;
+        }
+        $companyId = (int) $receipt['company_id'];
+        $profile = new PostingProfileService();
+        $inventoryAccount = $profile->account($companyId, 'ap', 'inventory', '1300');
+        $grniAccount = $profile->account($companyId, 'ap', 'grni', '2300');
+        $receiptNo = (string) ($receipt['receipt_no'] ?? ('PR-' . $receiptId));
+
+        return (new GeneralLedgerService())->post([
+            'company_id' => $companyId,
+            'site_id' => $receipt['site_id'] ?? null,
+            'journal_no' => 'GL-PR-REV-' . $receiptNo . '-' . date('His'),
+            'journal_date' => date('Y-m-d'),
+            'source_module' => 'purchase',
+            'source_type' => 'purchase_receipt_reversal',
+            'source_id' => $receiptId,
+            'source_no' => $receiptNo,
+            'description' => 'Reverse purchase receipt ' . $receiptNo,
+            'currency_code' => 'IDR',
+        ], [
+            ['account_no' => $grniAccount, 'description' => 'Reverse GRNI', 'debit' => $amount, 'credit' => 0],
+            ['account_no' => $inventoryAccount, 'description' => 'Reverse inventory receipt', 'debit' => 0, 'credit' => $amount],
+        ], $userId);
+    }
+
+    private function recalculatePoReceiptQuantities(int $poId, ?int $userId = null): void
+    {
+        $db = Database::connect();
+        $lineModel = new PurchaseOrderLineModel();
+        $lines = $lineModel->where('purchase_order_id', $poId)->findAll();
+        foreach ($lines as $line) {
+            $qtyRow = $db->table('purchase_receipt_lines prl')
+                ->select('COALESCE(SUM(prl.qty_received - COALESCE(prl.reversed_qty, 0)), 0) AS qty_received', false)
+                ->join('purchase_receipts pr', 'pr.id = prl.purchase_receipt_id', 'inner')
+                ->where('prl.purchase_order_line_id', (int) $line['id'])
+                ->where('pr.status', 'posted')
+                ->get()
+                ->getRowArray();
+
+            $qtyReceived = round((float) ($qtyRow['qty_received'] ?? 0), 4);
+            $qtyOrdered = round($this->toNumber($line['qty_ordered'] ?? $line['qty'] ?? 0), 4);
+            $qtyOutstanding = max(0.0, round($qtyOrdered - $qtyReceived, 4));
+            $lineModel->update((int) $line['id'], [
+                'qty_received' => $qtyReceived,
+                'qty_outstanding' => $qtyOutstanding,
+                'line_status' => $qtyReceived <= 0 ? 'open' : ($qtyOutstanding <= 0 ? 'received' : 'partial_received'),
+                'updated_by' => $userId,
+            ]);
+        }
+    }
+
+    private function refreshPoStatus(int $poId, ?int $userId = null): void
+    {
+        $lines = (new PurchaseOrderLineModel())->where('purchase_order_id', $poId)->findAll();
+        $totalOutstanding = 0.0;
+        $totalReceived = 0.0;
+        foreach ($lines as $line) {
+            $totalOutstanding += (float) ($line['qty_outstanding'] ?? 0);
+            $totalReceived += (float) ($line['qty_received'] ?? 0);
+        }
+        $status = $totalOutstanding <= 0 && $totalReceived > 0 ? 'received' : ($totalReceived > 0 ? 'partial_received' : 'approved');
+        (new PurchaseOrderModel())->update($poId, [
+            'status' => $status,
+            'document_status' => $status,
+            'updated_by' => $userId,
+        ]);
+    }
+
+    private function currentOutstanding(array $poLine): float
+    {
+        if (array_key_exists('qty_outstanding', $poLine) && $poLine['qty_outstanding'] !== null && $poLine['qty_outstanding'] !== '') {
+            return max(0.0, $this->toNumber($poLine['qty_outstanding']));
+        }
+        return max(0.0, $this->toNumber($poLine['qty_ordered'] ?? $poLine['qty'] ?? 0) - $this->toNumber($poLine['qty_received'] ?? 0));
+    }
+
+    private function hasActiveInvoice(int $receiptId): bool
+    {
+        $model = new PurchaseInvoiceModel();
+        $model->where('purchase_receipt_id', $receiptId)->where('status !=', 'cancelled');
+        return $model->first() !== null;
+    }
+
+    private function assertDocumentNumberAvailable(array $header): void
+    {
+        $existing = (new PurchaseReceiptModel())
+            ->where('company_id', (int) $header['company_id'])
+            ->where('receipt_no', (string) $header['receipt_no'])
+            ->first();
+        if ($existing !== null) {
+            throw new RuntimeException('Receipt number already exists: ' . $header['receipt_no']);
+        }
+    }
+
+    private function assertStorageLocation(array $header): void
+    {
+        if (empty($header['warehouse_id']) || empty($header['location_id'])) {
+            throw new RuntimeException('Warehouse and location are required.');
+        }
+    }
+
+    private function assertPeriodOpen(string $module, array $document, string $dateField): void
+    {
+        (new PeriodCloseService())->assertOpen(
+            $module,
+            (int) ($document['company_id'] ?? 0),
+            (string) ($document[$dateField] ?? date('Y-m-d')),
+            ! empty($document['site_id']) ? (int) $document['site_id'] : null
+        );
+    }
+
+    private function toNumber(mixed $value): float
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0.0;
+        }
+        if (str_contains($value, ',') && ! str_contains($value, '.')) {
+            $value = str_replace(',', '.', $value);
+        } else {
+            $value = str_replace(',', '', $value);
+        }
+        return (float) $value;
+    }
 }
