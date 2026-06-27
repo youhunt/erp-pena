@@ -176,13 +176,22 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     });
 
     $routes->group('gl', static function (RouteCollection $routes): void {
-        $routes->get('books', 'Finance\GeneralLedgerController::books');
-        $routes->get('chart-of-accounts', 'Finance\GeneralLedgerController::chartAccounts');
-        $routes->get('posting-profiles', 'Finance\PostingProfileController::index');
-        $routes->get('entries', 'Finance\GeneralLedgerController::entries');
-        $routes->get('entries/(:num)', 'Finance\GeneralLedgerController::showEntry/$1');
         $routes->get('utilities', 'Finance\GeneralLedgerController::utilities');
-        $routes->post('utilities/journal', 'Finance\GeneralLedgerController::postJournal');
+        $routes->post('utilities/init-defaults', 'Finance\GeneralLedgerController::initDefaults');
+        $routes->post('utilities/sync-legacy-coa', 'Finance\GeneralLedgerController::syncLegacyCoa');
+        $routes->post('utilities/sync-legacy-books', 'Finance\GeneralLedgerController::syncLegacyBooks');
+        $routes->get('legacy-excel', 'Finance\GeneralLedgerController::utilities');
+        $routes->get('books', 'Finance\GeneralLedgerController::books');
+        $routes->get('columns', 'Finance\GeneralLedgerController::columns');
+        $routes->get('legacy-coa', 'Finance\GeneralLedgerController::legacyCoa');
+        $routes->get('chart-of-accounts', 'Finance\GeneralLedgerController::chartAccounts');
+        $routes->get('posting-profiles', 'Finance\GeneralLedgerController::postingProfiles');
+        $routes->post('posting-profiles', 'Finance\GeneralLedgerController::updatePostingProfiles');
+        $routes->get('recurring', 'Finance\GeneralLedgerController::recurring');
+        $routes->get('entries', 'Finance\GeneralLedgerController::entries');
+        $routes->get('entries/new', 'Finance\GeneralLedgerController::newEntry');
+        $routes->post('entries', 'Finance\GeneralLedgerController::storeEntry');
+        $routes->get('entries/(:num)', 'Finance\GeneralLedgerController::showEntry/$1');
         $routes->get('period-close', 'Finance\PeriodCloseController::dashboard');
         $routes->post('period-close', 'Finance\PeriodCloseController::close');
         $routes->get('period-close/(:num)', 'Finance\PeriodCloseController::show/$1');
