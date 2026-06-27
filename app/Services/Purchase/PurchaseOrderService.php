@@ -121,11 +121,13 @@ class PurchaseOrderService
 
     public function submit(int $poId, ?int $userId = null): void
     {
+        $this->assertLinesInItemMaster($poId);
         $this->transition($poId, ['draft'], 'submitted', ['submitted_at' => date('Y-m-d H:i:s'), 'submitted_by' => $userId], $userId, 'po.submit', 'Purchase order submitted.');
     }
 
     public function approve(int $poId, ?int $userId = null): void
     {
+        $this->assertLinesInItemMaster($poId);
         $this->transition($poId, ['submitted'], 'approved', ['approved_at' => date('Y-m-d H:i:s'), 'approved_by' => $userId], $userId, 'po.approve', 'Purchase order approved.');
     }
 
@@ -148,8 +150,8 @@ class PurchaseOrderService
         }
 
         $current = (string) ($po['document_status'] ?? $po['status'] ?? 'draft');
-        if (! in_array($current, ['cancelled', 'closed'], true)) {
-            throw new RuntimeException('Only cancelled or closed purchase order can be activated. Current status: ' . $current . '.');
+        if (! in_array($current, ['cancelled', 'closed', 'submitted', 'approved'], true)) {
+            throw new RuntimeException('Only submitted, approved, cancelled, or closed purchase order can be returned/activated. Current status: ' . $current . '.');
         }
 
         $lineModel = new PurchaseOrderLineModel();
@@ -161,19 +163,24 @@ class PurchaseOrderService
             $outstanding = (float) ($line['qty_outstanding'] ?? 0);
             $totalReceived += $received;
             $totalOutstanding += $outstanding;
-            if ($current === 'cancelled' && $received > 0) {
-                throw new RuntimeException('PO cannot be activated from cancelled because one or more lines have already been received.');
+            if (in_array($current, ['cancelled', 'submitted', 'approved'], true) && $received > 0) {
+                throw new RuntimeException('PO cannot be returned to draft because one or more lines have already been received.');
             }
         }
 
         $this->assertPeriodOpen($po);
-        $targetStatus = $current === 'closed'
-            ? ($totalOutstanding <= 0 && $totalReceived > 0 ? 'received' : ($totalReceived > 0 ? 'partial_received' : 'approved'))
-            : 'draft';
+        $targetStatus = in_array($current, ['submitted', 'approved', 'cancelled'], true)
+            ? 'draft'
+            : ($totalOutstanding <= 0 && $totalReceived > 0 ? 'received' : ($totalReceived > 0 ? 'partial_received' : 'approved'));
 
+        $clearApproval = $targetStatus === 'draft';
         $model->update($poId, [
             'status' => $targetStatus,
             'document_status' => $targetStatus,
+            'submitted_at' => $clearApproval ? null : ($po['submitted_at'] ?? null),
+            'submitted_by' => $clearApproval ? null : ($po['submitted_by'] ?? null),
+            'approved_at' => $clearApproval ? null : ($po['approved_at'] ?? null),
+            'approved_by' => $clearApproval ? null : ($po['approved_by'] ?? null),
             'closed_at' => null,
             'closed_by' => null,
             'cancelled_at' => null,
@@ -186,12 +193,12 @@ class PurchaseOrderService
             $received = (float) ($line['qty_received'] ?? 0);
             $outstanding = (float) ($line['qty_outstanding'] ?? 0);
             $lineModel->update((int) $line['id'], [
-                'line_status' => $received <= 0 ? 'open' : ($outstanding <= 0 ? 'received' : 'partial_received'),
+                'line_status' => $targetStatus === 'draft' ? 'open' : ($received <= 0 ? 'open' : ($outstanding <= 0 ? 'received' : 'partial_received')),
                 'updated_by' => $userId,
             ]);
         }
 
-        $this->audit('po.activate', $poId, $po, ['from_status' => $current, 'to_status' => $targetStatus], $userId, 'Purchase order activated.');
+        $this->audit('po.activate', $poId, $po, ['from_status' => $current, 'to_status' => $targetStatus], $userId, $targetStatus === 'draft' ? 'Purchase order returned to draft.' : 'Purchase order activated.');
     }
 
     private function validateHeader(array $header, array $lines): void
@@ -226,6 +233,55 @@ class PurchaseOrderService
 
         $model->update($poId, array_replace($extra, ['status' => $toStatus, 'document_status' => $toStatus, 'updated_by' => $userId]));
         $this->audit($action, $poId, $po, ['to_status' => $toStatus] + $extra, $userId, $description);
+    }
+
+    private function assertLinesInItemMaster(int $poId): void
+    {
+        $po = (new PurchaseOrderModel())->find($poId);
+        if ($po === null) {
+            throw new RuntimeException('Purchase order not found.');
+        }
+
+        $db = Database::connect();
+        if (! $db->tableExists('items')) {
+            throw new RuntimeException('Item Master table does not exist. PO cannot be submitted.');
+        }
+
+        $lines = (new PurchaseOrderLineModel())->where('purchase_order_id', $poId)->orderBy('line_no', 'ASC')->findAll();
+        if ($lines === []) {
+            throw new RuntimeException('PO cannot be submitted because it has no line item.');
+        }
+
+        foreach ($lines as $line) {
+            $lineNo = (int) ($line['line_no'] ?? $line['po_line'] ?? 0);
+            $itemCode = strtoupper(trim((string) ($line['item_code'] ?? '')));
+            if ($itemCode === '') {
+                throw new RuntimeException('PO line ' . $lineNo . ' does not have item code. Please edit PO and reselect item from Item Master.');
+            }
+
+            $builder = $db->table('items')->where('item_code', $itemCode);
+            if ($db->fieldExists('company_id', 'items')) {
+                $builder->where('company_id', (int) ($po['company_id'] ?? 0));
+            }
+            if ($db->fieldExists('site_id', 'items') && ! empty($po['site_id'])) {
+                $builder->groupStart()
+                    ->where('site_id', (int) $po['site_id'])
+                    ->orWhere('site_id', null)
+                    ->orWhere('site_id', 0)
+                    ->groupEnd();
+            }
+            if ($db->fieldExists('deleted_at', 'items')) {
+                $builder->where('deleted_at', null);
+            }
+            if ($db->fieldExists('is_active', 'items')) {
+                $builder->where('is_active', 1);
+            }
+
+            $item = $builder->get(1)->getRowArray();
+            if ($item === null) {
+                throw new RuntimeException('PO cannot be submitted. Item code ' . $itemCode . ' on line ' . $lineNo . ' is not found in Item Master. Please return PO to draft and fix the item.');
+            }
+        }
     }
 
     private function assertPeriodOpen(array $document): void
