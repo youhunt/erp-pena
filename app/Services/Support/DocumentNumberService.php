@@ -39,10 +39,10 @@ final class DocumentNumberService
      *
      * @param array<string, mixed> $options
      */
-    public function next(string $transactionCode, ?DateTimeInterface $documentDate = null, array $options = []): string
+    public function next(string $transactionCode, DateTimeInterface|string|null $documentDate = null, array $options = []): string
     {
         $transactionCode = $this->normalizeCode($transactionCode);
-        $date = $documentDate ?? new DateTimeImmutable();
+        $date = $this->normalizeDate($documentDate);
         $config = $this->resolveConfig($transactionCode, $options);
 
         $db = $this->connection();
@@ -82,7 +82,7 @@ final class DocumentNumberService
                 'reset_period'     => $config['reset_period'],
                 'last_document_no' => $documentNo,
                 'created_at'       => $now,
-                'updated_at'       => $now,
+                'updated_at'       => $now
             ]);
         } else {
             $db->table(self::TABLE)
@@ -110,10 +110,10 @@ final class DocumentNumberService
      *
      * @param array<string, mixed> $options
      */
-    public function preview(string $transactionCode, ?DateTimeInterface $documentDate = null, array $options = []): string
+    public function preview(string $transactionCode, DateTimeInterface|string|null $documentDate = null, array $options = []): string
     {
         $transactionCode = $this->normalizeCode($transactionCode);
-        $date = $documentDate ?? new DateTimeImmutable();
+        $date = $this->normalizeDate($documentDate);
         $config = $this->resolveConfig($transactionCode, $options);
         $periodKey = $this->periodKey((string) $config['reset_period'], $date);
 
@@ -306,6 +306,19 @@ final class DocumentNumberService
         }
 
         return strtr((string) $config['format'], $tokens);
+    }
+
+    private function normalizeDate(DateTimeInterface|string|null $documentDate): DateTimeInterface
+    {
+        if ($documentDate instanceof DateTimeInterface) {
+            return $documentDate;
+        }
+
+        if (is_string($documentDate) && trim($documentDate) !== '') {
+            return new DateTimeImmutable($documentDate);
+        }
+
+        return new DateTimeImmutable();
     }
 
     private function normalizeCode(string $transactionCode): string
