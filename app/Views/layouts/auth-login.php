@@ -5,6 +5,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= esc(lang('Auth.login')) ?> | LENTERRA ERP</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
     <link rel="shortcut icon" href="<?= base_url('assets/skote/images/Logo.png') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/skote/css/bootstrap.min.css') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/skote/css/icons.min.css') ?>">
@@ -34,7 +38,7 @@
 
                         <div class="card-body pt-0">
                             <div class="auth-logo">
-                                <a href="<?= site_url('/') ?>" class="auth-logo-light">
+                                <a href="<?= site_url('/') ?>" class="auth-logo-dark">
                                     <div class="avatar-md profile-user-wid mb-4">
                                         <span class="avatar-title rounded-circle bg-light">
                                             <img src="<?= base_url('assets/skote/images/logo-sm-light.png') ?>" alt="LENTERRA ERP" class="rounded-circle" height="34">
@@ -42,7 +46,7 @@
                                     </div>
                                 </a>
 
-                                <a href="<?= site_url('/') ?>" class="auth-logo-dark">
+                                <a href="<?= site_url('/') ?>" class="auth-logo-light">
                                     <div class="avatar-md profile-user-wid mb-4">
                                         <span class="avatar-title rounded-circle bg-light">
                                             <img src="<?= base_url('assets/skote/images/logo-sm-dark.png') ?>" alt="LENTERRA ERP" class="rounded-circle" height="34">
