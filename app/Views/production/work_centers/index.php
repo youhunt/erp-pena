@@ -14,6 +14,13 @@
             </div>
         </div>
 
+        <?php if (session('error')): ?>
+            <div class="alert alert-danger"><?= esc(session('error')) ?></div>
+        <?php endif ?>
+        <?php if (session('message')): ?>
+            <div class="alert alert-success"><?= esc(session('message')) ?></div>
+        <?php endif ?>
+
         <div class="table-responsive">
             <table class="table table-nowrap table-hover align-middle mb-0">
                 <thead class="table-light">
@@ -59,8 +66,14 @@
                             </span>
                         </td>
                         <td class="text-end">
-                            <a href="<?= site_url('production/work-centers/' . $row['id']) ?>" class="btn btn-sm btn-light">View</a>
-                            <a href="<?= site_url('production/work-centers/' . $row['id'] . '/edit') ?>" class="btn btn-sm btn-outline-primary">Edit</a>
+                            <div class="d-inline-flex gap-1">
+                                <a href="<?= site_url('production/work-centers/' . $row['id']) ?>" class="btn btn-sm btn-light">View</a>
+                                <a href="<?= site_url('production/work-centers/' . $row['id'] . '/edit') ?>" class="btn btn-sm btn-outline-primary">Edit</a>
+                                <form method="post" action="<?= site_url('production/work-centers/' . $row['id'] . '/delete') ?>" class="d-inline" onsubmit="return confirm('Hapus Work Center <?= esc($row['work_center_code'], 'js') ?>? Data yang sudah dipakai di Routing/Work Order tidak bisa dihapus.');">
+                                    <?= csrf_field() ?>
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                </form>
+                            </div>
                         </td>
                     </tr>
                 <?php endforeach ?>
@@ -72,7 +85,7 @@
         </div>
 
         <div class="alert alert-info mt-3 mb-0">
-            Primary Machine dan Primary Cost diambil dari row pertama pada Machine Detail dan Cost Detail. Detail lengkap bisa dilihat dari tombol View.
+            Primary Machine dan Primary Cost diambil dari row pertama pada Machine Detail dan Cost Detail. Work Center yang sudah dipakai di Routing / Work Order tidak bisa dihapus.
         </div>
     </div>
 </div>
