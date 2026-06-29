@@ -51,11 +51,20 @@ class FixSetupTaxMasterAndWorkCenterCostType extends Migration
 
     private function ensureColumn(string $table, string $column, array $definition): void
     {
-        if ($this->db->fieldExists($column, $table)) {
+        if ($this->columnExists($table, $column)) {
             return;
         }
 
         $this->forge->addColumn($table, [$column => $definition]);
+    }
+
+    private function columnExists(string $table, string $column): bool
+    {
+        return (int) $this->db->table('information_schema.COLUMNS')
+            ->where('TABLE_SCHEMA', $this->db->database)
+            ->where('TABLE_NAME', $table)
+            ->where('COLUMN_NAME', $column)
+            ->countAllResults() > 0;
     }
 
     private function ensureMenuItems(): void
