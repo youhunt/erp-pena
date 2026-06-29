@@ -34,6 +34,10 @@ $uomOptions = static function (string $selected, array $uoms, string $fallback =
     }
     return $html;
 };
+$uomBlankOptions = $uomOptions('', $uoms, '');
+$uomCmOptions = $uomOptions('CM', $uoms, 'CM');
+$uomM3Options = $uomOptions('M3', $uoms, 'M3');
+$uomHourOptions = $uomOptions('HOUR', $uoms, 'HOUR');
 ?>
 <style>
     .wc-detail-wrap {
@@ -139,11 +143,11 @@ $uomOptions = static function (string $selected, array $uoms, string $fallback =
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Active Date</label>
-                    <input type="date" name="active_date" class="form-control" value="<?= esc($val('active_date', date('Y-m-d'))) ?>">
+                    <input type="date" name="active_date" class="form-control" value="<?= esc(substr($val('active_date', date('Y-m-d')), 0, 10)) ?>">
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Inactive Date</label>
-                    <input type="date" name="inactive_date" class="form-control" value="<?= esc($val('inactive_date')) ?>">
+                    <input type="date" name="inactive_date" class="form-control" value="<?= esc(substr($val('inactive_date'), 0, 10)) ?>">
                 </div>
                 <div class="col-md-12">
                     <label class="form-label">Notes</label>
@@ -265,6 +269,10 @@ $uomOptions = static function (string $selected, array $uoms, string $fallback =
     const machineTable = document.querySelector('#machineTable tbody');
     const costTable = document.querySelector('#costTable tbody');
     const hiddenMachine = document.getElementById('machine_code_header');
+    const uomBlankOptions = <?= json_encode($uomBlankOptions) ?>;
+    const uomCmOptions = <?= json_encode($uomCmOptions) ?>;
+    const uomM3Options = <?= json_encode($uomM3Options) ?>;
+    const uomHourOptions = <?= json_encode($uomHourOptions) ?>;
 
     function initSelect2(scope) {
         if (! window.jQuery || ! jQuery.fn.select2) return;
@@ -272,6 +280,14 @@ $uomOptions = static function (string $selected, array $uoms, string $fallback =
             const el = jQuery(this);
             if (el.data('select2')) return;
             el.select2({ width: '100%' });
+        });
+    }
+
+    function destroySelect2(scope) {
+        if (! window.jQuery || ! jQuery.fn.select2) return;
+        jQuery(scope || document).find('.uom-select, .select2-basic').each(function () {
+            const el = jQuery(this);
+            if (el.data('select2')) el.select2('destroy');
         });
     }
 
@@ -290,44 +306,57 @@ $uomOptions = static function (string $selected, array $uoms, string $fallback =
         syncPrimaryMachine();
     }
 
-    function resetSelect2(row) {
-        if (window.jQuery && jQuery.fn.select2) {
-            jQuery(row).find('.uom-select').each(function () {
-                const el = jQuery(this);
-                if (el.data('select2')) el.select2('destroy');
-            });
-        }
+    function optionHtml(kind) {
+        if (kind === 'CM') return uomCmOptions;
+        if (kind === 'M3') return uomM3Options;
+        if (kind === 'HOUR') return uomHourOptions;
+        return uomBlankOptions;
+    }
+
+    function machineRowHtml(rowNo) {
+        return `
+            <tr>
+                <td><input type="number" name="machine_no[]" class="form-control form-control-sm text-center" value="${rowNo}"></td>
+                <td><input name="machine[]" class="form-control form-control-sm machine-input" maxlength="12" value=""></td>
+                <td><input name="machine_notes[]" class="form-control form-control-sm" maxlength="300" value=""></td>
+                <td><input type="number" step="0.001" name="machine_speed[]" class="form-control form-control-sm text-end" value="0"></td>
+                <td><input type="number" step="0.001" name="machine_capacity[]" class="form-control form-control-sm text-end" value="100"></td>
+                <td><input type="number" step="0.000001" name="machine_qtylabor[]" class="form-control form-control-sm text-end" value="0"></td>
+                <td><input type="number" step="0.001" name="machine_workhour[]" class="form-control form-control-sm text-end" value="0"></td>
+                <td><input type="number" step="0.000001" name="machine_length[]" class="form-control form-control-sm text-end" value="0"></td>
+                <td><select name="machine_luom[]" class="form-select form-select-sm uom-select">${optionHtml('CM')}</select></td>
+                <td><input type="number" step="0.000001" name="machine_width[]" class="form-control form-control-sm text-end" value="0"></td>
+                <td><select name="machine_wuom[]" class="form-select form-select-sm uom-select">${optionHtml('CM')}</select></td>
+                <td><input type="number" step="0.000001" name="machine_height[]" class="form-control form-control-sm text-end" value="0"></td>
+                <td><select name="machine_huom[]" class="form-select form-select-sm uom-select">${optionHtml('CM')}</select></td>
+                <td><input type="number" step="0.000001" name="machine_volume[]" class="form-control form-control-sm text-end" value="0"></td>
+                <td><select name="machine_vuom[]" class="form-select form-select-sm uom-select">${optionHtml('M3')}</select></td>
+                <td><button type="button" class="btn btn-sm btn-outline-danger remove-row">Remove</button></td>
+            </tr>`;
+    }
+
+    function costRowHtml() {
+        return `
+            <tr>
+                <td><input name="costtype[]" class="form-control form-control-sm" maxlength="12" value=""></td>
+                <td><input type="number" step="0.01" name="costamount[]" class="form-control form-control-sm text-end" value="0"></td>
+                <td><select name="costuom[]" class="form-select form-select-sm uom-select">${optionHtml('HOUR')}</select></td>
+                <td><input name="cost_notes[]" class="form-control form-control-sm" maxlength="30" value=""></td>
+                <td><button type="button" class="btn btn-sm btn-outline-danger remove-row">Remove</button></td>
+            </tr>`;
     }
 
     document.getElementById('addMachineRow').addEventListener('click', function () {
-        const first = machineTable.querySelector('tr');
-        const row = first.cloneNode(true);
-        resetSelect2(row);
-        row.querySelectorAll('input, select').forEach(input => {
-            if (input.name === 'machine_no[]') input.value = (machineTable.querySelectorAll('tr').length + 1) * 10;
-            else if (input.name === 'machine_capacity[]') input.value = '100';
-            else if (input.name === 'machine_luom[]' || input.name === 'machine_wuom[]' || input.name === 'machine_huom[]') input.value = 'CM';
-            else if (input.name === 'machine_vuom[]') input.value = 'M3';
-            else if (input.type === 'number') input.value = '0';
-            else input.value = '';
-            input.required = false;
-        });
-        machineTable.appendChild(row);
+        const rowNo = (machineTable.querySelectorAll('tr').length + 1) * 10;
+        machineTable.insertAdjacentHTML('beforeend', machineRowHtml(rowNo));
+        const row = machineTable.lastElementChild;
         renumberMachineRows();
         initSelect2(row);
     });
 
     document.getElementById('addCostRow').addEventListener('click', function () {
-        const first = costTable.querySelector('tr');
-        const row = first.cloneNode(true);
-        resetSelect2(row);
-        row.querySelectorAll('input, select').forEach(input => {
-            if (input.name === 'costamount[]') input.value = '0';
-            else if (input.name === 'costuom[]') input.value = 'HOUR';
-            else input.value = '';
-        });
-        costTable.appendChild(row);
-        initSelect2(row);
+        costTable.insertAdjacentHTML('beforeend', costRowHtml());
+        initSelect2(costTable.lastElementChild);
     });
 
     document.addEventListener('input', function (event) {
@@ -338,18 +367,17 @@ $uomOptions = static function (string $selected, array $uoms, string $fallback =
         if (! event.target.classList.contains('remove-row')) return;
         const row = event.target.closest('tr');
         const tbody = row.closest('tbody');
+        const isMachineTable = tbody === machineTable;
+        destroySelect2(row);
         if (tbody.querySelectorAll('tr').length <= 1) {
-            resetSelect2(row);
-            row.querySelectorAll('input, select').forEach(input => {
-                if (input.type === 'number') input.value = input.name.includes('capacity') ? '100' : '0';
-                else if (input.name === 'machine_luom[]' || input.name === 'machine_wuom[]' || input.name === 'machine_huom[]') input.value = 'CM';
-                else if (input.name === 'machine_vuom[]') input.value = 'M3';
-                else if (input.name === 'costuom[]') input.value = 'HOUR';
-                else input.value = '';
-            });
-            initSelect2(row);
+            if (isMachineTable) {
+                row.outerHTML = machineRowHtml(10);
+                initSelect2(machineTable.lastElementChild);
+            } else {
+                row.outerHTML = costRowHtml();
+                initSelect2(costTable.lastElementChild);
+            }
         } else {
-            resetSelect2(row);
             row.remove();
         }
         renumberMachineRows();
