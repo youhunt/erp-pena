@@ -262,6 +262,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('work-orders', 'Production\WorkOrderController::index');
         $routes->get('work-orders/export', 'System\ProductionAuditExportController::workOrders');
         $routes->get('work-orders/new', 'Production\WorkOrderController::create');
+        $routes->get('work-orders/bom-preview', 'Production\WorkOrderBomPreviewController::index');
         $routes->post('work-orders', 'Production\WorkOrderController::store');
         $routes->get('work-orders/(:num)/edit', 'Production\ProductionEditController::editWorkOrder/$1');
         $routes->post('work-orders/(:num)', 'Production\ProductionEditController::updateWorkOrder/$1');
