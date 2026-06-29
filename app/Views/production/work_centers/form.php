@@ -6,9 +6,30 @@ $workCenter ??= [];
 $machines ??= [];
 $costs ??= [];
 $uoms ??= [];
+$costTypes ??= [];
 $isEdit = (bool) ($isEdit ?? false);
 $action ??= $isEdit ? site_url('production/work-centers/' . (int) ($workCenter['id'] ?? 0)) : site_url('production/work-centers');
 $val = static fn (string $field, mixed $default = ''): string => (string) old($field, $workCenter[$field] ?? $default);
+
+if ($costTypes === []) {
+    try {
+        $db = \Config\Database::connect();
+        if ($db->tableExists('costing_cost_types')) {
+            $tenant = new \App\Services\TenantContext(session());
+            $builder = $db->table('costing_cost_types')->where('deleted_at', null);
+            if ($db->fieldExists('is_active', 'costing_cost_types')) {
+                $builder->where('is_active', 1);
+            }
+            if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', 'costing_cost_types')) {
+                $builder->groupStart()->where('company_id', $tenant->activeCompanyId())->orWhere('company_id', null)->groupEnd();
+            }
+            $costTypes = $builder->orderBy('cost_group', 'ASC')->orderBy('type', 'ASC')->get(500)->getResultArray();
+        }
+    } catch (\Throwable) {
+        $costTypes = [];
+    }
+}
+
 $machineRows = $machines !== [] ? $machines : [
     ['no' => 10, 'machine' => $val('machine_code'), 'notes1' => $val('notes'), 'speed' => $val('speed', '0'), 'capacity' => $val('capacity_percent', '100'), 'qtylabor' => $val('qty_labor', '0'), 'workhour' => $val('working_hour', '0'), 'length' => $val('max_length', '0'), 'luom' => $val('length_uom', 'CM'), 'width' => $val('max_width', '0'), 'wuom' => $val('width_uom', 'CM'), 'height' => $val('max_height', '0'), 'huom' => $val('height_uom', 'CM'), 'volume' => $val('max_volume', '0'), 'vuom' => $val('volume_uom', 'M3')],
 ];
@@ -34,10 +55,38 @@ $uomOptions = static function (string $selected, array $uoms, string $fallback =
     }
     return $html;
 };
+$costTypeOptions = static function (string $selected, array $costTypes, string $fallback = ''): string {
+    $selected = trim($selected !== '' ? $selected : $fallback);
+    $html = '<option value="">Select Cost Type</option>';
+    $exists = false;
+    foreach ($costTypes as $costType) {
+        $type = (string) ($costType['type'] ?? $costType['code'] ?? $costType['cost_type'] ?? '');
+        if ($type === '') {
+            continue;
+        }
+        $description = trim((string) ($costType['description'] ?? ''));
+        $group = trim((string) ($costType['cost_group'] ?? ''));
+        $exists = $exists || strtoupper($type) === strtoupper($selected);
+        $label = $type;
+        if ($description !== '') {
+            $label .= ' - ' . $description;
+        }
+        if ($group !== '') {
+            $label .= ' (' . $group . ')';
+        }
+        $html .= '<option value="' . esc($type, 'attr') . '" ' . (strtoupper($selected) === strtoupper($type) ? 'selected' : '') . '>' . esc($label) . '</option>';
+    }
+    if ($selected !== '' && ! $exists) {
+        $html .= '<option value="' . esc($selected, 'attr') . '" selected>' . esc($selected) . '</option>';
+    }
+    return $html;
+};
 $uomBlankOptions = $uomOptions('', $uoms, '');
 $uomCmOptions = $uomOptions('CM', $uoms, 'CM');
 $uomM3Options = $uomOptions('M3', $uoms, 'M3');
 $uomHourOptions = $uomOptions('HOUR', $uoms, 'HOUR');
+$costTypeBlankOptions = $costTypeOptions('', $costTypes, '');
+$costTypeLaborOptions = $costTypeOptions('Labor', $costTypes, 'Labor');
 ?>
 <style>
     .wc-detail-wrap {
@@ -50,7 +99,7 @@ $uomHourOptions = $uomOptions('HOUR', $uoms, 'HOUR');
         table-layout: fixed;
     }
     .wc-cost-table {
-        min-width: 820px;
+        min-width: 900px;
         table-layout: fixed;
     }
     .wc-machine-table th,
@@ -69,6 +118,9 @@ $uomHourOptions = $uomOptions('HOUR', $uoms, 'HOUR');
     .wc-machine-table .select2-container,
     .wc-cost-table .select2-container {
         min-width: 120px;
+    }
+    .wc-cost-table .costtype-select + .select2-container {
+        min-width: 190px;
     }
     .wc-machine-table th:nth-child(1), .wc-machine-table td:nth-child(1) { width: 78px; }
     .wc-machine-table th:nth-child(2), .wc-machine-table td:nth-child(2) { width: 170px; }
@@ -220,7 +272,7 @@ $uomHourOptions = $uomOptions('HOUR', $uoms, 'HOUR');
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
                     <h5 class="font-size-15 mb-1">Cost Detail</h5>
-                    <p class="text-muted mb-0">Bisa input lebih dari satu tipe biaya, misalnya Labor, Machine, Overhead.</p>
+                    <p class="text-muted mb-0">Cost Type mengambil dari master Cost Type. Tambahkan master di menu Cost Type bila pilihan belum tersedia.</p>
                 </div>
                 <button type="button" class="btn btn-sm btn-outline-primary" id="addCostRow"><i class="bx bx-plus me-1"></i> Add Cost</button>
             </div>
@@ -228,7 +280,7 @@ $uomHourOptions = $uomOptions('HOUR', $uoms, 'HOUR');
                 <table class="table table-bordered table-sm align-middle mb-0 wc-cost-table" id="costTable">
                     <thead class="table-light">
                         <tr>
-                            <th style="width:180px">Cost Type</th>
+                            <th style="width:230px">Cost Type</th>
                             <th class="text-end" style="width:150px">Amount</th>
                             <th style="width:160px">UoM</th>
                             <th>Notes</th>
@@ -238,7 +290,7 @@ $uomHourOptions = $uomOptions('HOUR', $uoms, 'HOUR');
                     <tbody>
                     <?php foreach ($costRows as $c): ?>
                         <tr>
-                            <td><input name="costtype[]" class="form-control form-control-sm" maxlength="12" value="<?= esc($c['costtype'] ?? '') ?>"></td>
+                            <td><select name="costtype[]" class="form-select form-select-sm costtype-select"><?= $costTypeOptions((string) ($c['costtype'] ?? 'Labor'), $costTypes, 'Labor') ?></select></td>
                             <td><input type="number" step="0.01" name="costamount[]" class="form-control form-control-sm text-end" value="<?= esc($c['costamount'] ?? '0') ?>"></td>
                             <td><select name="costuom[]" class="form-select form-select-sm uom-select"><?= $uomOptions((string) ($c['costuom'] ?? 'HOUR'), $uoms, 'HOUR') ?></select></td>
                             <td><input name="cost_notes[]" class="form-control form-control-sm" maxlength="30" value="<?= esc($c['notes2'] ?? '') ?>"></td>
@@ -273,10 +325,11 @@ $uomHourOptions = $uomOptions('HOUR', $uoms, 'HOUR');
     const uomCmOptions = <?= json_encode($uomCmOptions) ?>;
     const uomM3Options = <?= json_encode($uomM3Options) ?>;
     const uomHourOptions = <?= json_encode($uomHourOptions) ?>;
+    const costTypeOptions = <?= json_encode($costTypeBlankOptions) ?>;
 
     function initSelect2(scope) {
         if (! window.jQuery || ! jQuery.fn.select2) return;
-        jQuery(scope || document).find('.uom-select, .select2-basic').each(function () {
+        jQuery(scope || document).find('.uom-select, .select2-basic, .costtype-select').each(function () {
             const el = jQuery(this);
             if (el.data('select2')) return;
             el.select2({ width: '100%' });
@@ -285,7 +338,7 @@ $uomHourOptions = $uomOptions('HOUR', $uoms, 'HOUR');
 
     function destroySelect2(scope) {
         if (! window.jQuery || ! jQuery.fn.select2) return;
-        jQuery(scope || document).find('.uom-select, .select2-basic').each(function () {
+        jQuery(scope || document).find('.uom-select, .select2-basic, .costtype-select').each(function () {
             const el = jQuery(this);
             if (el.data('select2')) el.select2('destroy');
         });
@@ -338,7 +391,7 @@ $uomHourOptions = $uomOptions('HOUR', $uoms, 'HOUR');
     function costRowHtml() {
         return `
             <tr>
-                <td><input name="costtype[]" class="form-control form-control-sm" maxlength="12" value=""></td>
+                <td><select name="costtype[]" class="form-select form-select-sm costtype-select">${costTypeOptions}</select></td>
                 <td><input type="number" step="0.01" name="costamount[]" class="form-control form-control-sm text-end" value="0"></td>
                 <td><select name="costuom[]" class="form-select form-select-sm uom-select">${optionHtml('HOUR')}</select></td>
                 <td><input name="cost_notes[]" class="form-control form-control-sm" maxlength="30" value=""></td>
