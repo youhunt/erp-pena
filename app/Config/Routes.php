@@ -280,7 +280,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->get('options/cities', 'Setup\MasterDataController::cityOptions');
         $routes->get('options/locations', 'Setup\MasterDataController::locationOptions');
 
-        foreach (['item-vat','other-charge-vat','charge-vat','wht'] as $resource) {
+        foreach (['vat','item-vat','other-charge-vat','charge-vat','wht'] as $resource) {
             $routes->get($resource, 'Setup\TaxMasterController::index/' . $resource);
             $routes->get($resource . '/new', 'Setup\TaxMasterController::create/' . $resource);
             $routes->post($resource, 'Setup\TaxMasterController::store/' . $resource);
@@ -290,7 +290,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
             $routes->post($resource . '/(:num)/delete', 'Setup\TaxMasterController::delete/' . $resource . '/$1');
         }
 
-        foreach (['transaction-codes','prefix-codes','companies','sites','departments','warehouses','locations','countries','provinces','cities','postal-codes','currencies','uoms','uom-conversions','vat','address-master','customer-terms','customer-promos','customers','supplier-terms','supplier-promos','suppliers','items','item-locations','batch-masters'] as $resource) {
+        foreach (['transaction-codes','prefix-codes','companies','sites','departments','warehouses','locations','countries','provinces','cities','postal-codes','currencies','uoms','uom-conversions','address-master','customer-terms','customer-promos','customers','supplier-terms','supplier-promos','suppliers','items','item-locations','batch-masters'] as $resource) {
             $routes->get($resource, 'Setup\MasterDataController::index/' . $resource);
             $routes->get($resource . '/new', 'Setup\MasterDataController::create/' . $resource);
             $routes->post($resource, 'Setup\MasterDataController::store/' . $resource);
