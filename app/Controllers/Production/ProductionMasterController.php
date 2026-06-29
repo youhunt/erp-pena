@@ -15,6 +15,7 @@ use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use Config\Database;
 use RuntimeException;
+use Throwable;
 
 class ProductionMasterController extends BaseController
 {
@@ -89,6 +90,11 @@ class ProductionMasterController extends BaseController
     {
         return view('production/work_centers/form', $this->formLookups() + [
             'title' => 'Create Work Center',
+            'workCenter' => [],
+            'machines' => [],
+            'costs' => [],
+            'isEdit' => false,
+            'action' => site_url('production/work-centers'),
         ]);
     }
 
@@ -115,7 +121,6 @@ class ProductionMasterController extends BaseController
             'department_code' => 'required|max_length[12]',
             'warehouse_code' => 'required|max_length[12]',
             'work_center_code' => 'required|max_length[12]',
-            'machine_code' => 'required|max_length[12]',
         ])) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
         }
@@ -125,6 +130,14 @@ class ProductionMasterController extends BaseController
         if ($companyId === null || $companyId < 1) {
             return redirect()->back()->withInput()->with('error', 'Active company is required.');
         }
+
+        $machineRows = $this->postedWorkCenterMachines();
+        if ($machineRows === []) {
+            return redirect()->back()->withInput()->with('error', 'Minimal isi 1 Machine Detail.');
+        }
+        $costRows = $this->postedWorkCenterCosts();
+        $primaryMachine = $machineRows[0];
+        $primaryCost = $costRows[0] ?? ['costtype' => '', 'costamount' => 0, 'costuom' => ''];
 
         $model = new ProductionWorkCenterModel();
         $where = [
@@ -138,38 +151,49 @@ class ProductionMasterController extends BaseController
             return redirect()->back()->withInput()->with('error', 'Data already exist.');
         }
 
-        $id = (int) $model->insert($where + [
-            'site_id' => $tenant->activeSiteId(),
-            'description' => trim((string) $this->request->getPost('description')),
-            'machine_code' => trim((string) $this->request->getPost('machine_code')),
-            'notes' => trim((string) $this->request->getPost('notes')),
-            'speed' => (float) $this->request->getPost('speed'),
-            'capacity_percent' => (float) ($this->request->getPost('capacity_percent') ?: 100),
-            'max_length' => (float) $this->request->getPost('max_length'),
-            'length_uom' => trim((string) $this->request->getPost('length_uom')),
-            'max_width' => (float) $this->request->getPost('max_width'),
-            'width_uom' => trim((string) $this->request->getPost('width_uom')),
-            'max_height' => (float) $this->request->getPost('max_height'),
-            'height_uom' => trim((string) $this->request->getPost('height_uom')),
-            'max_volume' => (float) $this->request->getPost('max_volume'),
-            'volume_uom' => trim((string) $this->request->getPost('volume_uom')),
-            'qty_labor' => (float) $this->request->getPost('qty_labor'),
-            'working_hour' => (float) $this->request->getPost('working_hour'),
-            'cost_type' => trim((string) $this->request->getPost('cost_type')),
-            'cost_amount' => (float) $this->request->getPost('cost_amount'),
-            'cost_uom' => trim((string) $this->request->getPost('cost_uom')),
-            'active_date' => $this->nullableDate($this->request->getPost('active_date')),
-            'inactive_date' => $this->nullableDate($this->request->getPost('inactive_date')),
-            'is_active' => 1,
-            'created_by' => auth()->id(),
-            'updated_by' => auth()->id(),
-        ], true);
+        $db = Database::connect();
+        $db->transBegin();
+        try {
+            $id = (int) $model->insert($where + [
+                'site_id' => $tenant->activeSiteId(),
+                'description' => trim((string) $this->request->getPost('description')),
+                'machine_code' => (string) ($primaryMachine['machine'] ?? ''),
+                'notes' => trim((string) $this->request->getPost('notes')),
+                'speed' => (float) ($primaryMachine['speed'] ?? 0),
+                'capacity_percent' => (float) ($primaryMachine['capacity'] ?? 100),
+                'max_length' => (float) ($primaryMachine['length'] ?? 0),
+                'length_uom' => (string) ($primaryMachine['luom'] ?? ''),
+                'max_width' => (float) ($primaryMachine['width'] ?? 0),
+                'width_uom' => (string) ($primaryMachine['wuom'] ?? ''),
+                'max_height' => (float) ($primaryMachine['height'] ?? 0),
+                'height_uom' => (string) ($primaryMachine['huom'] ?? ''),
+                'max_volume' => (float) ($primaryMachine['volume'] ?? 0),
+                'volume_uom' => (string) ($primaryMachine['vuom'] ?? ''),
+                'qty_labor' => (float) ($primaryMachine['qtylabor'] ?? 0),
+                'working_hour' => (float) ($primaryMachine['workhour'] ?? 0),
+                'cost_type' => (string) ($primaryCost['costtype'] ?? ''),
+                'cost_amount' => (float) ($primaryCost['costamount'] ?? 0),
+                'cost_uom' => (string) ($primaryCost['costuom'] ?? ''),
+                'active_date' => $this->nullableDate($this->request->getPost('active_date')),
+                'inactive_date' => $this->nullableDate($this->request->getPost('inactive_date')),
+                'is_active' => 1,
+                'created_by' => auth()->id(),
+                'updated_by' => auth()->id(),
+            ], true);
 
-        $this->saveWorkCenterChildren($id, $companyId, $tenant, $where);
+            $this->saveWorkCenterChildren($id, $companyId, $tenant, $where, $machineRows, $costRows);
 
-        $this->audit('production.work_center', 'work_center.create', 'production_work_centers', $id, $where['work_center_code']);
+            if ($db->transStatus() === false) {
+                throw new RuntimeException('Failed to save Work Center.');
+            }
+            $db->transCommit();
+            $this->audit('production.work_center', 'work_center.create', 'production_work_centers', $id, $where['work_center_code']);
 
-        return redirect()->to('/production/work-centers/' . $id)->with('message', 'Work center saved.');
+            return redirect()->to('/production/work-centers/' . $id)->with('message', 'Work center saved.');
+        } catch (Throwable $e) {
+            $db->transRollback();
+            return redirect()->back()->withInput()->with('error', $e->getMessage());
+        }
     }
 
     public function routings(): string
@@ -334,30 +358,9 @@ class ProductionMasterController extends BaseController
         }
     }
 
-    private function saveWorkCenterChildren(int $workCenterId, int $companyId, TenantContext $tenant, array $where): void
+    private function saveWorkCenterChildren(int $workCenterId, int $companyId, TenantContext $tenant, array $where, array $machineRows, array $costRows): void
     {
         $user = (string) (auth()->user()?->username ?? auth()->user()?->email ?? auth()->id() ?? 'system');
-
-        $machineRows = $this->postedWorkCenterMachines();
-        if ($machineRows === []) {
-            $machineRows[] = [
-                'no' => 10,
-                'machine' => trim((string) $this->request->getPost('machine_code')),
-                'notes1' => trim((string) $this->request->getPost('notes')),
-                'speed' => (float) $this->request->getPost('speed'),
-                'capacity' => (float) ($this->request->getPost('capacity_percent') ?: 100),
-                'length' => (float) $this->request->getPost('max_length'),
-                'luom' => trim((string) $this->request->getPost('length_uom')),
-                'width' => (float) $this->request->getPost('max_width'),
-                'wuom' => trim((string) $this->request->getPost('width_uom')),
-                'height' => (float) $this->request->getPost('max_height'),
-                'huom' => trim((string) $this->request->getPost('height_uom')),
-                'volume' => (float) $this->request->getPost('max_volume'),
-                'vuom' => trim((string) $this->request->getPost('volume_uom')),
-                'qtylabor' => (float) $this->request->getPost('qty_labor'),
-                'workhour' => (float) $this->request->getPost('working_hour'),
-            ];
-        }
 
         $machineModel = new WorkCenterMachineModel();
         foreach ($machineRows as $row) {
@@ -376,16 +379,6 @@ class ProductionMasterController extends BaseController
                 'updated_by' => $user,
                 'active' => 1,
             ]);
-        }
-
-        $costRows = $this->postedWorkCenterCosts();
-        if ($costRows === [] && trim((string) $this->request->getPost('cost_type')) !== '') {
-            $costRows[] = [
-                'costtype' => trim((string) $this->request->getPost('cost_type')),
-                'costamount' => (float) $this->request->getPost('cost_amount'),
-                'costuom' => trim((string) $this->request->getPost('cost_uom')),
-                'notes2' => '',
-            ];
         }
 
         $costModel = new WorkCenterCostModel();
@@ -418,18 +411,18 @@ class ProductionMasterController extends BaseController
                 'no' => (int) (((array) $this->request->getPost('machine_no'))[$index] ?? (($index + 1) * 10)),
                 'machine' => $machine,
                 'notes1' => trim((string) (((array) $this->request->getPost('machine_notes'))[$index] ?? '')),
-                'speed' => (float) (((array) $this->request->getPost('machine_speed'))[$index] ?? 0),
-                'capacity' => (float) (((array) $this->request->getPost('machine_capacity'))[$index] ?? 100),
-                'length' => (float) (((array) $this->request->getPost('machine_length'))[$index] ?? 0),
+                'speed' => $this->toNumber(((array) $this->request->getPost('machine_speed'))[$index] ?? 0),
+                'capacity' => $this->toNumber(((array) $this->request->getPost('machine_capacity'))[$index] ?? 100),
+                'length' => $this->toNumber(((array) $this->request->getPost('machine_length'))[$index] ?? 0),
                 'luom' => trim((string) (((array) $this->request->getPost('machine_luom'))[$index] ?? '')),
-                'width' => (float) (((array) $this->request->getPost('machine_width'))[$index] ?? 0),
+                'width' => $this->toNumber(((array) $this->request->getPost('machine_width'))[$index] ?? 0),
                 'wuom' => trim((string) (((array) $this->request->getPost('machine_wuom'))[$index] ?? '')),
-                'height' => (float) (((array) $this->request->getPost('machine_height'))[$index] ?? 0),
+                'height' => $this->toNumber(((array) $this->request->getPost('machine_height'))[$index] ?? 0),
                 'huom' => trim((string) (((array) $this->request->getPost('machine_huom'))[$index] ?? '')),
-                'volume' => (float) (((array) $this->request->getPost('machine_volume'))[$index] ?? 0),
+                'volume' => $this->toNumber(((array) $this->request->getPost('machine_volume'))[$index] ?? 0),
                 'vuom' => trim((string) (((array) $this->request->getPost('machine_vuom'))[$index] ?? '')),
-                'qtylabor' => (float) (((array) $this->request->getPost('machine_qtylabor'))[$index] ?? 0),
-                'workhour' => (float) (((array) $this->request->getPost('machine_workhour'))[$index] ?? 0),
+                'qtylabor' => $this->toNumber(((array) $this->request->getPost('machine_qtylabor'))[$index] ?? 0),
+                'workhour' => $this->toNumber(((array) $this->request->getPost('machine_workhour'))[$index] ?? 0),
             ];
         }
 
@@ -447,7 +440,7 @@ class ProductionMasterController extends BaseController
             }
             $rows[] = [
                 'costtype' => $type,
-                'costamount' => (float) (((array) $this->request->getPost('costamount'))[$index] ?? 0),
+                'costamount' => $this->toNumber(((array) $this->request->getPost('costamount'))[$index] ?? 0),
                 'costuom' => trim((string) (((array) $this->request->getPost('costuom'))[$index] ?? '')),
                 'notes2' => trim((string) (((array) $this->request->getPost('cost_notes'))[$index] ?? '')),
             ];
@@ -576,6 +569,9 @@ class ProductionMasterController extends BaseController
         }
 
         $db = Database::connect();
+        if (! $db->tableExists('items')) {
+            return null;
+        }
         $builder = $db->table('items');
         $db->fieldExists('item_code', 'items') ? $builder->where('item_code', $code) : $builder->where('code', $code);
 
@@ -615,6 +611,21 @@ class ProductionMasterController extends BaseController
         $value = trim((string) $value);
 
         return $value !== '' ? str_replace('T', ' ', $value) : null;
+    }
+
+    private function toNumber(mixed $value): float
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0.0;
+        }
+        if (str_contains($value, ',') && ! str_contains($value, '.')) {
+            $value = str_replace(',', '.', $value);
+        } else {
+            $value = str_replace(',', '', $value);
+        }
+
+        return (float) $value;
     }
 
     private function audit(string $module, string $action, string $table, int $id, string $code): void
