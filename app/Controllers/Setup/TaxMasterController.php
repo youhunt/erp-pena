@@ -5,6 +5,7 @@ namespace App\Controllers\Setup;
 use App\Controllers\BaseController;
 use App\Models\ChargeVatRateModel;
 use App\Models\ItemVatRateModel;
+use App\Models\VatRateModel;
 use App\Models\WithholdingTaxRateModel;
 use App\Services\AuditLogService;
 use App\Services\TenantContext;
@@ -20,6 +21,25 @@ class TaxMasterController extends BaseController
     public function __construct()
     {
         $this->configs = [
+            'vat' => [
+                'title' => 'VAT Master',
+                'table' => 'vat_rates',
+                'model' => VatRateModel::class,
+                'code_label' => 'VAT Code',
+                'description_label' => 'VAT Description',
+                'display_fields' => ['site', 'company', 'vat', 'description', 'vatpctg', 'scpctg', 'otherpctg', 'optionalpctg', 'gl'],
+                'fields' => [
+                    'site' => ['label' => 'Site', 'type' => 'hidden_tenant', 'required' => true, 'max' => 12],
+                    'company' => ['label' => 'Company', 'type' => 'hidden_tenant', 'required' => false, 'max' => 12],
+                    'vat' => ['label' => 'VAT Code', 'type' => 'text', 'required' => true, 'max' => 12],
+                    'description' => ['label' => 'VAT Description', 'type' => 'textarea', 'required' => false, 'max' => 500],
+                    'vatpctg' => ['label' => 'VAT %', 'type' => 'number', 'default' => 0],
+                    'scpctg' => ['label' => 'Service Charge %', 'type' => 'number', 'default' => 0],
+                    'otherpctg' => ['label' => 'Other %', 'type' => 'number', 'default' => 0],
+                    'optionalpctg' => ['label' => 'Optional %', 'type' => 'number', 'default' => 0],
+                    'gl' => ['label' => 'GL Code', 'type' => 'gl', 'required' => false, 'max' => 30],
+                ],
+            ],
             'item-vat' => [
                 'title' => 'Item VAT Master',
                 'table' => 'item_vat_rates',
@@ -292,6 +312,12 @@ class TaxMasterController extends BaseController
                 $value = trim((string) $value);
             }
             $payload[$name] = $value;
+        }
+
+        if ($config['table'] === 'vat_rates') {
+            $payload['code'] = $payload['vat'] ?? '';
+            $payload['name'] = $payload['description'] ?? '';
+            $payload['rate'] = $payload['vatpctg'] ?? 0;
         }
 
         if ($config['table'] === 'wht_rates') {
