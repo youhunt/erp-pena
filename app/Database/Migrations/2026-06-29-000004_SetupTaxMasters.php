@@ -11,6 +11,7 @@ class SetupTaxMasters extends Migration
         $this->ensureItemVatRates();
         $this->ensureChargeVatRates();
         $this->ensureWhtRates();
+        $this->ensureMenuItems();
     }
 
     public function down(): void
@@ -104,6 +105,65 @@ class SetupTaxMasters extends Migration
             return;
         }
         $this->forge->addColumn($table, [$column => $definition]);
+    }
+
+    private function ensureMenuItems(): void
+    {
+        if (! $this->db->tableExists('menu_items')) {
+            return;
+        }
+
+        $setup = $this->db->table('menu_items')
+            ->where('label', 'Setup')
+            ->groupStart()
+                ->where('parent_id', null)
+                ->orWhere('parent_id', 0)
+            ->groupEnd()
+            ->orderBy('id', 'ASC')
+            ->get(1)
+            ->getRowArray();
+
+        $now = date('Y-m-d H:i:s');
+        if ($setup === null) {
+            $this->db->table('menu_items')->insert([
+                'parent_id' => 0,
+                'label' => 'Setup',
+                'route' => '#',
+                'icon' => 'bx-slider-alt',
+                'permission' => 'setup.master.view',
+                'sort_order' => 900,
+                'is_active' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+            $setupId = (int) $this->db->insertID();
+        } else {
+            $setupId = (int) $setup['id'];
+        }
+
+        foreach ([
+            ['Item VAT Master', 'setup/item-vat', 'bx-receipt', 237],
+            ['Other Charge VAT Master', 'setup/other-charge-vat', 'bx-plus-medical', 238],
+            ['WHT Master', 'setup/wht', 'bx-cut', 239],
+        ] as [$label, $route, $icon, $sort]) {
+            $existing = $this->db->table('menu_items')->where('route', $route)->get(1)->getRowArray();
+            $payload = [
+                'parent_id' => $setupId,
+                'label' => $label,
+                'route' => $route,
+                'icon' => $icon,
+                'permission' => 'setup.master.view',
+                'sort_order' => $sort,
+                'is_active' => 1,
+                'updated_at' => $now,
+            ];
+            if ($existing) {
+                $this->db->table('menu_items')->where('id', (int) $existing['id'])->update($payload);
+                continue;
+            }
+            $payload['created_at'] = $now;
+            $this->db->table('menu_items')->insert($payload);
+        }
     }
 
     private function baseFields(): array
