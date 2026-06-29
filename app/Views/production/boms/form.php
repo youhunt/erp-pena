@@ -2,9 +2,12 @@
 
 <?= $this->section('content') ?>
 <?php
+use App\Services\TenantContext;
+
 $bom ??= [];
 $lines ??= [];
 $items ??= [];
+$routings ??= [];
 $isEdit = (bool) ($isEdit ?? false);
 $action ??= $isEdit ? site_url('production/boms/' . (int) ($bom['id'] ?? 0)) : site_url('production/boms');
 $val = static fn(string $f, mixed $d = ''): string => (string) old($f, $bom[$f] ?? $d);
@@ -21,6 +24,31 @@ foreach ($items as $item) {
     }
     if (isset($item['id']) && (int) $item['id'] > 0) {
         $itemById[(int) $item['id']] = $item;
+    }
+}
+
+if ($routings === []) {
+    try {
+        $db = db_connect();
+        if ($db->tableExists('production_routings')) {
+            $tenant = new TenantContext(session());
+            $builder = $db->table('production_routings')->select('id, site_code, department_code, warehouse_code, item_code, description')->orderBy('item_code', 'ASC');
+            if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', 'production_routings')) {
+                $builder->where('company_id', $tenant->activeCompanyId());
+            }
+            if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', 'production_routings')) {
+                $builder->where('site_id', $tenant->activeSiteId());
+            }
+            if ($db->fieldExists('deleted_at', 'production_routings')) {
+                $builder->where('deleted_at', null);
+            }
+            if ($db->fieldExists('is_active', 'production_routings')) {
+                $builder->where('is_active', 1);
+            }
+            $routings = $builder->get(500)->getResultArray();
+        }
+    } catch (Throwable) {
+        $routings = [];
     }
 }
 ?>
@@ -41,12 +69,13 @@ foreach ($items as $item) {
 <form method="post" action="<?= esc($action, 'attr') ?>">
     <?= csrf_field() ?>
     <div class="card"><div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-4"><div><h4 class="card-title mb-1"><?= esc($isEdit ? 'Edit BOM' : 'Create BOM') ?></h4><p class="text-muted mb-0">Define parent item, batch quantity, and child components.</p></div><a href="<?= $isEdit ? site_url('production/boms/' . (int) ($bom['id'] ?? 0)) : site_url('production/boms') ?>" class="btn btn-light">Back</a></div>
+        <div class="d-flex justify-content-between align-items-center mb-4"><div><h4 class="card-title mb-1"><?= esc($isEdit ? 'Edit BOM' : 'Create BOM') ?></h4><p class="text-muted mb-0">Define parent item, batch quantity, child components, and linked routing.</p></div><a href="<?= $isEdit ? site_url('production/boms/' . (int) ($bom['id'] ?? 0)) : site_url('production/boms') ?>" class="btn btn-light">Back</a></div>
         <div class="row">
             <div class="col-md-3 mb-3"><label class="form-label">Site</label><select name="site_code" class="form-select" required><?php foreach ($sites as $site): ?><?php $code=$site['code']??''; ?><option value="<?= esc($code) ?>" <?= $val('site_code')===$code?'selected':'' ?>><?= esc($code . ' - ' . ($site['name'] ?? '')) ?></option><?php endforeach ?></select></div>
             <div class="col-md-3 mb-3"><label class="form-label">Department</label><select name="department_code" class="form-select" required><?php foreach ($departments as $department): ?><?php $code=$department['code']??''; ?><option value="<?= esc($code) ?>" <?= $val('department_code')===$code?'selected':'' ?>><?= esc($code . ' - ' . ($department['name'] ?? '')) ?></option><?php endforeach ?></select></div>
             <div class="col-md-3 mb-3"><label class="form-label">Warehouse</label><select name="warehouse_code" class="form-select"><option value="">No Warehouse</option><?php foreach ($warehouses as $warehouse): ?><?php $code=$warehouse['code']??''; ?><option value="<?= esc($code) ?>" <?= $val('warehouse_code')===$code?'selected':'' ?>><?= esc($code . ' - ' . ($warehouse['name'] ?? '')) ?></option><?php endforeach ?></select></div>
             <div class="col-md-3 mb-3"><label class="form-label">Parent Item</label><select name="parent_item_code" class="form-select" required><?php foreach ($items as $item): ?><?php $code=$itemCode($item); ?><option value="<?= esc($code) ?>" <?= $val('parent_item_code')===$code?'selected':'' ?>><?= esc($itemLabel($item)) ?></option><?php endforeach ?></select></div>
+            <div class="col-md-4 mb-3"><label class="form-label">Routing Link</label><select name="routing_id" class="form-select"><option value="">No linked routing</option><?php foreach ($routings as $routingRow): ?><?php $routingId=(int)($routingRow['id']??0); $label=trim(($routingRow['item_code']??'') . ' / ' . ($routingRow['site_code']??'') . ' / ' . ($routingRow['department_code']??'') . ' / ' . ($routingRow['warehouse_code']??''), ' /'); ?><option value="<?= esc((string)$routingId, 'attr') ?>" <?= (string)$val('routing_id')===(string)$routingId?'selected':'' ?>><?= esc($label . (($routingRow['description']??'')!=='' ? ' - ' . $routingRow['description'] : '')) ?></option><?php endforeach ?></select><div class="form-text">Link BOM ke Routing untuk item dan site yang sesuai.</div></div>
             <div class="col-md-2 mb-3"><label class="form-label">Type</label><input name="bom_type" class="form-control" value="<?= esc($val('bom_type', 'standard')) ?>"></div>
             <div class="col-md-2 mb-3"><label class="form-label">Qty/Batch</label><input type="number" step="0.000001" name="qty_batch" class="form-control" required value="<?= esc($val('qty_batch', '1')) ?>"></div>
             <div class="col-md-2 mb-3"><label class="form-label">UoM</label><select name="uom_code" class="form-select" required><?php foreach ($uoms as $uom): ?><?php $code=$uom['code']??''; ?><option value="<?= esc($code) ?>" <?= $val('uom_code')===$code?'selected':'' ?>><?= esc($code) ?></option><?php endforeach ?></select></div>
