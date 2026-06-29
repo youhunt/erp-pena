@@ -10,6 +10,7 @@ use App\Models\ProductionRoutingModel;
 use App\Models\ProductionWorkCenterModel;
 use App\Services\TenantContext;
 use CodeIgniter\HTTP\ResponseInterface;
+use Config\Database;
 use RuntimeException;
 
 class WorkOrderBomPreviewController extends BaseController
@@ -32,7 +33,7 @@ class WorkOrderBomPreviewController extends BaseController
             'wo_qty' => (float) ($this->request->getGet('wo_qty') ?: 1),
         ];
 
-        if ($header['site_code'] === '' || $header['parent_item_code'] === '') {
+        if ($header['parent_item_code'] === '') {
             return $this->response->setJSON(['bom' => null, 'components' => [], 'routing' => null, 'routings' => []]);
         }
 
@@ -47,7 +48,7 @@ class WorkOrderBomPreviewController extends BaseController
     {
         $bom = $this->findBom($header);
         if ($bom === null) {
-            throw new RuntimeException('BOM not found for parent item ' . $header['parent_item_code'] . '.');
+            throw new RuntimeException('BOM tidak ditemukan untuk parent item ' . $header['parent_item_code'] . '. Cek menu Production > BOM.');
         }
 
         $woQty = (float) ($header['wo_qty'] ?? 1);
@@ -59,12 +60,23 @@ class WorkOrderBomPreviewController extends BaseController
         }
 
         $components = [];
-        foreach ((new ProductionBomLineModel())->where('production_bom_id', (int) $bom['id'])->orderBy('child_no', 'ASC')->findAll() as $line) {
+        $lines = (new ProductionBomLineModel())
+            ->where('production_bom_id', (int) $bom['id'])
+            ->orderBy('child_no', 'ASC')
+            ->findAll();
+
+        foreach ($lines as $line) {
             $qty = round((float) ($line['qty_used'] ?? 0) * $scale, 12);
+            $itemName = trim((string) ($line['child_item_name'] ?? ''));
+            if ($itemName === '') {
+                $item = $this->itemByCode((string) ($line['child_item_code'] ?? ''));
+                $itemName = (string) ($item['item_name'] ?? $item['name'] ?? '');
+            }
+
             $components[] = [
                 'line_no' => (int) ($line['child_no'] ?? 0),
                 'component_item_code' => (string) ($line['child_item_code'] ?? ''),
-                'component_item_name' => (string) ($line['child_item_name'] ?? ''),
+                'component_item_name' => $itemName,
                 'qty_used' => $qty,
                 'uom_code' => (string) ($line['uom_code'] ?? ''),
                 'warehouse_code' => $warehouse,
@@ -86,7 +98,7 @@ class WorkOrderBomPreviewController extends BaseController
                     'line_no' => (int) ($line['route_no'] ?? 0),
                     'routing_name' => (string) ($line['routing_name'] ?? ''),
                     'work_center_code' => (string) ($line['work_center_code'] ?? ''),
-                    'work_center_name' => (string) ($workCenter['description'] ?? $line['work_center_code'] ?? ''),
+                    'work_center_name' => (string) ($workCenter['description'] ?? $workCenter['work_center_name'] ?? $line['work_center_code'] ?? ''),
                     'hour_qty' => round((float) ($line['hour_qty'] ?? 0) * $scale, 8),
                     'uom_code' => (string) ($line['hour_uom'] ?? 'Hour'),
                 ];
@@ -100,6 +112,7 @@ class WorkOrderBomPreviewController extends BaseController
                 'uom_code' => (string) ($bom['uom_code'] ?? 'PCS'),
                 'description' => (string) ($bom['description'] ?? ''),
                 'warehouse_code' => (string) ($bom['warehouse_code'] ?? ''),
+                'component_count' => count($components),
             ],
             'routing' => $routing === null ? null : [
                 'id' => (int) $routing['id'],
@@ -112,28 +125,49 @@ class WorkOrderBomPreviewController extends BaseController
 
     private function findBom(array $header): ?array
     {
-        $model = new ProductionBomModel();
-        $model->where('company_id', $header['company_id'])
-            ->where('site_code', $header['site_code'])
-            ->where('parent_item_code', $header['parent_item_code']);
-        if ($header['department_code'] !== '') {
-            $model->where('department_code', $header['department_code']);
+        $candidates = [];
+
+        if ($header['site_code'] !== '' && $header['department_code'] !== '' && $header['warehouse_code'] !== '') {
+            $candidates[] = ['site_code', 'department_code', 'warehouse_code'];
         }
-        if ($header['warehouse_code'] !== '') {
-            $model->groupStart()->where('warehouse_code', $header['warehouse_code'])->orWhere('warehouse_code', '')->orWhere('warehouse_code', null)->groupEnd();
+        if ($header['site_code'] !== '' && $header['department_code'] !== '') {
+            $candidates[] = ['site_code', 'department_code'];
+        }
+        if ($header['site_code'] !== '') {
+            $candidates[] = ['site_code'];
+        }
+        $candidates[] = [];
+
+        foreach ($candidates as $filters) {
+            $model = new ProductionBomModel();
+            $model->where('company_id', $header['company_id'])
+                ->where('parent_item_code', $header['parent_item_code']);
+
+            foreach ($filters as $field) {
+                $value = trim((string) ($header[$field] ?? ''));
+                if ($value === '') {
+                    continue;
+                }
+
+                if ($field === 'warehouse_code') {
+                    $model->groupStart()
+                        ->where('warehouse_code', $value)
+                        ->orWhere('warehouse_code', '')
+                        ->orWhere('warehouse_code', null)
+                        ->groupEnd();
+                    continue;
+                }
+
+                $model->where($field, $value);
+            }
+
+            $row = $model->orderBy('id', 'DESC')->first();
+            if ($row !== null) {
+                return $row;
+            }
         }
 
-        $row = $model->orderBy('warehouse_code', 'DESC')->orderBy('id', 'DESC')->first();
-        if ($row !== null) {
-            return $row;
-        }
-
-        return (new ProductionBomModel())
-            ->where('company_id', $header['company_id'])
-            ->where('site_code', $header['site_code'])
-            ->where('parent_item_code', $header['parent_item_code'])
-            ->orderBy('id', 'DESC')
-            ->first();
+        return null;
     }
 
     private function findRouting(array $header, array $bom): ?array
@@ -145,27 +179,64 @@ class WorkOrderBomPreviewController extends BaseController
             }
         }
 
-        $model = new ProductionRoutingModel();
-        $model->where('company_id', $header['company_id'])
-            ->where('site_code', $header['site_code'])
-            ->where('item_code', $header['parent_item_code']);
-        if ($header['department_code'] !== '') {
-            $model->where('department_code', $header['department_code']);
+        $candidates = [];
+        if ($header['site_code'] !== '' && $header['department_code'] !== '' && $header['warehouse_code'] !== '') {
+            $candidates[] = ['site_code', 'department_code', 'warehouse_code'];
         }
-        if ($header['warehouse_code'] !== '') {
-            $model->groupStart()->where('warehouse_code', $header['warehouse_code'])->orWhere('warehouse_code', '')->orWhere('warehouse_code', null)->groupEnd();
+        if ($header['site_code'] !== '' && $header['department_code'] !== '') {
+            $candidates[] = ['site_code', 'department_code'];
+        }
+        if ($header['site_code'] !== '') {
+            $candidates[] = ['site_code'];
+        }
+        $candidates[] = [];
+
+        foreach ($candidates as $filters) {
+            $model = new ProductionRoutingModel();
+            $model->where('company_id', $header['company_id'])
+                ->where('item_code', $header['parent_item_code']);
+
+            foreach ($filters as $field) {
+                $value = trim((string) ($header[$field] ?? ''));
+                if ($value === '') {
+                    continue;
+                }
+
+                if ($field === 'warehouse_code') {
+                    $model->groupStart()
+                        ->where('warehouse_code', $value)
+                        ->orWhere('warehouse_code', '')
+                        ->orWhere('warehouse_code', null)
+                        ->groupEnd();
+                    continue;
+                }
+
+                $model->where($field, $value);
+            }
+
+            $row = $model->orderBy('id', 'DESC')->first();
+            if ($row !== null) {
+                return $row;
+            }
         }
 
-        $row = $model->orderBy('warehouse_code', 'DESC')->orderBy('id', 'DESC')->first();
-        if ($row !== null) {
-            return $row;
+        return null;
+    }
+
+    private function itemByCode(string $code): ?array
+    {
+        if ($code === '') {
+            return null;
         }
 
-        return (new ProductionRoutingModel())
-            ->where('company_id', $header['company_id'])
-            ->where('site_code', $header['site_code'])
-            ->where('item_code', $header['parent_item_code'])
-            ->orderBy('id', 'DESC')
-            ->first();
+        $db = Database::connect();
+        if (! $db->tableExists('items')) {
+            return null;
+        }
+
+        $builder = $db->table('items');
+        $db->fieldExists('item_code', 'items') ? $builder->where('item_code', $code) : $builder->where('code', $code);
+
+        return $builder->get()->getRowArray();
     }
 }
