@@ -10,6 +10,15 @@ class ItemVatRateModel extends Model
     protected $primaryKey = 'id';
     protected $returnType = 'array';
     protected $useSoftDeletes = true;
-    protected $allowedFields = ['company_id', 'item_id', 'vat_rate_id', 'is_active', 'created_by', 'updated_by'];
     protected $useTimestamps = true;
+
+    protected $allowedFields = [
+        'company_id', 'site_id', 'company', 'site',
+        'vat', 'description',
+        'vatpctg', 'scpctg', 'whtpctg', 'otherpctg', 'optionalpctg',
+        'gl',
+        // legacy compatibility fields
+        'item_id', 'vat_rate_id',
+        'is_active', 'created_by', 'updated_by',
+    ];
 }
