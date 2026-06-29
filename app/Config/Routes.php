@@ -251,6 +251,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
         $routes->post('work-centers', 'Production\ProductionMasterController::storeWorkCenter');
         $routes->get('work-centers/(:num)/edit', 'Production\ProductionEditController::editWorkCenter/$1');
         $routes->post('work-centers/(:num)', 'Production\ProductionEditController::updateWorkCenter/$1');
+        $routes->post('work-centers/(:num)/delete', 'Production\WorkCenterDeleteController::delete/$1');
         $routes->get('work-centers/(:num)', 'Production\ProductionMasterController::showWorkCenter/$1');
         $routes->get('routings', 'Production\ProductionMasterController::routings');
         $routes->get('routings/new', 'Production\ProductionMasterController::newRouting');
