@@ -36,7 +36,7 @@ class RoutingBomLinkAndLineDates extends Migration
         }
 
         $this->ensureColumn('production_boms', 'routing_id', ['type' => 'BIGINT', 'constraint' => 20, 'unsigned' => true, 'null' => true]);
-        $this->ensureIndex('production_boms', 'idx_production_boms_routing_id', ['routing_id']);
+        $this->ensureIndex('production_boms', 'idx_production_boms_routing_id', 'routing_id');
     }
 
     private function ensureColumn(string $table, string $column, array $definition): void
@@ -57,14 +57,13 @@ class RoutingBomLinkAndLineDates extends Migration
             ->countAllResults() > 0;
     }
 
-    private function ensureIndex(string $table, string $indexName, array $columns): void
+    private function ensureIndex(string $table, string $indexName, string $column): void
     {
-        if ($this->indexExists($table, $indexName)) {
+        if ($this->indexExists($table, $indexName) || ! $this->columnExists($table, $column)) {
             return;
         }
 
-        $this->forge->addKey($columns, false, false, $indexName);
-        $this->forge->processIndexes($table);
+        $this->db->query(sprintf('ALTER TABLE `%s` ADD INDEX `%s` (`%s`)', $table, $indexName, $column));
     }
 
     private function indexExists(string $table, string $indexName): bool
