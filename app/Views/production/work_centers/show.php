@@ -17,6 +17,14 @@ foreach ($costs as $cost) {
         vertical-align: middle;
     }
 </style>
+
+<?php if (session('error')): ?>
+    <div class="alert alert-danger"><?= esc(session('error')) ?></div>
+<?php endif ?>
+<?php if (session('message')): ?>
+    <div class="alert alert-success"><?= esc(session('message')) ?></div>
+<?php endif ?>
+
 <div class="row">
     <div class="col-xl-4">
         <div class="card">
@@ -42,9 +50,13 @@ foreach ($costs as $cost) {
                     <tr><th>Notes</th><td><?= esc($workCenter['notes'] ?? '-') ?></td></tr>
                 </table>
 
-                <div class="d-flex gap-2 mt-3">
+                <div class="d-flex flex-wrap gap-2 mt-3">
                     <a href="<?= site_url('production/work-centers') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back</a>
                     <a href="<?= site_url('production/work-centers/' . $workCenter['id'] . '/edit') ?>" class="btn btn-outline-primary"><i class="bx bx-edit me-1"></i> Edit</a>
+                    <form method="post" action="<?= site_url('production/work-centers/' . $workCenter['id'] . '/delete') ?>" class="d-inline" onsubmit="return confirm('Hapus Work Center <?= esc($workCenter['work_center_code'], 'js') ?>? Work Center yang sudah dipakai di Routing/Work Order tidak bisa dihapus.');">
+                        <?= csrf_field() ?>
+                        <button type="submit" class="btn btn-outline-danger"><i class="bx bx-trash me-1"></i> Delete</button>
+                    </form>
                 </div>
             </div>
         </div>
