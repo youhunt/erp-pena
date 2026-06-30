@@ -33,17 +33,20 @@ class AllocationController extends BaseController
             throw PageNotFoundException::forPageNotFound();
         }
 
+        $lines = (new SalesOrderLineModel())->where('sales_order_id', $salesOrderId)->orderBy('line_no', 'ASC')->findAll();
+
         return view('sales/allocations/form', [
             'title' => 'Create Allocation Order',
             'order' => $order,
-            'lines' => (new SalesOrderLineModel())->where('sales_order_id', $salesOrderId)->orderBy('line_no', 'ASC')->findAll(),
+            'lines' => $lines,
+            'previewRows' => (new AllocationService())->allocationPreviewRows($order, $lines),
         ]);
     }
 
     public function storeFromSo(int $salesOrderId)
     {
         if (! $this->validate([
-            'allocnumb' => 'required|max_length[60]',
+            'allocnumb' => 'permit_empty|max_length[60]',
             'allocdate' => 'required|valid_date[Y-m-d]',
         ])) {
             return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
