@@ -1,6 +1,26 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php
+$rows ??= [];
+$fromDate ??= (string) service('request')->getGet('from_date') ?: date('Y-m-01');
+$toDate ??= (string) service('request')->getGet('to_date') ?: date('Y-m-t');
+$summary ??= [
+    'items' => count($rows),
+    'qty' => 0,
+    'with_bom' => 0,
+    'without_bom' => 0,
+];
+foreach ($rows as &$row) {
+    $row['first_date'] ??= $row['forecast_date'] ?? $row['period_month'] ?? '';
+    $row['last_date'] ??= $row['forecast_date'] ?? $row['period_month'] ?? '';
+    $row['forecast_qty'] ??= $row['qty'] ?? 0;
+    $row['mps_qty'] ??= $row['qty'] ?? 0;
+    $row['suggested_action'] ??= ! empty($row['has_bom']) ? 'ready_for_mrp' : 'create_bom';
+    $summary['qty'] += (float) ($row['mps_qty'] ?? 0);
+}
+unset($row);
+?>
 <div class="card">
     <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
