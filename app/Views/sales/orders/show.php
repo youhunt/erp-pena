@@ -4,13 +4,20 @@
 <?php
 $status = (string) ($order['document_status'] ?? $order['status'] ?? 'draft');
 $hasProcessedLine = false;
+$totalReserved = 0.0;
+$totalDelivered = 0.0;
 foreach ($lines as $line) {
-    if ((float) ($line['qty_reserved'] ?? 0) > 0 || (float) ($line['qty_delivered'] ?? 0) > 0) {
+    $reserved = (float) ($line['qty_reserved'] ?? 0);
+    $delivered = (float) ($line['qty_delivered'] ?? 0);
+    $totalReserved += $reserved;
+    $totalDelivered += $delivered;
+    if ($reserved > 0 || $delivered > 0) {
         $hasProcessedLine = true;
-        break;
     }
 }
 $canEditSo = $status === 'draft' && ! $hasProcessedLine;
+$canBackToDraft = in_array($status, ['submitted', 'approved', 'reserved', 'partial_reserved', 'cancelled'], true) && $totalDelivered <= 0;
+$hasDownstreamPosted = in_array($status, ['partial_delivered', 'delivered', 'invoiced'], true) || $totalDelivered > 0;
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -39,6 +46,12 @@ $canEditSo = $status === 'draft' && ! $hasProcessedLine;
                     </tbody>
                 </table>
 
+                <?php if ($hasDownstreamPosted): ?>
+                    <div class="alert alert-warning mt-3 mb-0">
+                        SO ini sudah ada proses downstream / delivered/invoiced, jadi tidak bisa langsung dikembalikan ke draft. Urutannya: cancel A/R receipt, cancel invoice, reverse delivery, baru SO bisa dibuka ulang.
+                    </div>
+                <?php endif ?>
+
                 <div class="d-flex flex-wrap gap-2 mt-3">
                     <a href="<?= site_url('sales/orders') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to List</a>
                     <a href="<?= site_url('print/sales-orders/' . (int) $order['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
@@ -56,6 +69,13 @@ $canEditSo = $status === 'draft' && ! $hasProcessedLine;
                     <?php endif ?>
                     <?php if (in_array($status, ['approved','reserved','partial_delivered'], true)): ?>
                         <a href="<?= site_url('sales/orders/' . $order['id'] . '/deliver') ?>" class="btn btn-success"><i class="bx bx-send me-1"></i> Create DO</a>
+                    <?php endif ?>
+                    <?php if ($canBackToDraft): ?>
+                        <form method="post" action="<?= site_url('sales/orders/' . $order['id'] . '/cancel') ?>">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="back_to_draft">
+                            <button class="btn btn-warning" onclick="return confirm('Kembalikan SO ini ke draft? Allocation/reservation yang masih open akan dilepas.')"><i class="bx bx-rotate-left me-1"></i> Back to Draft</button>
+                        </form>
                     <?php endif ?>
                     <?php if (in_array($status, ['draft','submitted'], true)): ?>
                         <form method="post" action="<?= site_url('sales/orders/' . $order['id'] . '/cancel') ?>">
@@ -85,7 +105,7 @@ $canEditSo = $status === 'draft' && ! $hasProcessedLine;
                         <tr><th>Freight</th><td class="text-end"><?= esc(number_format((float) ($order['freight_amount'] ?? 0), 2)) ?></td></tr>
                         <tr><th>Other Amount</th><td class="text-end"><?= esc(number_format((float) ($order['other_amount'] ?? 0), 2)) ?></td></tr>
                         <tr><th>Tax</th><td class="text-end"><?= esc(number_format((float) ($order['tax_amount'] ?? 0), 2)) ?></td></tr>
-                        <tr class="table-light"><th>Total</th><td class="text-end fw-semibold"><?= esc(number_format((float) ($order['total_amount'] ?? 0), 2)) ?></td></tr>
+                        <tr class="table-light"><th>Total</th><td class="text-end fw-semibold"><?= esc(number_format((float) $order['total_amount'], 2)) ?></td></tr>
                     </tbody>
                 </table>
             </div>
