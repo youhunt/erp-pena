@@ -21,4 +21,5 @@
 <script src="<?= base_url('assets/pena/select2-init.js') ?>"></script>
 <script src="<?= base_url('assets/pena/company-currency-select2.js') ?>"></script>
 <script src="<?= base_url('assets/pena/supplier-form-helper.js') ?>"></script>
+<script src="<?= base_url('assets/pena/work-order-preview.js') ?>"></script>
 <script src="<?= base_url('assets/skote/js/app.js') ?>"></script>
