@@ -26,7 +26,7 @@ if ($db->tableExists('items')) {
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
                 <h4 class="card-title mb-1">Calculate Cost</h4>
-                <p class="text-muted mb-0">Hitung BOM Cost dari material paling bawah ke atas.</p>
+                <p class="text-muted mb-0">BOM Cost dihitung dari material paling bawah ke atas. Parent hanya mengambil cost dari <strong>Main Child</strong>; Alternative ditampilkan tapi tidak dihitung.</p>
             </div>
             <div class="d-flex gap-2">
                 <a href="<?= site_url('modules/cost-type') ?>" class="btn btn-light">Cost Type</a>
@@ -38,7 +38,7 @@ if ($db->tableExists('items')) {
         <?php if (session('error')): ?><div class="alert alert-danger"><?= esc(session('error')) ?></div><?php endif ?>
 
         <?php if (! $hasTable): ?>
-            <div class="alert alert-warning">Tabel Costing belum tersedia. Jalankan <code>database/hosting/2026-06-24_install_costing_module.sql</code>.</div>
+            <div class="alert alert-warning">Tabel Costing belum tersedia/lengkap. Jalankan migration atau SQL installer costing terbaru.</div>
         <?php endif ?>
 
         <form method="get" action="<?= site_url('modules/calculate-cost') ?>" class="row g-3 border rounded bg-light p-3 mb-4">
@@ -54,15 +54,16 @@ if ($db->tableExists('items')) {
             </div>
             <div class="col-md-2 d-flex align-items-end"><button type="submit" class="btn btn-primary w-100">Calculate</button></div>
             <?php if ($itemCode !== ''): ?>
-                <div class="col-md-3 d-flex align-items-end"><a class="btn btn-success w-100" href="<?= site_url('modules/calculate-cost?action=save&item_code=' . rawurlencode($itemCode)) ?>">Save to Item Cost</a></div>
+                <div class="col-md-3 d-flex align-items-end"><a class="btn btn-success w-100" href="<?= site_url('modules/calculate-cost?action=save&item_code=' . rawurlencode($itemCode)) ?>">Save BOM Cost</a></div>
             <?php endif ?>
         </form>
 
         <?php if ($itemCode !== ''): ?>
             <div class="row mb-4">
-                <div class="col-md-4"><div class="border rounded p-3"><div class="text-muted">This Item Cost</div><h4><?= number_format((float) ($calculation['this_item_cost'] ?? 0), 6) ?></h4></div></div>
-                <div class="col-md-4"><div class="border rounded p-3"><div class="text-muted">BOM Cost</div><h4><?= number_format((float) ($calculation['bom_cost'] ?? 0), 6) ?></h4></div></div>
-                <div class="col-md-4"><div class="border rounded p-3"><div class="text-muted">Total Cost</div><h4 class="text-success"><?= number_format((float) ($calculation['total_cost'] ?? 0), 6) ?></h4></div></div>
+                <div class="col-md-3"><div class="border rounded p-3"><div class="text-muted">This Item Cost</div><h4><?= number_format((float) ($calculation['this_item_cost'] ?? 0), 6) ?></h4></div></div>
+                <div class="col-md-3"><div class="border rounded p-3"><div class="text-muted">BOM Cost</div><h4><?= number_format((float) ($calculation['bom_cost'] ?? 0), 6) ?></h4></div></div>
+                <div class="col-md-3"><div class="border rounded p-3"><div class="text-muted">Work Center Cost</div><h4><?= number_format((float) ($calculation['work_center_cost'] ?? 0), 6) ?></h4></div></div>
+                <div class="col-md-3"><div class="border rounded p-3"><div class="text-muted">Total Cost</div><h4 class="text-success"><?= number_format((float) ($calculation['total_cost'] ?? 0), 6) ?></h4></div></div>
             </div>
         <?php endif ?>
 
@@ -71,16 +72,16 @@ if ($db->tableExists('items')) {
                 <thead class="table-light">
                 <tr>
                     <th>Level</th>
-                    <th>BOM No.</th>
-                    <th>Item Child</th>
+                    <th>Item</th>
                     <th class="text-end">Qty/Batch</th>
                     <th class="text-end">Qty Used</th>
                     <th>UoM</th>
                     <th class="text-end">% Ratio</th>
                     <th class="text-end">Factor</th>
+                    <th>Type</th>
                     <th class="text-end">This Item Cost</th>
                     <th class="text-end">BOM Cost</th>
-                    <th class="text-end">Total Cost</th>
+                    <th class="text-end">Total / Contribution</th>
                     <th>Notes</th>
                 </tr>
                 </thead>
@@ -89,15 +90,20 @@ if ($db->tableExists('items')) {
                 <?php if ($itemCode === ''): ?><tr><td colspan="12" class="text-center text-muted py-4">Pilih Item Code untuk calculate cost.</td></tr><?php endif ?>
                 <?php if ($itemCode !== '' && $rows === []): ?><tr><td colspan="12" class="text-center text-muted py-4">No BOM child found. Cost diambil dari This Item Cost.</td></tr><?php endif ?>
                 <?php foreach ($rows as $row): ?>
-                    <tr>
+                    <?php $isItem = ($row['row_type'] ?? '') === 'item'; ?>
+                    <tr class="<?= $isItem ? 'table-light' : '' ?>">
                         <td><?= number_format((float) ($row['depth'] ?? 0), 0) ?></td>
-                        <td><?= esc($row['bom_no'] ?? '') ?></td>
-                        <td style="padding-left: <?= ((int) ($row['depth'] ?? 0)) * 18 ?>px"><strong><?= esc($row['item_code'] ?? '') ?></strong><br><small class="text-muted"><?= esc($row['item_name'] ?? '') ?></small></td>
+                        <td style="padding-left: <?= ((int) ($row['depth'] ?? 0)) * 18 ?>px">
+                            <strong><?= esc($row['item_code'] ?? '') ?></strong>
+                            <?php if ($isItem): ?><span class="badge bg-primary ms-1">Item</span><?php endif ?>
+                            <br><small class="text-muted"><?= esc($row['item_name'] ?? '') ?></small>
+                        </td>
                         <td class="text-end"><?= number_format((float) ($row['qty_batch'] ?? 0), 6) ?></td>
-                        <td class="text-end"><?= number_format((float) ($row['qty_used'] ?? 0), 6) ?></td>
+                        <td class="text-end"><?= ($row['qty_used'] ?? null) === null ? '-' : number_format((float) ($row['qty_used'] ?? 0), 6) ?></td>
                         <td><?= esc($row['uom_code'] ?? '') ?></td>
                         <td class="text-end"><?= number_format((float) ($row['ratio_percent'] ?? 0), 6) ?></td>
-                        <td class="text-end"><?= number_format((float) ($row['factor'] ?? 0), 6) ?></td>
+                        <td class="text-end"><?= ($row['factor'] ?? null) === null ? '-' : number_format((float) ($row['factor'] ?? 0), 6) ?></td>
+                        <td><?= esc($row['component_type'] ?? '') ?></td>
                         <td class="text-end"><?= number_format((float) ($row['this_item_cost'] ?? 0), 6) ?></td>
                         <td class="text-end"><?= number_format((float) ($row['bom_cost'] ?? 0), 6) ?></td>
                         <td class="text-end fw-semibold"><?= number_format((float) ($row['total_cost'] ?? 0), 6) ?></td>
