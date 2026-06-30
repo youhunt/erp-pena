@@ -5,6 +5,7 @@ namespace App\Controllers\Sales;
 use App\Controllers\BaseController;
 use App\Models\SalesOrderLineModel;
 use App\Models\SalesOrderModel;
+use App\Services\Sales\SalesOrderActivationService;
 use App\Services\Sales\SalesOrderService;
 use App\Services\Support\DocumentNumberService;
 use App\Services\TenantContext;
@@ -170,9 +171,14 @@ class SalesOrderController extends BaseController
     public function cancel(int $id)
     {
         try {
-            if ((string) $this->request->getPost('action') === 'reopen') {
+            $action = (string) $this->request->getPost('action');
+            if ($action === 'reopen') {
                 (new SalesOrderService())->reopen($id, auth()->id());
                 return redirect()->to('/sales/orders/' . $id)->with('message', 'SO reopened as draft.');
+            }
+            if (in_array($action, ['activate', 'back_to_draft'], true)) {
+                (new SalesOrderActivationService())->activate($id, auth()->id());
+                return redirect()->to('/sales/orders/' . $id)->with('message', 'SO returned to draft.');
             }
 
             $reason = trim((string) $this->request->getPost('cancel_reason'));
