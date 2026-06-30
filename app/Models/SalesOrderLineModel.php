@@ -13,7 +13,10 @@ class SalesOrderLineModel extends Model
     protected $allowedFields = [
         'sales_order_id', 'line_no', 'so_line', 'item_id', 'item_code', 'item_name', 'description',
         'qty', 'qty_ordered', 'qty_reserved', 'qty_delivered', 'qty_outstanding',
-        'uom_code', 'unit_price', 'discount_percent', 'discount_amount', 'freight_amount',
+        'allocation_qty', 'allocationqty', 'allocated_qty', 'available_so_qty', 'availablesoqty',
+        'available_soqqty', 'so_stock_qty', 'sostockqty', 'so_stock_uom', 'sostockuom',
+        'uom_code', 'trans_code', 'transcode', 'whs', 'shipto',
+        'unit_price', 'discount_percent', 'discount_amount', 'freight_amount',
         'special_charge_amount', 'other_amount', 'tax_amount', 'line_total', 'line_status',
     ];
 }
