@@ -18,6 +18,67 @@ foreach ($lines as $line) {
 $canEditSo = $status === 'draft' && ! $hasProcessedLine;
 $canBackToDraft = in_array($status, ['submitted', 'approved', 'reserved', 'partial_reserved', 'cancelled'], true) && $totalDelivered <= 0;
 $hasDownstreamPosted = in_array($status, ['partial_delivered', 'delivered', 'invoiced'], true) || $totalDelivered > 0;
+
+$db = \Config\Database::connect();
+$masterLabel = static function (string $table, mixed $rawValue, mixed $idValue, array $codeFields, array $nameFields) use ($db): string {
+    $raw = trim((string) ($rawValue ?? ''));
+    $id = (int) ($idValue ?? 0);
+
+    if (! $db->tableExists($table)) {
+        return $raw !== '' ? $raw : ($id > 0 ? (string) $id : '-');
+    }
+
+    $builder = $db->table($table);
+    if ($id > 0) {
+        $builder->where('id', $id);
+    } elseif ($raw !== '') {
+        $usableCodeFields = array_values(array_filter($codeFields, static fn (string $field): bool => $db->fieldExists($field, $table)));
+        if ($usableCodeFields === []) {
+            return $raw;
+        }
+        $builder->groupStart();
+        foreach ($usableCodeFields as $index => $field) {
+            $index === 0 ? $builder->where($field, $raw) : $builder->orWhere($field, $raw);
+        }
+        $builder->groupEnd();
+    } else {
+        return '-';
+    }
+
+    if ($db->fieldExists('deleted_at', $table)) {
+        $builder->where('deleted_at', null);
+    }
+
+    $row = $builder->get(1)->getRowArray();
+    if ($row === null) {
+        return $raw !== '' ? $raw : ($id > 0 ? (string) $id : '-');
+    }
+
+    $code = '';
+    foreach ($codeFields as $field) {
+        if (array_key_exists($field, $row) && trim((string) $row[$field]) !== '') {
+            $code = trim((string) $row[$field]);
+            break;
+        }
+    }
+
+    $name = '';
+    foreach ($nameFields as $field) {
+        if (array_key_exists($field, $row) && trim((string) $row[$field]) !== '') {
+            $name = trim((string) $row[$field]);
+            break;
+        }
+    }
+
+    if ($code !== '' && $name !== '' && strcasecmp($code, $name) !== 0) {
+        return $code . ' - ' . $name;
+    }
+
+    return $code !== '' ? $code : ($name !== '' ? $name : ($raw !== '' ? $raw : (string) $id));
+};
+
+$companyDisplay = $masterLabel('companies', $order['company'] ?? null, $order['company_id'] ?? null, ['code', 'company_code'], ['name', 'company_name']);
+$siteDisplay = $masterLabel('sites', $order['site'] ?? null, $order['site_id'] ?? null, ['code', 'site_code'], ['name', 'site_name']);
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -38,8 +99,8 @@ $hasDownstreamPosted = in_array($status, ['partial_delivered', 'delivered', 'inv
                         <tr><th>Customer</th><td><?= esc(($order['customer_code'] ?? $order['customer'] ?? '-') . ' ' . ($order['customer_name'] ?? '')) ?></td></tr>
                         <tr><th>Terms</th><td><?= esc($order['terms_code'] ?? '-') ?></td></tr>
                         <tr><th>Currency</th><td><?= esc($order['currency_code']) ?></td></tr>
-                        <tr><th>Company</th><td><?= esc($order['company'] ?? $order['company_id']) ?></td></tr>
-                        <tr><th>Site</th><td><?= esc($order['site'] ?? $order['site_id'] ?? '-') ?></td></tr>
+                        <tr><th>Company</th><td><?= esc($companyDisplay) ?></td></tr>
+                        <tr><th>Site</th><td><?= esc($siteDisplay) ?></td></tr>
                         <tr><th>Submitted</th><td><?= esc($order['submitted_at'] ?? '-') ?></td></tr>
                         <tr><th>Approved</th><td><?= esc($order['approved_at'] ?? '-') ?></td></tr>
                         <tr><th>Reserved</th><td><?= esc($order['reserved_at'] ?? '-') ?></td></tr>
@@ -105,7 +166,7 @@ $hasDownstreamPosted = in_array($status, ['partial_delivered', 'delivered', 'inv
                         <tr><th>Freight</th><td class="text-end"><?= esc(number_format((float) ($order['freight_amount'] ?? 0), 2)) ?></td></tr>
                         <tr><th>Other Amount</th><td class="text-end"><?= esc(number_format((float) ($order['other_amount'] ?? 0), 2)) ?></td></tr>
                         <tr><th>Tax</th><td class="text-end"><?= esc(number_format((float) ($order['tax_amount'] ?? 0), 2)) ?></td></tr>
-                        <tr class="table-light"><th>Total</th><td class="text-end fw-semibold"><?= esc(number_format((float) $order['total_amount'], 2)) ?></td></tr>
+                        <tr class="table-light"><th>Total</th><td class="text-end fw-semibold"><?= esc(number_format((float) ($order['total_amount'] ?? 0), 2)) ?></td></tr>
                     </tbody>
                 </table>
             </div>
@@ -144,7 +205,7 @@ $hasDownstreamPosted = in_array($status, ['partial_delivered', 'delivered', 'inv
                         <?php endforeach ?>
                         </tbody>
                         <tfoot class="table-light">
-                            <tr><th colspan="11" class="text-end">Total</th><th class="text-end"><?= esc(number_format((float) $order['total_amount'], 2)) ?></th><th></th></tr>
+                            <tr><th colspan="11" class="text-end">Total</th><th class="text-end"><?= esc(number_format((float) ($order['total_amount'] ?? 0), 2)) ?></th><th></th></tr>
                         </tfoot>
                     </table>
                 </div>
