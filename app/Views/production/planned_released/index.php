@@ -1,6 +1,29 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php
+$hasTable ??= true;
+$rows ??= [];
+$status ??= '';
+$type ??= '';
+$typeSummary ??= [];
+$summary ??= [
+    'total' => count($rows),
+    'planned' => 0,
+    'prepared' => 0,
+    'approved' => 0,
+    'converted' => 0,
+    'cancelled' => 0,
+];
+foreach ($rows as $row) {
+    $rowStatus = (string) ($row['status'] ?? 'planned');
+    if (array_key_exists($rowStatus, $summary)) {
+        $summary[$rowStatus]++;
+    }
+    $planType = (string) ($row['plan_type'] ?? 'planned');
+    $typeSummary[$planType] = ($typeSummary[$planType] ?? 0) + 1;
+}
+?>
 <div class="card">
     <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
@@ -74,7 +97,7 @@
                 <?php if ($rows === []): ?><tr><td colspan="8" class="text-center text-muted py-4">No planned release found.</td></tr><?php endif ?>
                 <?php foreach ($rows as $row): ?>
                     <?php
-                        $runId = (int) ($row['mrp_run_id'] ?? 0);
+                        $runId = (int) ($row['mrp_run_id'] ?? $row['production_mrp_run_id'] ?? 0);
                         $planId = (int) ($row['id'] ?? 0);
                         $rowStatus = (string) ($row['status'] ?? 'planned');
                         $badge = match ($rowStatus) {
