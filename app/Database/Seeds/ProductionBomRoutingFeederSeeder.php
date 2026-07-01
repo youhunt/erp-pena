@@ -7,7 +7,6 @@ use Config\Database;
 
 class ProductionBomRoutingFeederSeeder extends Seeder
 {
-    private $db;
     private int $companyId = 1;
     private ?int $siteId = null;
     private string $siteCode = 'HO';

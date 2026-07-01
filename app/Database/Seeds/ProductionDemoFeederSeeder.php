@@ -7,7 +7,6 @@ use Config\Database;
 
 class ProductionDemoFeederSeeder extends Seeder
 {
-    private $db;
     private ?int $companyId = null;
     private ?int $siteId = null;
     private string $siteCode = 'HO';
