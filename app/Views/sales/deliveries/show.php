@@ -2,6 +2,7 @@
 
 <?= $this->section('content') ?>
 <?php
+helper('master_display');
 $status = (string) ($delivery['status'] ?? 'posted');
 $existingInvoice = $existingInvoice ?? null;
 $statusClass = match ($status) {
@@ -66,6 +67,10 @@ $marginLabel = $grossProfit === null ? 'not calculated' : ($grossProfit >= 0 ? '
                         <tr><th>Date</th><td><?= esc($delivery['delivery_date']) ?></td></tr>
                         <tr><th>SO No</th><td><a href="<?= site_url('sales/orders/' . $delivery['sales_order_id']) ?>"><?= esc($delivery['so_no']) ?></a></td></tr>
                         <tr><th>Customer</th><td><?= esc(($delivery['customer_code'] ?? '-') . ' ' . ($delivery['customer_name'] ?? '')) ?></td></tr>
+                        <tr><th>Company</th><td><?= esc(erp_company_label($delivery)) ?></td></tr>
+                        <tr><th>Site</th><td><?= esc(erp_site_label($delivery)) ?></td></tr>
+                        <tr><th>Warehouse</th><td><?= esc(erp_warehouse_label($delivery)) ?></td></tr>
+                        <tr><th>Location</th><td><?= esc(erp_location_label($delivery)) ?></td></tr>
                         <tr><th>Stock Movement</th><td><?= $hasMovements ? '<span class="badge bg-success">posted</span>' : '<span class="badge bg-secondary">none</span>' ?></td></tr>
                         <tr><th>COGS GL Entry</th><td><?= $hasCogsGl ? '<a href="' . site_url('gl/entries/' . $delivery['gl_entry_id']) . '">#' . esc($delivery['gl_entry_id']) . '</a>' : '<span class="text-muted">Not posted / not linked</span>' ?></td></tr>
                         <tr><th>AR Invoice</th><td><?= $hasInvoice ? '<a href="' . site_url('ar/sales-invoices/' . (int) $existingInvoice['id']) . '">' . esc($existingInvoice['invoice_no'] ?? ('#' . $existingInvoice['id'])) . '</a>' : '-' ?></td></tr>
@@ -143,12 +148,14 @@ $marginLabel = $grossProfit === null ? 'not calculated' : ($grossProfit >= 0 ? '
                 </div>
                 <div class="table-responsive">
                     <table class="table table-nowrap align-middle mb-0">
-                        <thead class="table-light"><tr><th>#</th><th>Item</th><th>Batch</th><th class="text-end">Qty</th><th>UoM</th><th class="text-end">Price</th><th>Movement</th><th>Reversal</th></tr></thead>
+                        <thead class="table-light"><tr><th>#</th><th>Item</th><th>Whs</th><th>Loc</th><th>Batch</th><th class="text-end">Qty</th><th>UoM</th><th class="text-end">Price</th><th>Movement</th><th>Reversal</th></tr></thead>
                         <tbody>
                         <?php foreach ($lines as $line): ?>
                             <tr>
                                 <td><?= esc($line['line_no']) ?></td>
                                 <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
+                                <td><?= esc(erp_warehouse_label($line)) ?></td>
+                                <td><?= esc(erp_location_label($line)) ?></td>
                                 <td><?= esc(($line['batch_no'] ?? '') !== '' ? $line['batch_no'] : '-') ?></td>
                                 <td class="text-end"><?= esc(number_format((float) $line['qty_delivered'], 4)) ?></td>
                                 <td><?= esc($line['uom_code'] ?? '-') ?></td>
