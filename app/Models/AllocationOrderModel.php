@@ -17,7 +17,7 @@ class AllocationOrderModel extends Model
     protected $allowedFields = [
         'company_id', 'site_id', 'sales_order_id', 'allocnumb', 'allocdate',
         'site', 'customer', 'customern', 'shipdate', 'shipto', 'dept', 'whs',
-        'remarks', 'status', 'posted_at', 'posted_by', 'created_by',
-        'updated_by', 'deleted_by', 'active',
+        'remarks', 'status', 'delivery_id', 'delivered_at', 'delivered_by',
+        'posted_at', 'posted_by', 'created_by', 'updated_by', 'deleted_by', 'active',
     ];
 }
