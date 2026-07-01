@@ -11,6 +11,49 @@ foreach ($lines as $line) {
 }
 $remainingAllocation = max(0.0, $totalAllocated - $totalDelivered);
 $canCreateDelivery = ! empty($allocation['sales_order_id']) && in_array($status, ['posted', 'partial_delivered'], true) && $remainingAllocation > 0;
+
+$db = \Config\Database::connect();
+$siteDisplay = static function (array $allocation) use ($db): string {
+    $raw = trim((string) ($allocation['site'] ?? ''));
+    $siteId = (int) ($allocation['site_id'] ?? 0);
+
+    if (! $db->tableExists('sites')) {
+        return $raw !== '' ? $raw : ($siteId > 0 ? (string) $siteId : '-');
+    }
+
+    $builder = $db->table('sites');
+    if ($siteId > 0) {
+        $builder->where('id', $siteId);
+    } elseif ($raw !== '') {
+        $builder->groupStart();
+        if ($db->fieldExists('code', 'sites')) {
+            $builder->where('code', $raw);
+        }
+        if ($db->fieldExists('site_code', 'sites')) {
+            $builder->orWhere('site_code', $raw);
+        }
+        $builder->groupEnd();
+    } else {
+        return '-';
+    }
+
+    if ($db->fieldExists('deleted_at', 'sites')) {
+        $builder->where('deleted_at', null);
+    }
+
+    $row = $builder->get(1)->getRowArray();
+    if ($row === null) {
+        return $raw !== '' ? $raw : ($siteId > 0 ? (string) $siteId : '-');
+    }
+
+    $code = trim((string) ($row['code'] ?? $row['site_code'] ?? ''));
+    $name = trim((string) ($row['name'] ?? $row['site_name'] ?? ''));
+    if ($code !== '' && $name !== '' && strcasecmp($code, $name) !== 0) {
+        return $code . ' - ' . $name;
+    }
+
+    return $code !== '' ? $code : ($name !== '' ? $name : (string) ($row['id'] ?? '-'));
+};
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -27,7 +70,7 @@ $canCreateDelivery = ! empty($allocation['sales_order_id']) && in_array($status,
                     <tr><th>Allocation No</th><td><?= esc($allocation['allocnumb']) ?></td></tr>
                     <tr><th>Date</th><td><?= esc($allocation['allocdate']) ?></td></tr>
                     <tr><th>Customer</th><td><?= esc(($allocation['customer'] ?? '-') . ' ' . ($allocation['customern'] ?? '')) ?></td></tr>
-                    <tr><th>Site</th><td><?= esc($allocation['site'] ?? '-') ?></td></tr>
+                    <tr><th>Site</th><td><?= esc($siteDisplay($allocation)) ?></td></tr>
                     <tr><th>Dept</th><td><?= esc($allocation['dept'] ?? '-') ?></td></tr>
                     <tr><th>Warehouse</th><td><?= esc($allocation['whs'] ?? '-') ?></td></tr>
                     <tr><th>Ship Date</th><td><?= esc($allocation['shipdate'] ?? '-') ?></td></tr>
