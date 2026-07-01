@@ -212,7 +212,50 @@ class XlsxSheetReader
             }
         }
 
+        if (isset($rows[0]) && is_array($rows[0])) {
+            $rows[0] = array_map([$this, 'normalizeHeader'], $rows[0]);
+        }
+
         return $rows;
+    }
+
+    private function normalizeHeader(mixed $value): string
+    {
+        $header = strtolower(trim((string) $value));
+        $header = preg_replace('/[^a-z0-9]+/', '_', $header) ?? $header;
+        $header = trim($header, '_');
+
+        $aliases = [
+            'site' => 'site_code',
+            'dept' => 'department_code',
+            'department' => 'department_code',
+            'warehouse' => 'warehouse_code',
+            'whs' => 'warehouse_code',
+            'work_center' => 'work_center_code',
+            'workcenter' => 'work_center_code',
+            'wo_number' => 'wo_no',
+            'work_order_no' => 'wo_no',
+            'work_order_number' => 'wo_no',
+            'parent_item' => 'parent_item_code',
+            'item_parent' => 'parent_item_code',
+            'parent_item_name' => 'parent_item_name',
+            'qty_wo' => 'wo_qty',
+            'quantity_wo' => 'wo_qty',
+            'uom' => 'uom_code',
+            'component' => 'component_item_code',
+            'component_code' => 'component_item_code',
+            'component_name' => 'component_item_name',
+            'name_component' => 'component_item_name',
+            'no' => 'line_no',
+            'line' => 'line_no',
+            'routing_work_center' => 'route_work_center_code',
+            'route_work_center' => 'route_work_center_code',
+            'work_center_name' => 'routing_name',
+            'hour' => 'hour_qty',
+            'hour_uom' => 'route_uom',
+        ];
+
+        return $aliases[$header] ?? $header;
     }
 
     private function columnIndex(string $cellRef): int
