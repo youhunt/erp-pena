@@ -121,10 +121,10 @@ if ($isWorkOrderImport && $companyId !== null) {
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
             <div>
                 <h4 class="card-title mb-1"><?= esc($title ?? 'Preview Import') ?></h4>
-                <p class="text-muted mb-0">Periksa hasil validasi. Data belum masuk database sampai tombol <strong>Commit Import</strong> ditekan.</p>
+                <p class="text-muted mb-0">Review the validation result. Data will not be saved until <strong>Commit Import</strong> is clicked.</p>
             </div>
             <div class="d-flex gap-2">
-                <a href="<?= site_url('production/imports/' . esc($resource, 'url')) ?>" class="btn btn-light">Upload Ulang</a>
+                <a href="<?= site_url('production/imports/' . esc($resource, 'url')) ?>" class="btn btn-light">Upload Again</a>
                 <a href="<?= site_url($config['return_to'] ?? 'production') ?>" class="btn btn-outline-secondary">Back</a>
             </div>
         </div>
@@ -138,7 +138,7 @@ if ($isWorkOrderImport && $companyId !== null) {
                     <form method="post" action="<?= site_url('production/imports/' . esc($resource, 'url')) ?>" class="w-100">
                         <?= csrf_field() ?>
                         <input type="hidden" name="commit_token" value="<?= esc($token, 'attr') ?>">
-                        <button type="submit" class="btn btn-success w-100" onclick="return confirm('Commit import <?= esc($config['title'] ?? 'Production') ?> sekarang?')"><i class="bx bx-check me-1"></i> Commit Import</button>
+                        <button type="submit" class="btn btn-success w-100" onclick="return confirm('Commit <?= esc($config['title'] ?? 'Production') ?> import now?')"><i class="bx bx-check me-1"></i> Commit Import</button>
                     </form>
                 <?php else: ?>
                     <button class="btn btn-secondary w-100" disabled>Commit Disabled</button>
@@ -147,13 +147,13 @@ if ($isWorkOrderImport && $companyId !== null) {
         </div>
 
         <?php if ($hasErrors): ?>
-            <div class="alert alert-danger">Masih ada error. Perbaiki file lalu upload ulang. Data tidak akan di-commit sebelum semua baris valid.</div>
+            <div class="alert alert-danger">Errors still exist. Fix the file and upload it again. Data cannot be committed until all rows are valid.</div>
         <?php else: ?>
-            <div class="alert alert-success">Semua baris valid. Silakan klik <strong>Commit Import</strong> untuk menyimpan ke database.</div>
+            <div class="alert alert-success">All rows are valid. Click <strong>Commit Import</strong> to save the data.</div>
         <?php endif ?>
 
         <?php if ($isWorkOrderImport): ?>
-            <div class="alert alert-info">Preview utama Work Order hanya menampilkan <strong>header WO</strong>. BOM dan Routing yang akan dibuat otomatis dari master ditampilkan di bagian bawah untuk pengecekan.</div>
+            <div class="alert alert-info">The main Work Order preview only shows the <strong>WO header</strong>. BOM and Routing lines that will be generated automatically from master data are shown below for review.</div>
         <?php endif ?>
 
         <div class="table-responsive">
@@ -207,7 +207,7 @@ if ($isWorkOrderImport && $companyId !== null) {
 <?php if ($isWorkOrderImport): ?>
     <div class="card">
         <div class="card-body">
-            <h5 class="card-title mb-3">Preview BOM & Routing Otomatis</h5>
+            <h5 class="card-title mb-3">Automatic BOM & Routing Preview</h5>
             <?php foreach ($workOrderGeneratedPreviews as $detail): ?>
                 <div class="border rounded p-3 mb-3">
                     <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
