@@ -2,6 +2,7 @@
 
 <?= $this->section('content') ?>
 <?php
+helper('master_display');
 $status = (string) ($allocation['status'] ?? 'posted');
 $totalAllocated = 0.0;
 $totalDelivered = 0.0;
@@ -11,49 +12,6 @@ foreach ($lines as $line) {
 }
 $remainingAllocation = max(0.0, $totalAllocated - $totalDelivered);
 $canCreateDelivery = ! empty($allocation['sales_order_id']) && in_array($status, ['posted', 'partial_delivered'], true) && $remainingAllocation > 0;
-
-$db = \Config\Database::connect();
-$siteDisplay = static function (array $allocation) use ($db): string {
-    $raw = trim((string) ($allocation['site'] ?? ''));
-    $siteId = (int) ($allocation['site_id'] ?? 0);
-
-    if (! $db->tableExists('sites')) {
-        return $raw !== '' ? $raw : ($siteId > 0 ? (string) $siteId : '-');
-    }
-
-    $builder = $db->table('sites');
-    if ($siteId > 0) {
-        $builder->where('id', $siteId);
-    } elseif ($raw !== '') {
-        $builder->groupStart();
-        if ($db->fieldExists('code', 'sites')) {
-            $builder->where('code', $raw);
-        }
-        if ($db->fieldExists('site_code', 'sites')) {
-            $builder->orWhere('site_code', $raw);
-        }
-        $builder->groupEnd();
-    } else {
-        return '-';
-    }
-
-    if ($db->fieldExists('deleted_at', 'sites')) {
-        $builder->where('deleted_at', null);
-    }
-
-    $row = $builder->get(1)->getRowArray();
-    if ($row === null) {
-        return $raw !== '' ? $raw : ($siteId > 0 ? (string) $siteId : '-');
-    }
-
-    $code = trim((string) ($row['code'] ?? $row['site_code'] ?? ''));
-    $name = trim((string) ($row['name'] ?? $row['site_name'] ?? ''));
-    if ($code !== '' && $name !== '' && strcasecmp($code, $name) !== 0) {
-        return $code . ' - ' . $name;
-    }
-
-    return $code !== '' ? $code : ($name !== '' ? $name : (string) ($row['id'] ?? '-'));
-};
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -70,9 +28,9 @@ $siteDisplay = static function (array $allocation) use ($db): string {
                     <tr><th>Allocation No</th><td><?= esc($allocation['allocnumb']) ?></td></tr>
                     <tr><th>Date</th><td><?= esc($allocation['allocdate']) ?></td></tr>
                     <tr><th>Customer</th><td><?= esc(($allocation['customer'] ?? '-') . ' ' . ($allocation['customern'] ?? '')) ?></td></tr>
-                    <tr><th>Site</th><td><?= esc($siteDisplay($allocation)) ?></td></tr>
-                    <tr><th>Dept</th><td><?= esc($allocation['dept'] ?? '-') ?></td></tr>
-                    <tr><th>Warehouse</th><td><?= esc($allocation['whs'] ?? '-') ?></td></tr>
+                    <tr><th>Site</th><td><?= esc(erp_site_label($allocation)) ?></td></tr>
+                    <tr><th>Dept</th><td><?= esc(erp_master_label('departments', $allocation['dept'] ?? null, $allocation['department_id'] ?? null, ['code', 'dept_code', 'department_code'], ['name', 'dept_name', 'department_name', 'description'])) ?></td></tr>
+                    <tr><th>Warehouse</th><td><?= esc(erp_warehouse_label($allocation, 'whs')) ?></td></tr>
                     <tr><th>Ship Date</th><td><?= esc($allocation['shipdate'] ?? '-') ?></td></tr>
                     <tr><th>Ship To</th><td><?= esc($allocation['shipto'] ?? '-') ?></td></tr>
                     <tr><th>Posted</th><td><?= esc($allocation['posted_at'] ?? '-') ?></td></tr>
@@ -132,8 +90,8 @@ $siteDisplay = static function (array $allocation) use ($db): string {
                                 <td><?= esc($line['line'] ?? '-') ?></td>
                                 <td><div><?= esc($line['salesorder'] ?? '-') ?></div><small class="text-muted">SO Line: <?= esc($line['soline'] ?? '-') ?></small></td>
                                 <td><div class="fw-semibold"><?= esc($line['itemcode'] ?? '-') ?></div><small class="text-muted"><?= esc($line['itemname'] ?? '-') ?></small></td>
-                                <td><?= esc($line['whs'] ?? '-') ?></td>
-                                <td><?= esc($line['loc'] ?? '-') ?></td>
+                                <td><?= esc(erp_warehouse_label($line, 'whs')) ?></td>
+                                <td><?= esc(erp_location_label($line, 'loc')) ?></td>
                                 <td><?= esc($line['batchno'] ?? '-') ?></td>
                                 <td class="text-end"><?= esc(number_format((float) ($line['soqty'] ?? 0), 6)) ?></td>
                                 <td class="text-end"><?= esc(number_format((float) ($line['stockqty'] ?? 0), 6)) ?></td>
