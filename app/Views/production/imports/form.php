@@ -4,9 +4,9 @@
 <?php
 $displayHeaders = $config['headers'] ?? [];
 $lineInfo = match ($resource ?? '') {
-    'work-orders' => 'Work Order import cukup header WO saja. BOM dan Routing akan otomatis mengikuti master berdasarkan parent_item_code.',
-    'work-centers' => 'Work Center tidak memakai line_no.',
-    default => 'BOM dan Routing wajib memakai line_no untuk detail line.',
+    'work-orders' => 'Work Order import only requires the WO header. BOM and Routing will be generated automatically from the master data using parent_item_code.',
+    'work-centers' => 'Work Center import does not use line_no.',
+    default => 'BOM and Routing import require line_no for detail lines.',
 };
 
 if (($resource ?? '') === 'work-orders') {
@@ -34,7 +34,7 @@ if (($resource ?? '') === 'work-orders') {
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
             <div>
                 <h4 class="card-title mb-1"><?= esc($title ?? 'Production Import') ?></h4>
-                <p class="text-muted mb-0">Upload file, sistem akan melakukan preview dan validasi dulu. Data belum masuk database sampai tombol <strong>Commit Import</strong> ditekan.</p>
+                <p class="text-muted mb-0">Upload a file to preview and validate it first. Data will not be saved until <strong>Commit Import</strong> is clicked.</p>
             </div>
             <div class="d-flex gap-2">
                 <a href="<?= site_url('production/imports/' . esc($resource, 'url') . '/template') ?>" class="btn btn-outline-primary"><i class="bx bx-download me-1"></i> Download Template</a>
@@ -48,7 +48,7 @@ if (($resource ?? '') === 'work-orders') {
                 <div class="col-md-8 mb-3">
                     <label class="form-label">Excel / CSV File</label>
                     <input type="file" name="excel_file" class="form-control" accept=".xlsx,.xls,.csv,.tsv,.txt" required>
-                    <small class="text-muted">Maksimal 10 MB. Format disarankan .xlsx dari template.</small>
+                    <small class="text-muted">Maximum 10 MB. The recommended format is the downloaded .xlsx template.</small>
                 </div>
                 <div class="col-md-4 mb-3 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary w-100"><i class="bx bx-search-alt me-1"></i> Preview & Validate</button>
@@ -57,11 +57,11 @@ if (($resource ?? '') === 'work-orders') {
         </form>
 
         <div class="alert alert-info mb-0">
-            <div class="fw-semibold mb-2">Kolom template:</div>
+            <div class="fw-semibold mb-2">Template columns:</div>
             <div class="small text-break"><?= esc(implode(', ', $displayHeaders)) ?></div>
             <hr>
             <div class="small mb-0">
-                Semua import production wajib memakai <strong>site_code</strong>. <?= esc($lineInfo) ?>
+                All production imports must include <strong>site_code</strong>. <?= esc($lineInfo) ?>
             </div>
         </div>
     </div>
