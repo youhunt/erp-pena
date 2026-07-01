@@ -12,6 +12,10 @@ foreach ($lines as $line) {
 }
 $remainingAllocation = max(0.0, $totalAllocated - $totalDelivered);
 $canCreateDelivery = ! empty($allocation['sales_order_id']) && in_array($status, ['posted', 'partial_delivered'], true) && $remainingAllocation > 0;
+$firstLine = $lines[0] ?? [];
+$warehouseDisplay = trim((string) ($allocation['whs'] ?? '')) !== ''
+    ? erp_warehouse_label($allocation, 'whs')
+    : (! empty($firstLine) ? erp_warehouse_label($firstLine, 'whs') : '-');
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -22,7 +26,7 @@ $canCreateDelivery = ! empty($allocation['sales_order_id']) && in_array($status,
                         <h4 class="card-title mb-1">Allocation Order</h4>
                         <p class="text-muted mb-0"><?= esc($allocation['allocnumb']) ?></p>
                     </div>
-                    <span class="badge bg-<?= $status === 'delivered' ? 'success' : ($status === 'partial_delivered' ? 'warning' : 'primary') ?>"><?= esc($status) ?></span>
+                    <span class="badge bg-<?= $status === 'delivered' ? 'success' : ($status === 'partial_delivered' ? 'warning' : ($status === 'cancelled' ? 'danger' : 'primary')) ?>"><?= esc($status) ?></span>
                 </div>
                 <table class="table table-sm mb-0">
                     <tr><th>Allocation No</th><td><?= esc($allocation['allocnumb']) ?></td></tr>
@@ -30,7 +34,7 @@ $canCreateDelivery = ! empty($allocation['sales_order_id']) && in_array($status,
                     <tr><th>Customer</th><td><?= esc(($allocation['customer'] ?? '-') . ' ' . ($allocation['customern'] ?? '')) ?></td></tr>
                     <tr><th>Site</th><td><?= esc(erp_site_label($allocation)) ?></td></tr>
                     <tr><th>Dept</th><td><?= esc(erp_master_label('departments', $allocation['dept'] ?? null, $allocation['department_id'] ?? null, ['code', 'dept_code', 'department_code'], ['name', 'dept_name', 'department_name', 'description'])) ?></td></tr>
-                    <tr><th>Warehouse</th><td><?= esc(erp_warehouse_label($allocation, 'whs')) ?></td></tr>
+                    <tr><th>Warehouse</th><td><?= esc($warehouseDisplay) ?></td></tr>
                     <tr><th>Ship Date</th><td><?= esc($allocation['shipdate'] ?? '-') ?></td></tr>
                     <tr><th>Ship To</th><td><?= esc($allocation['shipto'] ?? '-') ?></td></tr>
                     <tr><th>Posted</th><td><?= esc($allocation['posted_at'] ?? '-') ?></td></tr>
@@ -43,6 +47,7 @@ $canCreateDelivery = ! empty($allocation['sales_order_id']) && in_array($status,
                 </div>
                 <div class="mt-3 d-flex flex-wrap gap-2">
                     <a href="<?= site_url('sales/allocations') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back</a>
+                    <a href="<?= site_url('sales/allocations/' . (int) $allocation['id'] . '/edit') ?>" class="btn btn-outline-primary"><i class="bx bx-edit me-1"></i> Edit Header</a>
                     <?php if (! empty($allocation['sales_order_id'])): ?>
                         <a href="<?= site_url('sales/orders/' . $allocation['sales_order_id']) ?>" class="btn btn-outline-primary">Open SO</a>
                     <?php endif ?>
