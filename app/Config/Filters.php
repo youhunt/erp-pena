@@ -2,6 +2,7 @@
 
 namespace Config;
 
+use App\Filters\EnglishUiTextFilter;
 use App\Filters\TenantBootstrapFilter;
 use App\Filters\PermissionGuardFilter;
 use App\Filters\SetupMasterTenantGuardFilter;
@@ -34,6 +35,7 @@ class Filters extends BaseFilters
         'tenant'        => TenantBootstrapFilter::class,
         'permission'    => PermissionGuardFilter::class,
         'setupTenant'   => SetupMasterTenantGuardFilter::class,
+        'englishUi'     => EnglishUiTextFilter::class,
     ];
 
     public array $required = [
@@ -50,7 +52,9 @@ class Filters extends BaseFilters
 
     public array $globals = [
         'before' => [],
-        'after' => [],
+        'after' => [
+            'englishUi',
+        ],
     ];
 
     public array $methods = [];
