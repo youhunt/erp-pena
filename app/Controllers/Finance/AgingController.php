@@ -10,6 +10,8 @@ use RuntimeException;
 
 class AgingController extends BaseController
 {
+    private array $partnerGroupCache = [];
+
     public function ap()
     {
         if ($this->request->getGet('export') === 'xlsx') {
@@ -43,7 +45,9 @@ class AgingController extends BaseController
         $asOf = $this->asOfDate();
         $tenant = new TenantContext(session());
         $config = $this->config($type);
-        $rows = $this->openRows($config, $tenant);
+        $filters = $this->filters();
+        $rows = $this->decorateRows($this->openRows($config, $tenant), $asOf, $config);
+        $rows = $this->filterRows($rows, $filters, $config);
         $summary = $this->summary($rows, $asOf, $config);
 
         return view('finance/aging/index', [
@@ -51,8 +55,10 @@ class AgingController extends BaseController
             'type' => $type,
             'asOf' => $asOf->format('Y-m-d'),
             'config' => $config,
+            'filters' => $filters,
+            'bucketOptions' => $this->bucketOptions(),
             'summary' => $summary,
-            'rows' => $this->decorateRows($rows, $asOf, $config),
+            'rows' => $rows,
             'totals' => $this->totals($summary),
         ]);
     }
@@ -62,7 +68,9 @@ class AgingController extends BaseController
         $asOf = $this->asOfDate();
         $tenant = new TenantContext(session());
         $config = $this->config($type);
+        $filters = $this->filters();
         $rows = $this->decorateRows($this->openRows($config, $tenant), $asOf, $config);
+        $rows = $this->filterRows($rows, $filters, $config);
         $summary = $this->summary($rows, $asOf, $config);
         $totals = $this->totals($summary);
         $prefix = strtoupper($type);
@@ -70,7 +78,7 @@ class AgingController extends BaseController
         return $this->xlsxWorkbookResponse(
             strtolower($type) . '-aging-' . $asOf->format('Y-m-d') . '.xlsx',
             [
-                $prefix . ' Aging Summary' => $this->agingSummaryRows($summary, $totals, $config, $asOf),
+                $prefix . ' Aging Summary' => $this->agingSummaryRows($summary, $totals, $config, $asOf, $filters),
                 $prefix . ' Aging Detail' => $this->agingDetailRows($rows, $config),
             ]
         );
@@ -86,6 +94,32 @@ class AgingController extends BaseController
         $date = DateTimeImmutable::createFromFormat('Y-m-d', $value);
 
         return $date ?: new DateTimeImmutable(date('Y-m-d'));
+    }
+
+    private function filters(): array
+    {
+        $bucket = trim((string) $this->request->getGet('aging_bucket'));
+        if (! array_key_exists($bucket, $this->bucketOptions())) {
+            $bucket = '';
+        }
+
+        return [
+            'partner_code' => trim((string) $this->request->getGet('partner_code')),
+            'partner_group' => trim((string) $this->request->getGet('partner_group')),
+            'aging_bucket' => $bucket,
+        ];
+    }
+
+    private function bucketOptions(): array
+    {
+        return [
+            '' => 'All Aging',
+            'current' => 'Current',
+            'days_1_30' => '1-30',
+            'days_31_60' => '31-60',
+            'days_61_90' => '61-90',
+            'days_over_90' => '> 90',
+        ];
     }
 
     /**
@@ -119,7 +153,47 @@ class AgingController extends BaseController
 
     /**
      * @param list<array<string, mixed>> $rows
-     *
+     * @return list<array<string, mixed>>
+     */
+    private function filterRows(array $rows, array $filters, array $config): array
+    {
+        $partnerCode = strtolower($filters['partner_code'] ?? '');
+        $partnerGroup = strtolower($filters['partner_group'] ?? '');
+        $bucket = (string) ($filters['aging_bucket'] ?? '');
+
+        if ($partnerCode === '' && $partnerGroup === '' && $bucket === '') {
+            return $rows;
+        }
+
+        $filtered = [];
+        foreach ($rows as $row) {
+            if ($partnerCode !== '') {
+                $code = strtolower((string) ($row[$config['partnerCodeField']] ?? ''));
+                $name = strtolower((string) ($row[$config['partnerNameField']] ?? ''));
+                if (! str_contains($code, $partnerCode) && ! str_contains($name, $partnerCode)) {
+                    continue;
+                }
+            }
+
+            if ($partnerGroup !== '') {
+                $group = strtolower((string) ($row['partner_group'] ?? ''));
+                if (! str_contains($group, $partnerGroup)) {
+                    continue;
+                }
+            }
+
+            if ($bucket !== '' && (string) ($row['bucket_key'] ?? '') !== $bucket) {
+                continue;
+            }
+
+            $filtered[] = $row;
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
      * @return list<array<string, mixed>>
      */
     private function summary(array $rows, DateTimeImmutable $asOf, array $config): array
@@ -131,6 +205,7 @@ class AgingController extends BaseController
                 $summary[$partnerKey] = [
                     'partner_code' => $row[$config['partnerCodeField']] ?? '-',
                     'partner_name' => $row[$config['partnerNameField']] ?? '-',
+                    'partner_group' => $row['partner_group'] ?? '',
                     'current' => 0.0,
                     'days_1_30' => 0.0,
                     'days_31_60' => 0.0,
@@ -141,7 +216,7 @@ class AgingController extends BaseController
             }
 
             $amount = (float) ($row['outstanding_amount'] ?? 0);
-            $bucket = $this->bucket($this->ageDays($row, $asOf));
+            $bucket = (string) ($row['bucket_key'] ?? $this->bucket($this->ageDays($row, $asOf)));
             $summary[$partnerKey][$bucket] += $amount;
             $summary[$partnerKey]['total'] += $amount;
         }
@@ -153,20 +228,77 @@ class AgingController extends BaseController
 
     /**
      * @param list<array<string, mixed>> $rows
-     *
      * @return list<array<string, mixed>>
      */
     private function decorateRows(array $rows, DateTimeImmutable $asOf, array $config): array
     {
         foreach ($rows as &$row) {
             $ageDays = $this->ageDays($row, $asOf);
+            $bucket = $this->bucket($ageDays);
             $row['age_days'] = $ageDays;
-            $row['bucket'] = $this->bucketLabel($this->bucket($ageDays));
+            $row['bucket_key'] = $bucket;
+            $row['bucket'] = $this->bucketLabel($bucket);
+            $row['partner_group'] = $this->partnerGroup($row, $config);
             $row['document_url'] = site_url($config['invoiceRoute'] . '/' . ($row[$config['invoiceIdField']] ?? 0));
         }
         unset($row);
 
         return $rows;
+    }
+
+    private function partnerGroup(array $row, array $config): string
+    {
+        foreach ($config['partnerGroupFields'] as $field) {
+            if (isset($row[$field]) && trim((string) $row[$field]) !== '') {
+                return trim((string) $row[$field]);
+            }
+        }
+
+        $partnerCode = trim((string) ($row[$config['partnerCodeField']] ?? ''));
+        if ($partnerCode === '' || empty($config['partnerMasterTable'])) {
+            return '';
+        }
+
+        $cacheKey = $config['partnerMasterTable'] . ':' . $partnerCode;
+        if (array_key_exists($cacheKey, $this->partnerGroupCache)) {
+            return $this->partnerGroupCache[$cacheKey];
+        }
+
+        $db = Database::connect();
+        if (! $db->tableExists($config['partnerMasterTable'])) {
+            return $this->partnerGroupCache[$cacheKey] = '';
+        }
+
+        $builder = $db->table($config['partnerMasterTable']);
+        $codeFields = array_unique(array_filter([$config['partnerMasterCodeField'] ?? null, 'code', $config['partnerCodeField']]));
+        $usableCodeFields = array_values(array_filter($codeFields, static fn ($field) => is_string($field) && $field !== ''));
+
+        $builder->groupStart();
+        $first = true;
+        foreach ($usableCodeFields as $field) {
+            if (! $db->fieldExists($field, $config['partnerMasterTable'])) {
+                continue;
+            }
+            $first ? $builder->where($field, $partnerCode) : $builder->orWhere($field, $partnerCode);
+            $first = false;
+        }
+        $builder->groupEnd();
+        if ($first) {
+            return $this->partnerGroupCache[$cacheKey] = '';
+        }
+
+        if ($db->fieldExists('deleted_at', $config['partnerMasterTable'])) {
+            $builder->where('deleted_at', null);
+        }
+
+        $master = $builder->get(1)->getRowArray() ?: [];
+        foreach ($config['partnerGroupFields'] as $field) {
+            if (isset($master[$field]) && trim((string) $master[$field]) !== '') {
+                return $this->partnerGroupCache[$cacheKey] = trim((string) $master[$field]);
+            }
+        }
+
+        return $this->partnerGroupCache[$cacheKey] = '';
     }
 
     private function ageDays(array $row, DateTimeImmutable $asOf): int
@@ -195,14 +327,12 @@ class AgingController extends BaseController
             'current' => 'Current',
             'days_1_30' => '1-30',
             'days_31_60' => '31-60',
-            'days_61_90' => '61-90',
-            default => '> 90',
+            default => $bucket === 'days_61_90' ? '61-90' : '> 90',
         };
     }
 
     /**
      * @param list<array<string, mixed>> $summary
-     *
      * @return array<string, float>
      */
     private function totals(array $summary): array
@@ -225,20 +355,24 @@ class AgingController extends BaseController
         return $totals;
     }
 
-    private function agingSummaryRows(array $summary, array $totals, array $config, DateTimeImmutable $asOf): array
+    private function agingSummaryRows(array $summary, array $totals, array $config, DateTimeImmutable $asOf, array $filters = []): array
     {
         $rows = [
             ['Report', $config['title']],
             ['As Of', $asOf->format('Y-m-d')],
+            ['Filter ' . $config['partnerLabel'], $filters['partner_code'] ?? ''],
+            ['Filter Group', $filters['partner_group'] ?? ''],
+            ['Filter Aging', $this->bucketOptions()[$filters['aging_bucket'] ?? ''] ?? 'All Aging'],
             ['Generated At', date('Y-m-d H:i:s')],
             [],
-            [$config['partnerLabel'] . ' Code', $config['partnerLabel'] . ' Name', 'Current', '1-30', '31-60', '61-90', '> 90', 'Total'],
+            [$config['partnerLabel'] . ' Code', $config['partnerLabel'] . ' Name', 'Group', 'Current', '1-30', '31-60', '61-90', '> 90', 'Total'],
         ];
 
         foreach ($summary as $row) {
             $rows[] = [
                 $row['partner_code'] ?? '-',
                 $row['partner_name'] ?? '-',
+                $row['partner_group'] ?? '',
                 (float) ($row['current'] ?? 0),
                 (float) ($row['days_1_30'] ?? 0),
                 (float) ($row['days_31_60'] ?? 0),
@@ -250,6 +384,7 @@ class AgingController extends BaseController
 
         $rows[] = [
             'TOTAL',
+            '',
             '',
             (float) ($totals['current'] ?? 0),
             (float) ($totals['days_1_30'] ?? 0),
@@ -270,6 +405,7 @@ class AgingController extends BaseController
             'Due Date',
             $config['partnerLabel'] . ' Code',
             $config['partnerLabel'] . ' Name',
+            'Group',
             'Bucket',
             'Age Days',
             'Outstanding Amount',
@@ -283,6 +419,7 @@ class AgingController extends BaseController
                 $row['due_date'] ?? '',
                 $row[$config['partnerCodeField']] ?? '',
                 $row[$config['partnerNameField']] ?? '',
+                $row['partner_group'] ?? '',
                 $row['bucket'] ?? '',
                 (int) ($row['age_days'] ?? 0),
                 (float) ($row['outstanding_amount'] ?? 0),
@@ -294,7 +431,7 @@ class AgingController extends BaseController
     }
 
     /**
-     * @return array<string, string>
+     * @return array<string, mixed>
      */
     private function config(string $type): array
     {
@@ -305,6 +442,9 @@ class AgingController extends BaseController
                 'partnerLabel' => 'Supplier',
                 'partnerCodeField' => 'supplier_code',
                 'partnerNameField' => 'supplier_name',
+                'partnerMasterTable' => 'suppliers',
+                'partnerMasterCodeField' => 'supplier',
+                'partnerGroupFields' => ['supplier_group', 'suppliergroup', 'suppliergrp', 'group_code', 'group_name', 'vendor_group', 'supplierref'],
                 'invoiceRoute' => 'ap/purchase-invoices',
                 'invoiceIdField' => 'purchase_invoice_id',
             ];
@@ -316,6 +456,9 @@ class AgingController extends BaseController
             'partnerLabel' => 'Customer',
             'partnerCodeField' => 'customer_code',
             'partnerNameField' => 'customer_name',
+            'partnerMasterTable' => 'customers',
+            'partnerMasterCodeField' => 'customer',
+            'partnerGroupFields' => ['customer_group', 'customergroup', 'customergrp', 'group_code', 'group_name', 'customerr'],
             'invoiceRoute' => 'ar/sales-invoices',
             'invoiceIdField' => 'sales_invoice_id',
         ];
@@ -339,7 +482,7 @@ class AgingController extends BaseController
             $sheet->fromArray($rows, null, 'A1');
             $highestColumn = $sheet->getHighestColumn();
             $highestRow = $sheet->getHighestRow();
-            $headerRow = str_contains((string) $sheetTitle, 'Summary') ? 5 : 1;
+            $headerRow = str_contains((string) $sheetTitle, 'Summary') ? 8 : 1;
             $headerRow = min($headerRow, max(1, $highestRow));
             $sheet->getStyle('A' . $headerRow . ':' . $highestColumn . $headerRow)->getFont()->setBold(true);
             if ($highestRow >= $headerRow) {
