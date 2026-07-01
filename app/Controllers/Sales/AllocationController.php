@@ -10,6 +10,7 @@ use App\Models\SalesOrderModel;
 use App\Services\Sales\AllocationService;
 use App\Services\TenantContext;
 use CodeIgniter\Exceptions\PageNotFoundException;
+use Config\Database;
 use RuntimeException;
 
 class AllocationController extends BaseController
@@ -86,6 +87,54 @@ class AllocationController extends BaseController
         ]);
     }
 
+    public function edit(int $id): string
+    {
+        $tenant = new TenantContext(session());
+        $allocation = $this->scopeModel(new AllocationOrderModel(), $tenant)->find($id);
+        if ($allocation === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        return view('sales/allocations/edit', [
+            'title' => 'Edit Allocation Header',
+            'allocation' => $allocation,
+            'lines' => (new AllocationLineModel())->where('allocationorder_id', $id)->orderBy('line', 'ASC')->findAll(),
+            'departments' => $this->masterRows('departments', $tenant),
+            'warehouses' => $this->masterRows('warehouses', $tenant),
+        ]);
+    }
+
+    public function update(int $id)
+    {
+        $tenant = new TenantContext(session());
+        $model = $this->scopeModel(new AllocationOrderModel(), $tenant);
+        $allocation = $model->find($id);
+        if ($allocation === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        if (! $this->validate([
+            'dept' => 'permit_empty|max_length[12]',
+            'whs' => 'permit_empty|max_length[12]',
+            'shipdate' => 'permit_empty|valid_date[Y-m-d]',
+            'shipto' => 'permit_empty|max_length[12]',
+            'remarks' => 'permit_empty|max_length[500]',
+        ])) {
+            return redirect()->back()->withInput()->with('error', implode(' ', $this->validator->getErrors()));
+        }
+
+        $model->update($id, [
+            'dept' => trim((string) $this->request->getPost('dept')),
+            'whs' => trim((string) $this->request->getPost('whs')),
+            'shipdate' => $this->request->getPost('shipdate') ?: null,
+            'shipto' => trim((string) $this->request->getPost('shipto')),
+            'remarks' => trim((string) $this->request->getPost('remarks')),
+            'updated_by' => (string) (auth()->id() ?? 'system'),
+        ]);
+
+        return redirect()->to('/sales/allocations/' . $id)->with('message', 'Allocation header updated. Stock reservation lines are not changed.');
+    }
+
     private function scopeModel($model, TenantContext $tenant)
     {
         if ($tenant->activeCompanyId() !== null) {
@@ -96,5 +145,29 @@ class AllocationController extends BaseController
         }
 
         return $model;
+    }
+
+    private function masterRows(string $table, TenantContext $tenant): array
+    {
+        $db = Database::connect();
+        if (! $db->tableExists($table)) {
+            return [];
+        }
+
+        $builder = $db->table($table);
+        if ($db->fieldExists('deleted_at', $table)) {
+            $builder->where('deleted_at', null);
+        }
+        if ($db->fieldExists('is_active', $table)) {
+            $builder->where('is_active', 1);
+        }
+        if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', $table)) {
+            $builder->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', $table)) {
+            $builder->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->groupEnd();
+        }
+
+        return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get()->getResultArray();
     }
 }
