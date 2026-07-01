@@ -16,7 +16,7 @@ class CustomerModel extends Model
 
     protected $allowedFields = [
         'company_id', 'site_id', 'code', 'name', 'terms_code', 'currency_code', 'tax_number', 'address', 'phone', 'email', 'is_active',
-        'company', 'site', 'customer', 'customern', 'customerr', 'contactnar', 'description', 'shipwhs',
+        'company', 'site', 'customer', 'customern', 'customerr', 'customer_group', 'contactnar', 'description', 'shipwhs',
         'officeaddre', 'officecity', 'officeprovir', 'officecount', 'officeposta', 'officeconta', 'officephon', 'officehp',
         'taxcode', 'taxnumber', 'vat', 'limitamound', 'limitqty', 'terms', 'limitdays', 'salescode', 'salesname',
         'bank1', 'bankaccou', 'bank2', 'bankaccou2',
