@@ -69,7 +69,7 @@ class XlsxSheetWriter
             'PCS',
             '10',
             '0',
-            'Import WO header. BOM dan Routing otomatis mengikuti master parent item.',
+            'Import WO header. BOM and Routing are generated automatically from the parent item master data.',
         ];
 
         return [$headers, $sample];
