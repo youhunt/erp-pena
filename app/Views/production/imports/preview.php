@@ -2,9 +2,119 @@
 
 <?= $this->section('content') ?>
 <?php
+use App\Models\ProductionBomLineModel;
+use App\Models\ProductionBomModel;
+use App\Models\ProductionRoutingLineModel;
+use App\Models\ProductionRoutingModel;
+use App\Models\ProductionWorkCenterModel;
+use App\Services\TenantContext;
+
 $rows = $preview['rows'] ?? [];
 $headers = $config['headers'] ?? [];
 $hasErrors = (bool) ($preview['has_errors'] ?? true);
+$isWorkOrderImport = ($resource ?? '') === 'work-orders';
+
+if ($isWorkOrderImport) {
+    $headers = [
+        'wo_code',
+        'wo_no',
+        'wo_date',
+        'site_code',
+        'department_code',
+        'warehouse_code',
+        'work_center_code',
+        'parent_item_code',
+        'parent_item_name',
+        'batch_qty',
+        'wo_qty',
+        'uom_code',
+        'std_qty_finished',
+        'act_qty_finished',
+        'description',
+    ];
+}
+
+$tenant = new TenantContext(session());
+$companyId = $tenant->activeCompanyId();
+$workOrderGeneratedPreviews = [];
+
+if ($isWorkOrderImport && $companyId !== null) {
+    $bomModel = new ProductionBomModel();
+    $bomLineModel = new ProductionBomLineModel();
+    $routingModel = new ProductionRoutingModel();
+    $routingLineModel = new ProductionRoutingLineModel();
+    $workCenterModel = new ProductionWorkCenterModel();
+
+    foreach ($rows as $previewRow) {
+        $data = $previewRow['data'] ?? [];
+        $siteCode = trim((string) ($data['site_code'] ?? ''));
+        $parentItemCode = trim((string) ($data['parent_item_code'] ?? ''));
+        $woNo = trim((string) ($data['wo_no'] ?? ''));
+        $woQty = (float) ($data['wo_qty'] ?? 0);
+        $batchQty = (float) ($data['batch_qty'] ?? 1);
+        $batchQty = $batchQty > 0 ? $batchQty : 1.0;
+        $scale = $woQty > 0 ? ($woQty / $batchQty) : 0;
+
+        $detail = [
+            'wo_no' => $woNo,
+            'parent_item_code' => $parentItemCode,
+            'components' => [],
+            'routings' => [],
+            'bom_found' => false,
+            'routing_found' => false,
+        ];
+
+        if ($siteCode !== '' && $parentItemCode !== '') {
+            $bom = $bomModel
+                ->where('company_id', (int) $companyId)
+                ->where('site_code', $siteCode)
+                ->where('parent_item_code', $parentItemCode)
+                ->first();
+
+            if ($bom) {
+                $detail['bom_found'] = true;
+                foreach ($bomLineModel->where('production_bom_id', (int) $bom['id'])->orderBy('child_no', 'ASC')->findAll(1000) as $line) {
+                    $qtyUsed = (float) ($line['qty_used'] ?? 0);
+                    $detail['components'][] = [
+                        'line_no' => $line['child_no'] ?? '',
+                        'component_item_code' => $line['child_item_code'] ?? '',
+                        'component_item_name' => $line['child_item_name'] ?? '',
+                        'qty_used' => $qtyUsed,
+                        'booking_qty' => $scale > 0 ? round($qtyUsed * $scale, 6) : $qtyUsed,
+                        'uom_code' => $line['uom_code'] ?? '',
+                    ];
+                }
+            }
+
+            $routing = $routingModel
+                ->where('company_id', (int) $companyId)
+                ->where('site_code', $siteCode)
+                ->where('item_code', $parentItemCode)
+                ->first();
+
+            if ($routing) {
+                $detail['routing_found'] = true;
+                foreach ($routingLineModel->where('production_routing_id', (int) $routing['id'])->orderBy('route_no', 'ASC')->findAll(1000) as $line) {
+                    $workCenterCode = (string) ($line['work_center_code'] ?? '');
+                    $workCenter = $workCenterCode !== ''
+                        ? $workCenterModel->where('company_id', (int) $companyId)->where('work_center_code', $workCenterCode)->first()
+                        : null;
+                    $hourQty = (float) ($line['hour_qty'] ?? 0);
+                    $detail['routings'][] = [
+                        'line_no' => $line['route_no'] ?? '',
+                        'routing_name' => $line['routing_name'] ?? '',
+                        'work_center_code' => $workCenterCode,
+                        'work_center_name' => $workCenter['description'] ?? $workCenterCode,
+                        'hour_qty' => $scale > 0 ? round($hourQty * $scale, 6) : $hourQty,
+                        'uom_code' => $line['hour_uom'] ?? '',
+                    ];
+                }
+            }
+        }
+
+        $workOrderGeneratedPreviews[] = $detail;
+    }
+}
 ?>
 <div class="card">
     <div class="card-body">
@@ -40,6 +150,10 @@ $hasErrors = (bool) ($preview['has_errors'] ?? true);
             <div class="alert alert-danger">Masih ada error. Perbaiki file lalu upload ulang. Data tidak akan di-commit sebelum semua baris valid.</div>
         <?php else: ?>
             <div class="alert alert-success">Semua baris valid. Silakan klik <strong>Commit Import</strong> untuk menyimpan ke database.</div>
+        <?php endif ?>
+
+        <?php if ($isWorkOrderImport): ?>
+            <div class="alert alert-info">Preview utama Work Order hanya menampilkan <strong>header WO</strong>. BOM dan Routing yang akan dibuat otomatis dari master ditampilkan di bagian bawah untuk pengecekan.</div>
         <?php endif ?>
 
         <div class="table-responsive">
@@ -89,4 +203,74 @@ $hasErrors = (bool) ($preview['has_errors'] ?? true);
         </div>
     </div>
 </div>
+
+<?php if ($isWorkOrderImport): ?>
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title mb-3">Preview BOM & Routing Otomatis</h5>
+            <?php foreach ($workOrderGeneratedPreviews as $detail): ?>
+                <div class="border rounded p-3 mb-3">
+                    <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+                        <div>
+                            <div class="fw-semibold"><?= esc($detail['wo_no'] ?: '-') ?></div>
+                            <small class="text-muted">Parent Item: <?= esc($detail['parent_item_code'] ?: '-') ?></small>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <span class="badge <?= $detail['bom_found'] ? 'bg-success' : 'bg-warning text-dark' ?>">BOM <?= $detail['bom_found'] ? 'Found' : 'Not Found' ?></span>
+                            <span class="badge <?= $detail['routing_found'] ? 'bg-success' : 'bg-warning text-dark' ?>">Routing <?= $detail['routing_found'] ? 'Found' : 'Not Found' ?></span>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-xl-7 mb-3">
+                            <div class="fw-semibold mb-2">BOM Components</div>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered mb-0">
+                                    <thead class="table-light"><tr><th>No</th><th>Component</th><th>Name</th><th class="text-end">Qty Used</th><th class="text-end">Booking Qty</th><th>UoM</th></tr></thead>
+                                    <tbody>
+                                    <?php foreach ($detail['components'] as $component): ?>
+                                        <tr>
+                                            <td><?= esc($component['line_no']) ?></td>
+                                            <td><?= esc($component['component_item_code']) ?></td>
+                                            <td><?= esc($component['component_item_name']) ?></td>
+                                            <td class="text-end"><?= esc(number_format((float) $component['qty_used'], 6)) ?></td>
+                                            <td class="text-end fw-semibold"><?= esc(number_format((float) $component['booking_qty'], 6)) ?></td>
+                                            <td><?= esc($component['uom_code']) ?></td>
+                                        </tr>
+                                    <?php endforeach ?>
+                                    <?php if ($detail['components'] === []): ?>
+                                        <tr><td colspan="6" class="text-center text-muted">No BOM component preview.</td></tr>
+                                    <?php endif ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="col-xl-5 mb-3">
+                            <div class="fw-semibold mb-2">Routing</div>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered mb-0">
+                                    <thead class="table-light"><tr><th>No</th><th>Routing</th><th>Work Center</th><th class="text-end">Hour</th><th>UoM</th></tr></thead>
+                                    <tbody>
+                                    <?php foreach ($detail['routings'] as $routing): ?>
+                                        <tr>
+                                            <td><?= esc($routing['line_no']) ?></td>
+                                            <td><?= esc($routing['routing_name']) ?></td>
+                                            <td><div><?= esc($routing['work_center_code']) ?></div><small class="text-muted"><?= esc($routing['work_center_name']) ?></small></td>
+                                            <td class="text-end"><?= esc(number_format((float) $routing['hour_qty'], 6)) ?></td>
+                                            <td><?= esc($routing['uom_code']) ?></td>
+                                        </tr>
+                                    <?php endforeach ?>
+                                    <?php if ($detail['routings'] === []): ?>
+                                        <tr><td colspan="5" class="text-center text-muted">No routing preview.</td></tr>
+                                    <?php endif ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <?php endforeach ?>
+        </div>
+    </div>
+<?php endif ?>
 <?= $this->endSection() ?>
