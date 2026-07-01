@@ -1,6 +1,7 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php helper('master_display'); ?>
 <div class="card">
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -19,8 +20,8 @@
                         <td class="fw-semibold"><?= esc($allocation['allocnumb'] ?? '-') ?></td>
                         <td><?= esc($allocation['allocdate'] ?? '-') ?></td>
                         <td><div><?= esc($allocation['customern'] ?? '-') ?></div><small class="text-muted"><?= esc($allocation['customer'] ?? '-') ?></small></td>
-                        <td><?= esc($allocation['site'] ?? '-') ?></td>
-                        <td><?= esc($allocation['whs'] ?? '-') ?></td>
+                        <td><?= esc(erp_site_label($allocation)) ?></td>
+                        <td><?= esc(erp_warehouse_label($allocation, 'whs')) ?></td>
                         <td><span class="badge bg-success"><?= esc($allocation['status'] ?? 'posted') ?></span></td>
                         <td class="text-end"><a href="<?= site_url('sales/allocations/' . $allocation['id']) ?>" class="btn btn-sm btn-outline-primary">View</a></td>
                     </tr>
