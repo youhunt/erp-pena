@@ -207,6 +207,9 @@ $routes->group('', ['filter' => 'auth'], static function (RouteCollection $route
     });
 
     $routes->group('production', static function (RouteCollection $routes): void {
+        $routes->get('imports/(:segment)', 'Production\ProductionImportController::form/$1');
+        $routes->get('imports/(:segment)/template', 'Production\ProductionImportController::template/$1');
+        $routes->post('imports/(:segment)', 'Production\ProductionImportController::import/$1');
         $routes->get('forecasts', 'Production\PlanningController::forecasts');
         $routes->post('forecasts', 'Production\PlanningController::storeForecast');
         $routes->get('mps', 'ModulePlaceholderController::mps');
