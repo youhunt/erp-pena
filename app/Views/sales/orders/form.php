@@ -213,12 +213,63 @@ document.addEventListener('DOMContentLoaded', function () {
     function optionName(option, select = null) { if (optionIsPlaceholder(option)) return ''; if (option && option.dataset && option.dataset.name && option.dataset.name.trim() !== '') return option.dataset.name.trim(); if (option && option.textContent && option.textContent.trim() !== '') return splitLabel(option.textContent); return splitLabel(renderedSelect2Text(select)); }
     function optionTerms(option) { if (optionIsPlaceholder(option)) return ''; return option && option.dataset && option.dataset.terms ? option.dataset.terms.trim() : ''; }
     function fillCustomerFromSelected(force = false) { const option = customerSelect.options[customerSelect.selectedIndex]; if (optionIsPlaceholder(option)) { if (force && customerName.value.trim() === 'Manual / No Customer Master') customerName.value = ''; return; } const selectedName = optionName(option, customerSelect); const selectedTerms = optionTerms(option); if ((force || customerName.value.trim() === '' || customerName.value.trim() === 'Manual / No Customer Master') && selectedName !== '') customerName.value = selectedName; if ((force || termsCode.value.trim() === '') && selectedTerms !== '') termsCode.value = selectedTerms; }
-    function fillItemRow(row, select) { const option = select.options[select.selectedIndex]; if (optionIsPlaceholder(option)) { row.querySelector('.item-id').value = ''; recalc(); return; } row.querySelector('.item-id').value = option && option.dataset ? (option.dataset.id || '') : ''; row.querySelector('.item-code-original').value = option.value || ''; row.querySelector('[name="item_name[]"]').value = optionName(option, select) || ''; row.querySelector('[name="uom_code[]"]').value = option && option.dataset ? (option.dataset.uom || 'PCS') : 'PCS'; row.querySelector('[name="unit_price[]"]').value = option && option.dataset ? (option.dataset.price || '0') : '0'; recalc(); }
+    function fillItemRow(row, select) { const option = select.options[select.selectedIndex]; if (optionIsPlaceholder(option)) { row.querySelector('.item-id').value = ''; row.querySelector('.item-code-original').value = ''; recalc(); return; } row.querySelector('.item-id').value = option && option.dataset ? (option.dataset.id || '') : ''; row.querySelector('.item-code-original').value = option.value || ''; row.querySelector('[name="item_name[]"]').value = optionName(option, select) || ''; row.querySelector('[name="uom_code[]"]').value = option && option.dataset ? (option.dataset.uom || 'PCS') : 'PCS'; row.querySelector('[name="unit_price[]"]').value = option && option.dataset ? (option.dataset.price || '0') : '0'; recalc(); }
     function recalc() { let subtotal = 0, discount = 0, charges = 0; tbody.querySelectorAll('tr').forEach(function (row) { const qty = rowNum(row, 'qty'); const price = rowNum(row, 'unit_price'); const gross = qty * price; const discPct = rowNum(row, 'discount_percent'); const discAmt = rowNum(row, 'discount_amount'); const lineDiscount = (gross * discPct / 100) + discAmt; const lineCharges = rowNum(row, 'freight_amount_line') + rowNum(row, 'special_charge_amount') + rowNum(row, 'other_amount_line'); const lineTotal = gross - lineDiscount + lineCharges; subtotal += gross; discount += lineDiscount; charges += lineCharges; row.querySelector('.line-total').textContent = money(lineTotal); }); discount += header('discount_amount'); charges += header('freight_amount') + header('other_amount'); document.getElementById('subtotalText').textContent = money(subtotal); document.getElementById('discountText').textContent = money(discount); document.getElementById('chargeText').textContent = money(charges); document.getElementById('totalText').textContent = money(subtotal - discount + charges); }
     function renumberLines() { tbody.querySelectorAll('tr').forEach(function (row, index) { row.querySelector('.line-number').value = index + 1; }); }
-    function bindRow(row) { row.querySelectorAll('.calc').forEach(input => input.addEventListener('input', recalc)); const select = row.querySelector('.item-select'); select.addEventListener('change', function () { fillItemRow(row, this); }); row.querySelector('.remove-line').addEventListener('click', function () { if (tbody.querySelectorAll('tr').length > 1) { row.remove(); renumberLines(); recalc(); } }); }
+    function cleanupSelect2Clone(row) {
+        row.querySelectorAll('.select2, .select2-container').forEach(function (el) { el.remove(); });
+        row.querySelectorAll('select').forEach(function (select) {
+            if (window.jQuery && window.jQuery.fn && window.jQuery.fn.select2) {
+                try {
+                    if (window.jQuery(select).data('select2')) {
+                        window.jQuery(select).select2('destroy');
+                    }
+                } catch (e) {}
+            }
+            select.classList.remove('select2-hidden-accessible');
+            select.removeAttribute('data-select2-id');
+            select.removeAttribute('aria-hidden');
+            select.removeAttribute('tabindex');
+            select.disabled = false;
+            select.style.display = '';
+            select.querySelectorAll('option').forEach(function (option) {
+                option.selected = false;
+                option.removeAttribute('data-select2-id');
+            });
+            select.selectedIndex = 0;
+        });
+    }
+    function bindRow(row) {
+        row.querySelectorAll('.calc').forEach(input => input.addEventListener('input', recalc));
+        const select = row.querySelector('.item-select');
+        if (select) {
+            select.disabled = false;
+            select.addEventListener('change', function () { fillItemRow(row, this); });
+        }
+        row.querySelector('.remove-line').addEventListener('click', function () { if (tbody.querySelectorAll('tr').length > 1) { row.remove(); renumberLines(); recalc(); } });
+    }
     document.querySelectorAll('.calc-header').forEach(input => input.addEventListener('input', recalc));
-    document.getElementById('addLineBtn').addEventListener('click', function () { const clone = tbody.querySelector('tr').cloneNode(true); clone.querySelectorAll('input').forEach(function (input) { if (input.type === 'hidden') { input.value = ''; return; } if (input.name === 'uom_code[]') input.value = 'PCS'; else if (input.classList.contains('calc')) input.value = '0'; else input.value = ''; }); clone.querySelectorAll('select').forEach(function (select) { select.selectedIndex = 0; }); tbody.appendChild(clone); renumberLines(); bindRow(clone); recalc(); });
+    document.getElementById('addLineBtn').addEventListener('click', function () {
+        const clone = tbody.querySelector('tr').cloneNode(true);
+        cleanupSelect2Clone(clone);
+        clone.querySelectorAll('input').forEach(function (input) {
+            input.disabled = false;
+            if (input.type === 'hidden') { input.value = ''; return; }
+            if (input.name === 'uom_code[]') input.value = 'PCS';
+            else if (input.classList.contains('calc')) input.value = '0';
+            else input.value = '';
+        });
+        clone.querySelectorAll('select').forEach(function (select) { select.selectedIndex = 0; select.disabled = false; });
+        tbody.appendChild(clone);
+        renumberLines();
+        bindRow(clone);
+        if (window.PenaSelect && typeof window.PenaSelect.init === 'function') {
+            window.PenaSelect.init(clone);
+        } else if (window.jQuery && window.jQuery.fn && window.jQuery.fn.select2) {
+            window.jQuery(clone).find('select.form-select:not([data-no-search])').select2({ width: '100%', allowClear: true, placeholder: 'Pilih / cari data', dropdownParent: window.jQuery(document.body) });
+        }
+        recalc();
+    });
     customerSelect.addEventListener('change', function () { fillCustomerFromSelected(true); });
     tbody.querySelectorAll('tr').forEach(bindRow);
     if (window.jQuery) { window.jQuery(document).on('change select2:select', '#customerSelect', function () { setTimeout(function () { fillCustomerFromSelected(true); }, 0); }); window.jQuery(document).on('change select2:select', '.item-select', function () { const row = this.closest('tr'); if (row) setTimeout(() => fillItemRow(row, this), 0); }); }
