@@ -1,5 +1,10 @@
+<?php
+$uiLocale = in_array((string) session('ui_locale'), ['en', 'id'], true) ? (string) session('ui_locale') : 'en';
+$uiMessagesFile = APPPATH . 'Language/' . $uiLocale . '/Ui.php';
+$uiMessages = is_file($uiMessagesFile) ? require $uiMessagesFile : [];
+?>
 <!doctype html>
-<html lang="en">
+<html lang="<?= esc($uiLocale, 'attr') ?>">
 
 <head>
     <meta charset="utf-8">
@@ -16,6 +21,13 @@
     <link rel="stylesheet" href="<?= base_url('assets/skote/css/app.min.css') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/pena/app.css') ?>">
     <link rel="stylesheet" href="<?= base_url('assets/pena/dashboard.css') ?>">
+    <script>
+        window.PenaLocale = <?= json_encode($uiLocale) ?>;
+        window.PenaMessages = <?= json_encode([
+            'selectSearchPrefix' => $uiMessages['selectSearchPrefix'] ?? 'Select / search ',
+            'selectSearchData' => $uiMessages['selectSearchData'] ?? 'Select / search data',
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    </script>
 </head>
 
 <body data-sidebar="dark">
