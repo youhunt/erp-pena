@@ -2,11 +2,32 @@
 
 <?= $this->section('content') ?>
 <?php
+$displayHeaders = $config['headers'] ?? [];
 $lineInfo = match ($resource ?? '') {
-    'work-orders' => 'Work Order boleh import header saja. Jika component/routing detail diisi manual, pakai component_line_no dan routing_line_no. Jika detail kosong, sistem mengambil BOM dan Routing dari master berdasarkan parent_item_code.',
+    'work-orders' => 'Work Order import cukup header WO saja. BOM dan Routing akan otomatis mengikuti master berdasarkan parent_item_code.',
     'work-centers' => 'Work Center tidak memakai line_no.',
     default => 'BOM dan Routing wajib memakai line_no untuk detail line.',
 };
+
+if (($resource ?? '') === 'work-orders') {
+    $displayHeaders = [
+        'wo_code',
+        'wo_no',
+        'wo_date',
+        'site_code',
+        'department_code',
+        'warehouse_code',
+        'work_center_code',
+        'parent_item_code',
+        'parent_item_name',
+        'batch_qty',
+        'wo_qty',
+        'uom_code',
+        'std_qty_finished',
+        'act_qty_finished',
+        'description',
+    ];
+}
 ?>
 <div class="card">
     <div class="card-body">
@@ -37,7 +58,7 @@ $lineInfo = match ($resource ?? '') {
 
         <div class="alert alert-info mb-0">
             <div class="fw-semibold mb-2">Kolom template:</div>
-            <div class="small text-break"><?= esc(implode(', ', $config['headers'] ?? [])) ?></div>
+            <div class="small text-break"><?= esc(implode(', ', $displayHeaders)) ?></div>
             <hr>
             <div class="small mb-0">
                 Semua import production wajib memakai <strong>site_code</strong>. <?= esc($lineInfo) ?>
