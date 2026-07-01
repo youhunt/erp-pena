@@ -8,6 +8,8 @@ class XlsxSheetWriter
 {
     public function writeFirstSheet(array $rows, string $sheetName = 'Sheet1'): string
     {
+        $rows = $this->normalizeRowsForSheet($rows, $sheetName);
+
         $workDir = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'pena_xlsx_write_' . bin2hex(random_bytes(8));
         if (! mkdir($workDir, 0777, true) && ! is_dir($workDir)) {
             throw new RuntimeException('Unable to create temporary Excel write directory.');
@@ -26,6 +28,51 @@ class XlsxSheetWriter
         } finally {
             $this->deleteDirectory($workDir);
         }
+    }
+
+    private function normalizeRowsForSheet(array $rows, string $sheetName): array
+    {
+        if (strcasecmp(trim($sheetName), 'Work Order Import') !== 0) {
+            return $rows;
+        }
+
+        $headers = [
+            'wo_code',
+            'wo_no',
+            'wo_date',
+            'site_code',
+            'department_code',
+            'warehouse_code',
+            'work_center_code',
+            'parent_item_code',
+            'parent_item_name',
+            'batch_qty',
+            'wo_qty',
+            'uom_code',
+            'std_qty_finished',
+            'act_qty_finished',
+            'description',
+        ];
+
+        $sample = [
+            'WO',
+            'WO-202607-0001',
+            date('Y-m-d'),
+            'HO',
+            'GEN',
+            'MAIN',
+            'WC-ASSY',
+            'ITEM-0001',
+            'Kertas A4 80gsm 001',
+            '1',
+            '10',
+            'PCS',
+            '10',
+            '0',
+            'Import WO header. BOM dan Routing otomatis mengikuti master parent item.',
+        ];
+
+        return [$headers, $sample];
     }
 
     private function createWorkbookFiles(string $workDir, array $rows, string $sheetName): void
