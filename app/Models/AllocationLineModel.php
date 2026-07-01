@@ -20,7 +20,7 @@ class AllocationLineModel extends Model
         'line', 'soprefix', 'salesorder', 'transcode', 'soline', 'itemcode',
         'itemname', 'soqty', 'souom', 'whs', 'loc', 'batchno', 'stockqty',
         'stockuom', 'availableqty', 'availableuom', 'allocateqty',
-        'allocateuom', 'shipto', 'description', 'created_by', 'updated_by',
-        'deleted_by', 'active',
+        'allocateuom', 'delivered_qty', 'delivery_line_id', 'shipto', 'description',
+        'created_by', 'updated_by', 'deleted_by', 'active',
     ];
 }
