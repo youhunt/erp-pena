@@ -2,6 +2,7 @@
 
 <?= $this->section('content') ?>
 <?php
+helper('master_display');
 $status = (string) ($receipt['status'] ?? 'posted');
 $existingInvoice = $existingInvoice ?? null;
 $statusClass = match ($status) {
@@ -10,6 +11,8 @@ $statusClass = match ($status) {
     'reversed' => 'bg-warning text-dark',
     default => 'bg-secondary',
 };
+$warehouseDisplay = ($warehouseLabel ?? '') !== '' && ($warehouseLabel ?? '-') !== '-' ? (string) $warehouseLabel : erp_warehouse_label($receipt);
+$locationDisplay = ($locationLabel ?? '') !== '' && ($locationLabel ?? '-') !== '-' ? (string) $locationLabel : erp_location_label($receipt);
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -28,8 +31,10 @@ $statusClass = match ($status) {
                         <tr><th>Date</th><td><?= esc($receipt['receipt_date']) ?></td></tr>
                         <tr><th>PO No</th><td><a href="<?= site_url('purchase/orders/' . $receipt['purchase_order_id']) ?>"><?= esc($receipt['po_no']) ?></a></td></tr>
                         <tr><th>Supplier</th><td><?= esc(($receipt['supplier_code'] ?? '-') . ' ' . ($receipt['supplier_name'] ?? '')) ?></td></tr>
-                        <tr><th>Warehouse</th><td><?= esc($warehouseLabel ?? '-') ?></td></tr>
-                        <tr><th>Location</th><td><?= esc($locationLabel ?? '-') ?></td></tr>
+                        <tr><th>Company</th><td><?= esc(erp_company_label($receipt)) ?></td></tr>
+                        <tr><th>Site</th><td><?= esc(erp_site_label($receipt)) ?></td></tr>
+                        <tr><th>Warehouse</th><td><?= esc($warehouseDisplay) ?></td></tr>
+                        <tr><th>Location</th><td><?= esc($locationDisplay) ?></td></tr>
                         <tr><th>Receipt GL Entry</th><td><?= ! empty($receipt['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $receipt['gl_entry_id']) . '">#' . esc($receipt['gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>AP Invoice</th><td><?= ! empty($existingInvoice) ? '<a href="' . site_url('ap/purchase-invoices/' . (int) $existingInvoice['id']) . '">' . esc($existingInvoice['invoice_no'] ?? ('#' . $existingInvoice['id'])) . '</a>' : '-' ?></td></tr>
                         <tr><th>Reversal GL</th><td><?= ! empty($receipt['reversal_gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $receipt['reversal_gl_entry_id']) . '">#' . esc($receipt['reversal_gl_entry_id']) . '</a>' : '-' ?></td></tr>
