@@ -15,7 +15,7 @@
 
         label = $.trim(label || '');
 
-        return label ? 'Pilih / cari ' + label : 'Pilih / cari data';
+        return label ? 'Select / search ' + label : 'Select / search data';
     }
 
     function init(root) {
