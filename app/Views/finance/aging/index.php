@@ -33,7 +33,7 @@ $bucketLabels = ['current' => 'Current', 'days_1_30' => '1-30', 'days_31_60' => 
         <div class="col-xl-2 col-md-4"><label class="form-label">As Of</label><input type="date" name="as_of" value="<?= esc($asOf) ?>" class="form-control"></div>
         <div class="col-xl-3 col-md-4">
             <label class="form-label"><?= esc($partnerLabel) ?> Code / Name</label>
-            <select name="partner_code" id="agingPartnerSelect" class="form-select select2-basic" data-placeholder="Pilih / cari <?= esc($partnerLabel, 'attr') ?>">
+            <select name="partner_code" id="agingPartnerSelect" class="form-select select2-basic" data-placeholder="Select / search <?= esc($partnerLabel, 'attr') ?>">
                 <option value="">All <?= esc($partnerLabel) ?></option>
                 <?php foreach ($partnerOptions as $code => $name): ?>
                     <?php $label = trim($code . ' - ' . $name, ' -'); ?>
@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!select || !window.jQuery || !window.jQuery.fn || !window.jQuery.fn.select2) return;
     var $select = window.jQuery(select);
     if ($select.data('select2')) $select.select2('destroy');
-    $select.select2({width: '100%', allowClear: true, placeholder: select.dataset.placeholder || 'Pilih / cari data'});
+    $select.select2({width: '100%', allowClear: true, placeholder: select.dataset.placeholder || 'Select / search data'});
 });
 </script>
 <?= $this->endSection() ?>
