@@ -256,7 +256,7 @@ $routes->group('', ['filter' => 'auth'], static function (RouteCollection $route
         $routes->post('setup/' . $master . '/(:num)/delete', 'Setup\TaxMasterController::delete/' . $master . '/$1');
     }
 
-    $genericSetupRoutes = ['company', 'site', 'department', 'warehouse', 'location', 'currency', 'uom', 'customer', 'customer-terms', 'customer-promo', 'customer-address', 'supplier', 'supplier-promo', 'item', 'batch'];
+    $genericSetupRoutes = ['transaction-codes', 'prefix-codes', 'companies', 'sites', 'departments', 'warehouses', 'locations', 'countries', 'provinces', 'cities', 'postal-codes', 'currencies', 'uoms', 'uom-conversions', 'address-master', 'customer-terms', 'customer-promos', 'customers', 'supplier-terms', 'supplier-promos', 'suppliers', 'items', 'item-locations', 'batch-masters'];
     foreach ($genericSetupRoutes as $master) {
         $routes->get('setup/' . $master, 'Setup\MasterDataController::index/' . $master);
         $routes->get('setup/' . $master . '/new', 'Setup\MasterDataController::create/' . $master);
