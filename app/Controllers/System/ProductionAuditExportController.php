@@ -17,11 +17,10 @@ class ProductionAuditExportController extends BaseController
         $tenant = new TenantContext(session());
         $model = new ProductionWorkOrderModel();
         $this->scope($model, $tenant);
-        $rows = $model->orderBy('wo_date', 'DESC')->orderBy('id', 'DESC')->findAll(10000);
+        $workOrders = $model->orderBy('wo_date', 'DESC')->orderBy('id', 'DESC')->findAll(10000);
 
         return $this->xlsxWorkbookResponse('production-work-orders-' . date('Y-m-d') . '.xlsx', [
-            'Summary' => $this->workOrderSummaryRows($rows),
-            'Work Orders' => $this->workOrderRows($rows),
+            'Work Orders' => $this->workOrderTemplateRows($workOrders),
         ]);
     }
 
@@ -35,21 +34,10 @@ class ProductionAuditExportController extends BaseController
             throw PageNotFoundException::forPageNotFound();
         }
 
-        $components = (new ProductionWorkOrderComponentModel())
-            ->where('production_work_order_id', $id)
-            ->orderBy('line_no', 'ASC')
-            ->findAll(10000);
-        $routings = (new ProductionWorkOrderRoutingModel())
-            ->where('production_work_order_id', $id)
-            ->orderBy('line_no', 'ASC')
-            ->findAll(10000);
-
         $filename = 'work-order-' . preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) ($workOrder['wo_no'] ?? $id)) . '.xlsx';
 
         return $this->xlsxWorkbookResponse($filename, [
-            'Summary' => $this->singleWorkOrderSummaryRows($workOrder, $components, $routings),
-            'Components' => $this->componentRows($components),
-            'Routings' => $this->routingRows($routings),
+            'Work Orders' => $this->workOrderTemplateRows([$workOrder]),
         ]);
     }
 
@@ -63,167 +51,102 @@ class ProductionAuditExportController extends BaseController
         }
     }
 
-    private function workOrderSummaryRows(array $rows): array
-    {
-        $qty = 0.0;
-        $finished = 0.0;
-        $statusCounts = [];
-        foreach ($rows as $row) {
-            $qty += (float) ($row['wo_qty'] ?? 0);
-            $finished += (float) ($row['act_qty_finished'] ?? 0);
-            $status = (string) ($row['status'] ?? 'unknown');
-            $statusCounts[$status] = ($statusCounts[$status] ?? 0) + 1;
-        }
-
-        $summary = [
-            ['Metric', 'Value'],
-            ['Report', 'Production Work Orders'],
-            ['Rows', count($rows)],
-            ['Total WO Qty', $qty],
-            ['Total Finished Qty', $finished],
-            ['Generated At', date('Y-m-d H:i:s')],
-            ['', ''],
-            ['Status', 'Count'],
-        ];
-        foreach ($statusCounts as $status => $count) {
-            $summary[] = [$status, $count];
-        }
-
-        return $summary;
-    }
-
-    private function workOrderRows(array $rows): array
-    {
-        $exportRows = [[
-            'WO Code',
-            'WO No',
-            'WO Date',
-            'Site',
-            'Department',
-            'Warehouse',
-            'Work Center',
-            'Parent Item Code',
-            'Parent Item Name',
-            'Batch Qty',
-            'WO Qty',
-            'Std Finished Qty',
-            'Actual Finished Qty',
-            'Status',
-            'Description',
-            'Created At',
-            'Updated At',
-        ]];
-
-        foreach ($rows as $row) {
-            $exportRows[] = [
-                $row['wo_code'] ?? '',
-                $row['wo_no'] ?? '',
-                $row['wo_date'] ?? '',
-                $row['site_code'] ?? '',
-                $row['department_code'] ?? '',
-                $row['warehouse_code'] ?? '',
-                $row['work_center_code'] ?? '',
-                $row['parent_item_code'] ?? '',
-                $row['parent_item_name'] ?? '',
-                (float) ($row['batch_qty'] ?? 0),
-                (float) ($row['wo_qty'] ?? 0),
-                (float) ($row['std_qty_finished'] ?? 0),
-                (float) ($row['act_qty_finished'] ?? 0),
-                $row['status'] ?? '',
-                $row['description'] ?? '',
-                $row['created_at'] ?? '',
-                $row['updated_at'] ?? '',
-            ];
-        }
-
-        return $exportRows;
-    }
-
-    private function singleWorkOrderSummaryRows(array $workOrder, array $components, array $routings): array
+    private function workOrderTemplateHeaders(): array
     {
         return [
-            ['Metric', 'Value'],
-            ['Report', 'Production Work Order Detail'],
-            ['WO No', (string) ($workOrder['wo_no'] ?? '-')],
-            ['WO Date', (string) ($workOrder['wo_date'] ?? '-')],
-            ['Status', (string) ($workOrder['status'] ?? '-')],
-            ['Site', (string) ($workOrder['site_code'] ?? '-')],
-            ['Department', (string) ($workOrder['department_code'] ?? '-')],
-            ['Warehouse', (string) ($workOrder['warehouse_code'] ?? '-')],
-            ['Work Center', (string) ($workOrder['work_center_code'] ?? '-')],
-            ['Parent Item', (string) ($workOrder['parent_item_code'] ?? '-')],
-            ['Parent Item Name', (string) ($workOrder['parent_item_name'] ?? '-')],
-            ['WO Qty', (float) ($workOrder['wo_qty'] ?? 0)],
-            ['Std Finished Qty', (float) ($workOrder['std_qty_finished'] ?? 0)],
-            ['Actual Finished Qty', (float) ($workOrder['act_qty_finished'] ?? 0)],
-            ['Component Lines', count($components)],
-            ['Routing Lines', count($routings)],
-            ['Generated At', date('Y-m-d H:i:s')],
+            'wo_code',
+            'wo_no',
+            'wo_date',
+            'site_code',
+            'department_code',
+            'warehouse_code',
+            'work_center_code',
+            'parent_item_code',
+            'parent_item_name',
+            'batch_qty',
+            'wo_qty',
+            'uom_code',
+            'std_qty_finished',
+            'act_qty_finished',
+            'description',
+            'component_line_no',
+            'component_item_code',
+            'component_item_name',
+            'qty_used',
+            'component_uom_code',
+            'component_whs',
+            'component_loc',
+            'component_batch_no',
+            'booking_qty',
+            'routing_line_no',
+            'routing_name',
+            'route_work_center_code',
+            'work_center_name',
+            'hour_qty',
+            'route_uom',
         ];
     }
 
-    private function componentRows(array $components): array
+    private function workOrderTemplateRows(array $workOrders): array
     {
-        $rows = [[
-            'Line No',
-            'Component Item Code',
-            'Component Item Name',
-            'Qty Used',
-            'UoM',
-            'Warehouse',
-            'Location',
-            'Batch No',
-            'Booking Qty',
-            'Allocated Qty',
-            'Issued Qty',
-            'Line Status',
-        ]];
+        $rows = [$this->workOrderTemplateHeaders()];
+        $componentModel = new ProductionWorkOrderComponentModel();
+        $routingModel = new ProductionWorkOrderRoutingModel();
 
-        foreach ($components as $line) {
-            $rows[] = [
-                (int) ($line['line_no'] ?? 0),
-                $line['component_item_code'] ?? '',
-                $line['component_item_name'] ?? '',
-                (float) ($line['qty_used'] ?? 0),
-                $line['uom_code'] ?? '',
-                $line['warehouse_code'] ?? '',
-                $line['location_code'] ?? '',
-                $line['batch_no'] ?? '',
-                (float) ($line['booking_qty'] ?? 0),
-                (float) ($line['allocated_qty'] ?? 0),
-                (float) ($line['issued_qty'] ?? 0),
-                $line['line_status'] ?? '',
-            ];
+        foreach ($workOrders as $workOrder) {
+            $workOrderId = (int) ($workOrder['id'] ?? 0);
+            $components = $workOrderId > 0
+                ? $componentModel->where('production_work_order_id', $workOrderId)->orderBy('line_no', 'ASC')->findAll(10000)
+                : [];
+            $routings = $workOrderId > 0
+                ? $routingModel->where('production_work_order_id', $workOrderId)->orderBy('line_no', 'ASC')->findAll(10000)
+                : [];
+
+            $detailCount = max(1, count($components), count($routings));
+            for ($index = 0; $index < $detailCount; $index++) {
+                $component = $components[$index] ?? [];
+                $routing = $routings[$index] ?? [];
+                $rows[] = $this->workOrderTemplateRow($workOrder, $component, $routing);
+            }
         }
 
         return $rows;
     }
 
-    private function routingRows(array $routings): array
+    private function workOrderTemplateRow(array $workOrder, array $component, array $routing): array
     {
-        $rows = [[
-            'Line No',
-            'Routing Code',
-            'Routing Name',
-            'Work Center Code',
-            'Work Center Name',
-            'Hour Qty',
-            'UoM',
-        ]];
-
-        foreach ($routings as $line) {
-            $rows[] = [
-                (int) ($line['line_no'] ?? 0),
-                $line['routing_code'] ?? '',
-                $line['routing_name'] ?? '',
-                $line['work_center_code'] ?? '',
-                $line['work_center_name'] ?? '',
-                (float) ($line['hour_qty'] ?? 0),
-                $line['uom_code'] ?? '',
-            ];
-        }
-
-        return $rows;
+        return [
+            $workOrder['wo_code'] ?? '',
+            $workOrder['wo_no'] ?? '',
+            $workOrder['wo_date'] ?? '',
+            $workOrder['site_code'] ?? $workOrder['site'] ?? '',
+            $workOrder['department_code'] ?? '',
+            $workOrder['warehouse_code'] ?? '',
+            $workOrder['work_center_code'] ?? '',
+            $workOrder['parent_item_code'] ?? '',
+            $workOrder['parent_item_name'] ?? '',
+            (float) ($workOrder['batch_qty'] ?? 0),
+            (float) ($workOrder['wo_qty'] ?? 0),
+            $workOrder['uom_code'] ?? '',
+            (float) ($workOrder['std_qty_finished'] ?? 0),
+            (float) ($workOrder['act_qty_finished'] ?? 0),
+            $workOrder['description'] ?? '',
+            $component === [] ? '' : (int) ($component['line_no'] ?? 0),
+            $component['component_item_code'] ?? '',
+            $component['component_item_name'] ?? '',
+            $component === [] ? '' : (float) ($component['qty_used'] ?? 0),
+            $component['uom_code'] ?? '',
+            $component['warehouse_code'] ?? '',
+            $component['location_code'] ?? '',
+            $component['batch_no'] ?? '',
+            $component === [] ? '' : (float) ($component['booking_qty'] ?? 0),
+            $routing === [] ? '' : (int) ($routing['line_no'] ?? 0),
+            $routing['routing_name'] ?? '',
+            $routing['work_center_code'] ?? '',
+            $routing['work_center_name'] ?? '',
+            $routing === [] ? '' : (float) ($routing['hour_qty'] ?? 0),
+            $routing['uom_code'] ?? '',
+        ];
     }
 
     /**
