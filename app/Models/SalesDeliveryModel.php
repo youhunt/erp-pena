@@ -13,7 +13,7 @@ class SalesDeliveryModel extends Model
     protected $useTimestamps = true;
     protected $allowedFields = [
         'company_id', 'site_id', 'company', 'site', 'delivery_no', 'delivery_date',
-        'sales_order_id', 'so_no', 'customer_id', 'customer_code', 'customer_name',
+        'sales_order_id', 'allocation_order_id', 'so_no', 'customer_id', 'customer_code', 'customer_name',
         'warehouse_id', 'location_id', 'status', 'gl_entry_id', 'reversal_gl_entry_id', 'notes', 'posted_at', 'posted_by',
         'reversed_at', 'reversed_by', 'reversal_reason',
         'created_by', 'updated_by',
