@@ -2,73 +2,80 @@
 
 use CodeIgniter\Router\RouteCollection;
 
-/**
- * @var RouteCollection $routes
- */
-$routes->get('/', 'DashboardController::index');
-$routes->get('dashboard', 'DashboardController::index');
+/** @var RouteCollection $routes */
+$routes->get('/', 'Home::index');
 
-$routes->group('', ['filter' => 'auth'], static function (RouteCollection $routes): void {
-    $routes->get('select-context', 'ContextController::index');
-    $routes->post('select-context', 'ContextController::set');
-    $routes->get('development-status', 'System\DevelopmentStatusController::index');
-    $routes->get('core/health', 'System\CoreHealthController::index');
-    $routes->get('core/audit/transactions', 'System\TransactionAuditController::index');
-    $routes->get('core/permissions', 'System\PermissionMatrixController::index');
-    $routes->get('core/transaction-permissions', 'System\TransactionPermissionMatrixController::index');
-    $routes->post('core/transaction-permissions/seed', 'System\TransactionPermissionMatrixController::seed');
-    $routes->get('modules/calculate-cost', 'Costing\CostCalculationController::index');
-    $routes->post('modules/calculate-cost', 'Costing\CostCalculationController::calculate');
-    $routes->post('modules/calculate-cost/calculate-all', 'Costing\CostCalculationController::calculateAll');
-    $routes->get('modules/calculate-cost/export', 'Costing\CostCalculationController::export');
-    $routes->get('modules/calculate-cost/export-all', 'Costing\CostCalculationController::exportAll');
-    $routes->get('auto-setup', 'System\AutoSetupController::index');
-    $routes->post('auto-setup/run', 'System\AutoSetupController::run');
-    $routes->get('data-import', 'System\DataImportController::index');
-    $routes->post('data-import/upload', 'System\DataImportController::upload');
-    $routes->get('data-import/template/(:segment)', 'System\DataImportController::template/$1');
-    $routes->get('excel-transfer', 'System\ExcelTransferController::index');
-    $routes->get('excel-transfer/template/(:segment)', 'System\ExcelTransferController::template/$1');
-    $routes->post('excel-transfer/import', 'System\ExcelTransferController::import');
-    $routes->get('excel-transfer/export/(:segment)', 'System\ExcelTransferController::export/$1');
-    $routes->get('master-data', 'MasterData\MasterDataController::overview');
-    $routes->get('admin/menu-management', 'Admin\MenuManagementController::index');
-    $routes->post('admin/menu-management/seed', 'Admin\MenuManagementController::seed');
-    $routes->post('admin/menu-management', 'Admin\MenuManagementController::store');
-    $routes->get('admin/menu-management/(:num)', 'Admin\MenuManagementController::show/$1');
-    $routes->post('admin/menu-management/(:num)', 'Admin\MenuManagementController::update/$1');
-    $routes->post('admin/menu-management/(:num)/toggle', 'Admin\MenuManagementController::toggle/$1');
-    $routes->get('admin/modules', 'Admin\ModuleController::index');
-    $routes->post('admin/modules', 'Admin\ModuleController::save');
-    $routes->post('admin/modules/refresh', 'Admin\ModuleController::refresh');
+service('auth')->routes($routes);
+
+$routes->group('', ['filter' => 'session'], static function (RouteCollection $routes): void {
+    $routes->get('dashboard', 'DashboardController::index');
+    $routes->post('tenant/switch', 'TenantController::switch');
+    $routes->get('modules/calculate-cost', 'Costing\CostCalculationController::calculate');
+    $routes->get('modules/(:segment)', 'ModulePlaceholderController::show/$1');
     $routes->get('audit-logs', 'AuditLogController::index');
+    $routes->get('audit-logs/(:num)', 'AuditLogController::show/$1');
+
+    $routes->get('print/purchase-orders/(:num)', 'DocumentPrintController::purchaseOrder/$1');
+    $routes->get('print/sales-orders/(:num)', 'DocumentPrintController::salesOrder/$1');
+    $routes->get('print/purchase-receipts/(:num)', 'DocumentPrintController::purchaseReceipt/$1');
+    $routes->get('print/sales-deliveries/(:num)', 'DocumentPrintController::salesDelivery/$1');
+    $routes->get('print/purchase-invoices/(:num)', 'DocumentPrintController::purchaseInvoice/$1');
+    $routes->get('print/sales-invoices/(:num)', 'DocumentPrintController::salesInvoice/$1');
+
+    $routes->group('system', static function (RouteCollection $routes): void {
+        $routes->get('development-status', 'System\DevelopmentStatusController::index');
+        $routes->get('core-health', 'System\CoreHealthController::index');
+        $routes->get('auto-setup', 'System\AutoSetupController::index');
+        $routes->post('auto-setup/run', 'System\AutoSetupController::run');
+        $routes->get('data-import', 'System\DataImportController::index');
+        $routes->get('data-import/coa/template', 'System\DataImportController::coaTemplate');
+        $routes->get('data-import/coa/import', 'System\DataImportController::coaImportForm');
+        $routes->post('data-import/coa/import', 'System\DataImportController::coaImport');
+        $routes->get('data-import/coa/export', 'System\DataImportController::coaExport');
+        $routes->get('data-import/opening-stock/template', 'System\DataImportController::openingStockTemplate');
+        $routes->get('data-import/opening-stock/import', 'System\DataImportController::openingStockImportForm');
+        $routes->post('data-import/opening-stock/import', 'System\DataImportController::openingStockImport');
+        $routes->get('data-import/opening-stock/export', 'System\DataImportController::openingStockExport');
+        $routes->get('excel-transfer', 'System\ExcelLiteTransferController::index');
+        $routes->get('excel-transfer/(:segment)/template', 'System\ExcelLiteTransferController::template/$1');
+        $routes->get('excel-transfer/(:segment)/import', 'System\ExcelLiteTransferController::importForm/$1');
+        $routes->post('excel-transfer/(:segment)/import', 'System\ExcelLiteTransferController::import/$1');
+        $routes->post('excel-transfer/(:segment)/commit', 'System\ExcelLiteTransferController::commit/$1');
+        $routes->get('excel-transfer/(:segment)/errors/(:segment)', 'System\ExcelLiteTransferController::downloadErrors/$1/$2');
+        $routes->get('excel-transfer/(:segment)/export', 'System\ExcelLiteTransferController::export/$1');
+    });
+
+    $routes->group('admin', static function (RouteCollection $routes): void {
+        $routes->get('users', 'Admin\UserController::index');
+        $routes->get('users/new', 'Admin\UserController::create');
+        $routes->post('users', 'Admin\UserController::store');
+        $routes->get('users/(:num)/edit', 'Admin\UserController::edit/$1');
+        $routes->post('users/(:num)', 'Admin\UserController::update/$1');
+        $routes->post('users/(:num)/toggle', 'Admin\UserController::toggle/$1');
+        $routes->get('roles', 'Admin\RoleController::index');
+    });
 
     $routes->group('inventory', static function (RouteCollection $routes): void {
-        $routes->get('stock-balances', 'Inventory\InventoryReportController::stockBalances');
-        $routes->get('stock-alerts', 'Inventory\InventoryReportController::stockAlerts');
-        $routes->get('stock-card', 'Inventory\InventoryReportController::stockCard');
-        $routes->get('inout', 'Inventory\InventoryInOutController::index');
-        $routes->get('inout/new', 'Inventory\InventoryInOutController::create');
-        $routes->post('inout', 'Inventory\InventoryInOutController::store');
-        $routes->get('inout/(:num)', 'Inventory\InventoryInOutController::show/$1');
-        $routes->get('movements', 'Inventory\MovementDocumentController::index');
-        $routes->get('movements/new', 'Inventory\MovementDocumentController::create');
-        $routes->post('movements', 'Inventory\MovementDocumentController::store');
-        $routes->get('movements/(:num)', 'Inventory\MovementDocumentController::show/$1');
-        $routes->get('transfers', 'Inventory\StockTransferController::index');
-        $routes->get('transfers/new', 'Inventory\StockTransferController::create');
-        $routes->post('transfers', 'Inventory\StockTransferController::store');
-        $routes->get('transfers/(:num)', 'Inventory\StockTransferController::show/$1');
-        $routes->get('stock-opname', 'Inventory\StockOpnameController::index');
-        $routes->get('stock-opname/new', 'Inventory\StockOpnameController::create');
-        $routes->post('stock-opname', 'Inventory\StockOpnameController::store');
-        $routes->get('stock-opname/(:num)', 'Inventory\StockOpnameController::show/$1');
-        $routes->post('stock-opname/(:num)/count', 'Inventory\StockOpnameController::recordCount/$1');
-        $routes->post('stock-opname/(:num)/post', 'Inventory\StockOpnameController::post/$1');
-        $routes->get('adjustments', 'Inventory\StockAdjustmentController::index');
-        $routes->get('adjustments/new', 'Inventory\StockAdjustmentController::create');
-        $routes->post('adjustments', 'Inventory\StockAdjustmentController::store');
-        $routes->get('adjustments/(:num)', 'Inventory\StockAdjustmentController::show/$1');
+        $routes->get('stock-balances', 'Inventory\StockBalanceController::index');
+        $routes->get('stock-alerts', 'Inventory\StockAlertController::index');
+        $routes->get('stock-card', 'Inventory\StockCardController::index');
+        $routes->get('stock-card/export', 'System\CoreAuditExportController::stockCard');
+        $routes->get('in-out', 'Inventory\InventoryMovementController::inOut');
+        $routes->post('in-out', 'Inventory\InventoryMovementController::storeInOut');
+        $routes->get('movement-documents/(:num)', 'Inventory\InventoryMovementController::showDocument/$1');
+        $routes->post('movement-documents/(:num)/reverse', 'Inventory\InventoryMovementDocumentController::reverse/$1');
+        $routes->get('transfers', 'Inventory\InventoryTransferController::index');
+        $routes->get('transfers/new', 'Inventory\InventoryTransferController::create');
+        $routes->post('transfers', 'Inventory\InventoryTransferController::store');
+        $routes->post('transfers/(:num)/submit', 'Inventory\InventoryTransferController::submit/$1');
+        $routes->post('transfers/(:num)/post', 'Inventory\InventoryTransferController::post/$1');
+        $routes->post('transfers/(:num)/cancel', 'Inventory\InventoryTransferController::cancel/$1');
+        $routes->post('transfers/(:num)/reverse', 'Inventory\InventoryTransferController::reverse/$1');
+        $routes->get('transfers/(:num)', 'Inventory\InventoryTransferController::show/$1');
+        $routes->get('stock-opname', 'Inventory\InventoryMovementController::stockOpname');
+        $routes->post('stock-opname', 'Inventory\InventoryMovementController::storeStockOpname');
+        $routes->get('stock-adjustment', 'Inventory\StockAdjustmentController::create');
+        $routes->post('stock-adjustment', 'Inventory\StockAdjustmentController::store');
     });
 
     $routes->group('sales', static function (RouteCollection $routes): void {
@@ -91,8 +98,6 @@ $routes->group('', ['filter' => 'auth'], static function (RouteCollection $route
         $routes->get('orders/(:num)/allocate', 'Sales\AllocationController::createFromSo/$1');
         $routes->post('orders/(:num)/allocate', 'Sales\AllocationController::storeFromSo/$1');
         $routes->get('allocations', 'Sales\AllocationController::index');
-        $routes->get('allocations/(:num)/edit', 'Sales\AllocationController::edit/$1');
-        $routes->post('allocations/(:num)', 'Sales\AllocationController::update/$1');
         $routes->get('allocations/(:num)', 'Sales\AllocationController::show/$1');
         $routes->get('orders/(:num)/deliver', 'Sales\SalesDeliveryController::createFromSo/$1');
         $routes->post('orders/(:num)/deliver', 'Sales\SalesDeliveryController::storeFromSo/$1');
@@ -183,27 +188,45 @@ $routes->group('', ['filter' => 'auth'], static function (RouteCollection $route
         $routes->get('chart-of-accounts', 'Finance\GeneralLedgerController::chartAccounts');
         $routes->get('posting-profiles', 'Finance\GeneralLedgerController::postingProfiles');
         $routes->post('posting-profiles', 'Finance\GeneralLedgerController::updatePostingProfiles');
-        $routes->get('period-close', 'Finance\PeriodCloseController::index');
-        $routes->post('period-close', 'Finance\PeriodCloseController::close');
-        $routes->post('period-close/(:num)/reopen', 'Finance\PeriodCloseController::reopen/$1');
+        $routes->get('recurring', 'Finance\GeneralLedgerController::recurring');
         $routes->get('entries', 'Finance\GeneralLedgerController::entries');
+        $routes->get('entries/new', 'Finance\GeneralLedgerController::newEntry');
+        $routes->post('entries', 'Finance\GeneralLedgerController::storeEntry');
         $routes->get('entries/(:num)', 'Finance\GeneralLedgerController::showEntry/$1');
+        $routes->get('period-close', 'Finance\PeriodCloseController::dashboard');
+        $routes->post('period-close', 'Finance\PeriodCloseController::close');
+        $routes->get('period-close/(:num)', 'Finance\PeriodCloseController::show/$1');
+        $routes->post('period-close/(:num)/reopen', 'Finance\PeriodCloseController::reopen/$1');
+        $routes->get('period-close/(:segment)', 'Finance\PeriodCloseController::index/$1');
     });
 
     $routes->group('cash-bank', static function (RouteCollection $routes): void {
-        $routes->get('cash-entries', 'CashBank\CashBankController::cashEntries');
-        $routes->get('cash-entries/new', 'CashBank\CashBankController::createCashEntry');
-        $routes->post('cash-entries', 'CashBank\CashBankController::storeCashEntry');
-        $routes->get('cash-entries/(:num)', 'CashBank\CashBankController::showCashEntry/$1');
-        $routes->get('bank-entries', 'CashBank\CashBankController::bankEntries');
-        $routes->get('bank-entries/new', 'CashBank\CashBankController::createBankEntry');
-        $routes->post('bank-entries', 'CashBank\CashBankController::storeBankEntry');
-        $routes->get('bank-entries/(:num)', 'CashBank\CashBankController::showBankEntry/$1');
-        $routes->get('statement-import', 'CashBank\StatementImportController::index');
-        $routes->post('statement-import/import', 'CashBank\StatementImportController::import');
-        $routes->get('statement-match', 'CashBank\StatementMatchController::index');
-        $routes->post('statement-match/run', 'CashBank\StatementMatchController::run');
-        $routes->get('reconciliation', 'CashBank\ReconciliationController::index');
+        $routes->get('accounts', 'Finance\CashBankMasterController::accounts');
+        $routes->get('currencies', 'Finance\CashBankMasterController::currencies');
+        $routes->get('employees', 'Finance\CashBankMasterController::employees');
+        $routes->get('rates', 'Finance\CashBankMasterController::rates');
+        $routes->get('cash-entries', 'Finance\CashBankController::entries/cash');
+        $routes->get('cash-entries/export', 'System\CashBankAuditExportController::entries/cash');
+        $routes->get('cash-entries/new', 'Finance\CashBankController::newEntry/cash');
+        $routes->post('cash-entries', 'Finance\CashBankController::storeEntry/cash');
+        $routes->get('cash-entries/(:num)', 'Finance\CashBankController::showEntry/cash/$1');
+        $routes->get('bank-entries', 'Finance\CashBankController::entries/bank');
+        $routes->get('bank-entries/export', 'System\CashBankAuditExportController::entries/bank');
+        $routes->get('bank-entries/new', 'Finance\CashBankController::newEntry/bank');
+        $routes->post('bank-entries', 'Finance\CashBankController::storeEntry/bank');
+        $routes->get('bank-entries/(:num)', 'Finance\CashBankController::showEntry/bank/$1');
+        $routes->get('statements', 'Finance\CashBankController::statementImports');
+        $routes->get('statements/template', 'Finance\CashBankController::statementTemplate');
+        $routes->get('statements/import', 'Finance\CashBankController::statementImportForm');
+        $routes->post('statements/import', 'Finance\CashBankController::importStatement');
+        $routes->post('statements/(:num)/match', 'Finance\CashBankController::matchStatementImport/$1');
+        $routes->get('statements/(:num)/export', 'System\CashBankAuditExportController::statement/$1');
+        $routes->get('statements/(:num)', 'Finance\CashBankController::showStatementImport/$1');
+        $routes->get('reconciliations', 'Finance\CashBankController::reconciliations');
+        $routes->get('reconciliations/new', 'Finance\CashBankController::newReconciliation');
+        $routes->post('reconciliations', 'Finance\CashBankController::storeReconciliation');
+        $routes->get('reconciliations/(:num)/export', 'System\CashBankAuditExportController::reconciliation/$1');
+        $routes->get('reconciliations/(:num)', 'Finance\CashBankController::showReconciliation/$1');
     });
 
     $routes->group('production', static function (RouteCollection $routes): void {
@@ -211,70 +234,78 @@ $routes->group('', ['filter' => 'auth'], static function (RouteCollection $route
         $routes->get('imports/(:segment)/template', 'Production\ProductionImportController::template/$1');
         $routes->post('imports/(:segment)', 'Production\ProductionImportController::import/$1');
         $routes->get('forecasts', 'Production\PlanningController::forecasts');
+        $routes->get('forecasts/new', 'Production\PlanningController::newForecast');
         $routes->post('forecasts', 'Production\PlanningController::storeForecast');
-        $routes->get('mps', 'ModulePlaceholderController::mps');
-        $routes->get('planned-released', 'ModulePlaceholderController::plannedReleased');
+        $routes->get('mps', 'ModulePlaceholderController::mpsPage');
+        $routes->get('planned-released', 'ModulePlaceholderController::plannedReleasedPage');
         $routes->get('mrp', 'Production\PlanningController::mrp');
         $routes->post('mrp/run', 'Production\PlanningController::runMrp');
-        $routes->get('mrp/runs/(:num)', 'Production\PlanningController::showMrpRun/$1');
+        $routes->get('mrp/runs/(:num)', 'Production\PlanningController::showMrp/$1');
         $routes->get('boms', 'Production\ProductionMasterController::boms');
         $routes->get('boms/new', 'Production\ProductionMasterController::newBom');
         $routes->post('boms', 'Production\ProductionMasterController::storeBom');
-        $routes->get('boms/(:num)', 'Production\ProductionMasterController::showBom');
-        $routes->get('boms/(:num)/edit', 'Production\ProductionEditController::editBom');
-        $routes->post('boms/(:num)', 'Production\ProductionEditController::updateBom');
+        $routes->get('boms/(:num)/edit', 'Production\ProductionEditController::editBom/$1');
+        $routes->post('boms/(:num)', 'Production\ProductionEditController::updateBom/$1');
+        $routes->get('boms/(:num)', 'Production\ProductionMasterController::showBom/$1');
         $routes->get('work-centers', 'Production\ProductionMasterController::workCenters');
         $routes->get('work-centers/new', 'Production\ProductionMasterController::newWorkCenter');
         $routes->post('work-centers', 'Production\ProductionMasterController::storeWorkCenter');
-        $routes->get('work-centers/(:num)', 'Production\ProductionMasterController::showWorkCenter');
-        $routes->get('work-centers/(:num)/edit', 'Production\ProductionEditController::editWorkCenter');
-        $routes->post('work-centers/(:num)', 'Production\ProductionEditController::updateWorkCenter');
+        $routes->get('work-centers/(:num)/edit', 'Production\ProductionEditController::editWorkCenter/$1');
+        $routes->post('work-centers/(:num)', 'Production\ProductionEditController::updateWorkCenter/$1');
+        $routes->post('work-centers/(:num)/delete', 'Production\WorkCenterDeleteController::delete/$1');
+        $routes->get('work-centers/(:num)', 'Production\ProductionMasterController::showWorkCenter/$1');
         $routes->get('routings', 'Production\ProductionMasterController::routings');
         $routes->get('routings/new', 'Production\ProductionMasterController::newRouting');
         $routes->post('routings', 'Production\ProductionMasterController::storeRouting');
-        $routes->get('routings/(:num)', 'Production\ProductionMasterController::showRouting');
-        $routes->get('routings/(:num)/edit', 'Production\ProductionEditController::editRouting');
-        $routes->post('routings/(:num)', 'Production\ProductionEditController::updateRouting');
+        $routes->get('routings/(:num)/edit', 'Production\ProductionEditController::editRouting/$1');
+        $routes->post('routings/(:num)', 'Production\ProductionEditController::updateRouting/$1');
+        $routes->get('routings/(:num)', 'Production\ProductionMasterController::showRouting/$1');
         $routes->get('work-orders', 'Production\WorkOrderController::index');
+        $routes->get('work-orders/export', 'System\ProductionAuditExportController::workOrders');
         $routes->get('work-orders/new', 'Production\WorkOrderController::create');
+        $routes->get('work-orders/bom-preview', 'Production\WorkOrderBomPreviewController::index');
         $routes->post('work-orders', 'Production\WorkOrderController::store');
-        $routes->get('work-orders/(:num)', 'Production\WorkOrderController::show');
-        $routes->post('work-orders/(:num)/allocate', 'Production\WorkOrderController::allocate');
-        $routes->post('work-orders/(:num)/issue', 'Production\WorkOrderController::issueMaterials');
-        $routes->post('work-orders/(:num)/receive', 'Production\WorkOrderController::receiveFinished');
-        $routes->post('work-orders/(:num)/issue-receive', 'Production\WorkOrderController::issueReceive');
-        $routes->get('period-close', 'ModulePlaceholderController::periodClose');
+        $routes->get('work-orders/(:num)/edit', 'Production\ProductionEditController::editWorkOrder/$1');
+        $routes->post('work-orders/(:num)', 'Production\ProductionEditController::updateWorkOrder/$1');
+        $routes->get('work-orders/(:num)/export', 'System\ProductionAuditExportController::workOrder/$1');
+        $routes->get('work-orders/(:num)', 'Production\WorkOrderController::show/$1');
+        $routes->post('work-orders/(:num)/allocate', 'Production\WorkOrderController::allocate/$1');
+        $routes->post('work-orders/(:num)/issue-materials', 'Production\WorkOrderController::issueMaterials/$1');
+        $routes->post('work-orders/(:num)/receive-finished', 'Production\WorkOrderController::receiveFinished/$1');
+        $routes->post('work-orders/(:num)/issue-receive', 'Production\WorkOrderController::issueReceive/$1');
     });
 
-    $routes->get('production-period-close', 'ModulePlaceholderController::periodClose');
+    $routes->group('setup', static function (RouteCollection $routes): void {
+        $routes->get('document-numbering', 'Setup\DocumentNumberingController::index');
+        $routes->post('document-numbering', 'Setup\DocumentNumberingController::save');
+        $routes->post('document-numbering/reset-sequence', 'Setup\DocumentNumberingController::resetSequence');
+        $routes->get('options/cities', 'Setup\MasterDataController::cityOptions');
+        $routes->get('options/locations', 'Setup\MasterDataController::locationOptions');
 
-    $taxMasterRoutes = ['vat', 'item-vat', 'other-charge-vat', 'charge-vat', 'wht'];
-    foreach ($taxMasterRoutes as $master) {
-        $routes->get('setup/' . $master, 'Setup\TaxMasterController::index/' . $master);
-        $routes->get('setup/' . $master . '/new', 'Setup\TaxMasterController::create/' . $master);
-        $routes->post('setup/' . $master, 'Setup\TaxMasterController::store/' . $master);
-        $routes->get('setup/' . $master . '/(:num)', 'Setup\TaxMasterController::show/' . $master . '/$1');
-        $routes->get('setup/' . $master . '/(:num)/edit', 'Setup\TaxMasterController::edit/' . $master . '/$1');
-        $routes->post('setup/' . $master . '/(:num)', 'Setup\TaxMasterController::update/' . $master . '/$1');
-        $routes->post('setup/' . $master . '/(:num)/delete', 'Setup\TaxMasterController::delete/' . $master . '/$1');
-    }
+        foreach (['vat','item-vat','other-charge-vat','charge-vat','wht'] as $resource) {
+            $routes->get($resource, 'Setup\TaxMasterController::index/' . $resource);
+            $routes->get($resource . '/new', 'Setup\TaxMasterController::create/' . $resource);
+            $routes->post($resource, 'Setup\TaxMasterController::store/' . $resource);
+            $routes->get($resource . '/(:num)', 'Setup\TaxMasterController::show/' . $resource . '/$1');
+            $routes->get($resource . '/(:num)/edit', 'Setup\TaxMasterController::edit/' . $resource . '/$1');
+            $routes->post($resource . '/(:num)', 'Setup\TaxMasterController::update/' . $resource . '/$1');
+            $routes->post($resource . '/(:num)/delete', 'Setup\TaxMasterController::delete/' . $resource . '/$1');
+        }
 
-    $genericSetupRoutes = ['transaction-codes', 'prefix-codes', 'companies', 'sites', 'departments', 'warehouses', 'locations', 'countries', 'provinces', 'cities', 'postal-codes', 'currencies', 'uoms', 'uom-conversions', 'address-master', 'customer-terms', 'customer-promos', 'customers', 'supplier-terms', 'supplier-promos', 'suppliers', 'items', 'item-locations', 'batch-masters'];
-    foreach ($genericSetupRoutes as $master) {
-        $routes->get('setup/' . $master, 'Setup\MasterDataController::index/' . $master);
-        $routes->get('setup/' . $master . '/new', 'Setup\MasterDataController::create/' . $master);
-        $routes->post('setup/' . $master, 'Setup\MasterDataController::store/' . $master);
-        $routes->get('setup/' . $master . '/(:num)', 'Setup\MasterDataController::show/' . $master . '/$1');
-        $routes->get('setup/' . $master . '/(:num)/edit', 'Setup\MasterDataController::edit/' . $master . '/$1');
-        $routes->post('setup/' . $master . '/(:num)', 'Setup\MasterDataController::update/' . $master . '/$1');
-        $routes->post('setup/' . $master . '/(:num)/delete', 'Setup\MasterDataController::delete/' . $master . '/$1');
-    }
-
-    $routes->get('setup/document-numbering', 'Setup\DocumentNumberingController::index');
-    $routes->get('setup/document-numbering/new', 'Setup\DocumentNumberingController::create');
-    $routes->post('setup/document-numbering', 'Setup\DocumentNumberingController::store');
-    $routes->get('setup/document-numbering/(:num)/edit', 'Setup\DocumentNumberingController::edit/$1');
-    $routes->post('setup/document-numbering/(:num)', 'Setup\DocumentNumberingController::update/$1');
-
-    $routes->get('modules/(:segment)', 'ModulePlaceholderController::show/$1');
+        foreach (['transaction-codes','prefix-codes','companies','sites','departments','warehouses','locations','countries','provinces','cities','postal-codes','currencies','uoms','uom-conversions','address-master','customer-terms','customer-promos','customers','supplier-terms','supplier-promos','suppliers','items','item-locations','batch-masters'] as $resource) {
+            $routes->get($resource, 'Setup\MasterDataController::index/' . $resource);
+            $routes->get($resource . '/new', 'Setup\MasterDataController::create/' . $resource);
+            $routes->post($resource, 'Setup\MasterDataController::store/' . $resource);
+            $routes->get($resource . '/(:num)', 'Setup\MasterDataController::show/' . $resource . '/$1');
+            $routes->get($resource . '/(:num)/edit', 'Setup\MasterDataController::edit/' . $resource . '/$1');
+            $routes->post($resource . '/(:num)', 'Setup\MasterDataController::update/' . $resource . '/$1');
+            $routes->post($resource . '/(:num)/delete', 'Setup\MasterDataController::delete/' . $resource . '/$1');
+            $routes->get($resource . '/export', 'System\ExcelLiteTransferController::export/' . $resource);
+            $routes->get($resource . '/import', 'System\ExcelLiteTransferController::importForm/' . $resource);
+            $routes->post($resource . '/import', 'System\ExcelLiteTransferController::import/' . $resource);
+            $routes->get($resource . '/template', 'System\ExcelLiteTransferController::template/' . $resource);
+        }
+        $routes->post('provinces/sync', 'Setup\WilayahSyncController::provinces');
+        $routes->post('cities/sync', 'Setup\WilayahSyncController::cities');
+    });
 });
