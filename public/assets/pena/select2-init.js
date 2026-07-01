@@ -1,6 +1,10 @@
 (function (window, $) {
     'use strict';
 
+    function message(key, fallback) {
+        return (window.PenaMessages && window.PenaMessages[key]) ? window.PenaMessages[key] : fallback;
+    }
+
     function placeholderFor(select) {
         var label = '';
         var id = select.attr('id');
@@ -15,7 +19,7 @@
 
         label = $.trim(label || '');
 
-        return label ? 'Select / search ' + label : 'Select / search data';
+        return label ? message('selectSearchPrefix', 'Select / search ') + label : message('selectSearchData', 'Select / search data');
     }
 
     function init(root) {
@@ -33,7 +37,7 @@
             select.select2({
                 width: '100%',
                 allowClear: !select.prop('required'),
-                placeholder: placeholderFor(select),
+                placeholder: select.data('placeholder') || placeholderFor(select),
                 dropdownParent: select.closest('.modal').length ? select.closest('.modal') : $(document.body)
             });
         });
