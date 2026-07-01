@@ -4,16 +4,14 @@
 <?php
 $oldQtys = old('qty_received', []);
 $oldBatchNos = old('batch_no', []);
-$oldUnitCosts = old('unit_cost', []);
-if (! is_array($oldQtys)) {
-    $oldQtys = [];
-}
-if (! is_array($oldBatchNos)) {
-    $oldBatchNos = [];
-}
-if (! is_array($oldUnitCosts)) {
-    $oldUnitCosts = [];
-}
+$oldUnitPrices = old('unit_price', []);
+$oldFreights = old('freight_amount', []);
+$oldSpecialPrices = old('special_price', []);
+if (! is_array($oldQtys)) $oldQtys = [];
+if (! is_array($oldBatchNos)) $oldBatchNos = [];
+if (! is_array($oldUnitPrices)) $oldUnitPrices = [];
+if (! is_array($oldFreights)) $oldFreights = [];
+if (! is_array($oldSpecialPrices)) $oldSpecialPrices = [];
 $selectedWarehouseId = (int) old('warehouse_id', $selectedWarehouseId ?? 0);
 $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
 $itemDisplay = static function (array $line): array {
@@ -89,7 +87,7 @@ $itemDisplay = static function (array $line): array {
         <div class="card-body">
             <h4 class="card-title mb-3">Outstanding Lines</h4>
             <div class="alert alert-info py-2">
-                Isi <strong>Receive Now</strong> dan koreksi <strong>Unit Cost</strong> jika harga receipt berbeda. Unit Cost akan membentuk stock value dan GL receipt.
+                Pada PO Receipt, line menampilkan <strong>Price</strong>, <strong>Freight</strong>, dan <strong>Special Price</strong> yang bisa diedit. Nilai stock/GL receipt dihitung dari Price + Freight + Special Price.
             </div>
             <div class="table-responsive">
                 <table class="table table-nowrap align-middle mb-0" id="receiptLinesTable">
@@ -101,9 +99,11 @@ $itemDisplay = static function (array $line): array {
                             <th class="text-end">Ordered</th>
                             <th class="text-end">Received</th>
                             <th class="text-end">Outstanding</th>
-                            <th class="text-end" style="min-width:150px;">Receive Now</th>
-                            <th class="text-end" style="min-width:150px;">Unit Cost</th>
-                            <th class="text-end" style="min-width:160px;">Line Cost</th>
+                            <th class="text-end" style="min-width:140px;">Receive Now</th>
+                            <th class="text-end" style="min-width:140px;">Price</th>
+                            <th class="text-end" style="min-width:140px;">Freight</th>
+                            <th class="text-end" style="min-width:150px;">Special Price</th>
+                            <th class="text-end" style="min-width:160px;">Line Value</th>
                             <th>UoM</th>
                         </tr>
                     </thead>
@@ -113,7 +113,9 @@ $itemDisplay = static function (array $line): array {
                         $outstanding = (float) ($line['qty_outstanding'] ?? $line['qty'] ?? 0);
                         $qtyValue = array_key_exists($index, $oldQtys) ? $oldQtys[$index] : $outstanding;
                         $batchValue = array_key_exists($index, $oldBatchNos) ? $oldBatchNos[$index] : '';
-                        $unitCostValue = array_key_exists($index, $oldUnitCosts) ? $oldUnitCosts[$index] : ($line['unit_price'] ?? 0);
+                        $priceValue = array_key_exists($index, $oldUnitPrices) ? $oldUnitPrices[$index] : ($line['unit_price'] ?? 0);
+                        $freightValue = array_key_exists($index, $oldFreights) ? $oldFreights[$index] : ($line['freight_amount'] ?? 0);
+                        $specialValue = array_key_exists($index, $oldSpecialPrices) ? $oldSpecialPrices[$index] : ($line['special_price'] ?? $line['special_charge_amount'] ?? 0);
                         [$displayCode, $displayName] = $itemDisplay($line);
                         ?>
                         <tr>
@@ -123,32 +125,17 @@ $itemDisplay = static function (array $line): array {
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_ordered'] ?? $line['qty'] ?? 0), 4)) ?></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_received'] ?? 0), 4)) ?></td>
                             <td class="text-end fw-semibold outstanding-qty"><?= esc(number_format($outstanding, 4, '.', '')) ?></td>
-                            <td>
-                                <input
-                                    type="text"
-                                    inputmode="decimal"
-                                    name="qty_received[]"
-                                    class="form-control text-end receive-now"
-                                    data-outstanding="<?= esc((string) $outstanding, 'attr') ?>"
-                                    value="<?= esc((string) $qtyValue) ?>"
-                                >
-                            </td>
-                            <td>
-                                <input
-                                    type="text"
-                                    inputmode="decimal"
-                                    name="unit_cost[]"
-                                    class="form-control text-end unit-cost"
-                                    value="<?= esc((string) $unitCostValue) ?>"
-                                >
-                            </td>
-                            <td class="text-end fw-semibold line-cost">0.00</td>
+                            <td><input type="text" inputmode="decimal" name="qty_received[]" class="form-control text-end receive-now" data-outstanding="<?= esc((string) $outstanding, 'attr') ?>" value="<?= esc((string) $qtyValue) ?>"></td>
+                            <td><input type="text" inputmode="decimal" name="unit_price[]" class="form-control text-end unit-price" value="<?= esc((string) $priceValue) ?>"></td>
+                            <td><input type="text" inputmode="decimal" name="freight_amount[]" class="form-control text-end freight-amount" value="<?= esc((string) $freightValue) ?>"></td>
+                            <td><input type="text" inputmode="decimal" name="special_price[]" class="form-control text-end special-price" value="<?= esc((string) $specialValue) ?>"></td>
+                            <td class="text-end fw-semibold line-cost">0.00<input type="hidden" name="unit_cost[]" class="unit-cost-hidden" value="0"></td>
                             <td><?= esc($line['uom_code'] ?? '-') ?></td>
                         </tr>
                     <?php endforeach ?>
 
                     <?php if ($lines === []): ?>
-                        <tr><td colspan="10" class="text-center text-muted py-4">No outstanding line to receive.</td></tr>
+                        <tr><td colspan="12" class="text-center text-muted py-4">No outstanding line to receive.</td></tr>
                     <?php endif ?>
                     </tbody>
                     <?php if ($lines !== []): ?>
@@ -156,7 +143,7 @@ $itemDisplay = static function (array $line): array {
                         <tr>
                             <th colspan="6" class="text-end">Total Receive Now</th>
                             <th class="text-end" id="totalReceiveNow">0.0000</th>
-                            <th class="text-end">Total Cost</th>
+                            <th colspan="3" class="text-end">Total Receipt Value</th>
                             <th class="text-end" id="totalReceiptCost">0.00</th>
                             <th></th>
                         </tr>
@@ -166,7 +153,7 @@ $itemDisplay = static function (array $line): array {
             </div>
 
             <div class="d-flex gap-2 mt-4">
-                <button type="submit" class="btn btn-primary" <?= $lines === [] ? 'disabled' : '' ?> onclick="return confirm('Post receipt ini? Unit cost akan membentuk nilai stock dan GL receipt.')"><i class="bx bx-package me-1"></i> Post Receipt & Update Stock</button>
+                <button type="submit" class="btn btn-primary" <?= $lines === [] ? 'disabled' : '' ?> onclick="return confirm('Post receipt ini? Price/Freight/Special Price akan membentuk nilai stock dan GL receipt.')"><i class="bx bx-package me-1"></i> Post Receipt & Update Stock</button>
                 <a href="<?= site_url('purchase/orders/' . $po['id']) ?>" class="btn btn-light">Back to PO</a>
             </div>
         </div>
@@ -201,21 +188,28 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function recalcTotals() {
         let totalQty = 0;
-        let totalCost = 0;
+        let totalValue = 0;
         document.querySelectorAll('#receiptLinesTable tbody tr').forEach(function (row) {
             const qtyInput = row.querySelector('.receive-now');
-            const unitCostInput = row.querySelector('.unit-cost');
+            const priceInput = row.querySelector('.unit-price');
+            const freightInput = row.querySelector('.freight-amount');
+            const specialInput = row.querySelector('.special-price');
+            const hiddenCost = row.querySelector('.unit-cost-hidden');
             const lineCostCell = row.querySelector('.line-cost');
-            if (! qtyInput || ! unitCostInput || ! lineCostCell) return;
+            if (! qtyInput || ! priceInput || ! freightInput || ! specialInput || ! lineCostCell) return;
             const qty = number(qtyInput.value);
-            const unitCost = number(unitCostInput.value);
-            const lineCost = qty * unitCost;
+            const unitPrice = number(priceInput.value);
+            const freight = number(freightInput.value);
+            const special = number(specialInput.value);
+            const receiptUnitValue = unitPrice + freight + special;
+            const lineValue = qty * receiptUnitValue;
+            if (hiddenCost) hiddenCost.value = receiptUnitValue.toFixed(6);
             totalQty += qty;
-            totalCost += lineCost;
-            lineCostCell.textContent = lineCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            totalValue += lineValue;
+            lineCostCell.firstChild.nodeValue = lineValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
         });
         if (totalReceiveNow) totalReceiveNow.textContent = totalQty.toLocaleString(undefined, {minimumFractionDigits: 4, maximumFractionDigits: 4});
-        if (totalReceiptCost) totalReceiptCost.textContent = totalCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        if (totalReceiptCost) totalReceiptCost.textContent = totalValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
 
     function hasSelect2(select) {
@@ -289,7 +283,7 @@ document.addEventListener('DOMContentLoaded', function () {
             recalcTotals();
         });
     });
-    document.querySelectorAll('.unit-cost').forEach(function (input) {
+    document.querySelectorAll('.unit-price, .freight-amount, .special-price').forEach(function (input) {
         input.addEventListener('input', function () {
             const value = number(input.value);
             input.classList.toggle('is-invalid', value < 0);
