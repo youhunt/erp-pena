@@ -15,6 +15,7 @@ use CodeIgniter\Filters\InvalidChars;
 use CodeIgniter\Filters\PageCache;
 use CodeIgniter\Filters\PerformanceMetrics;
 use CodeIgniter\Filters\SecureHeaders;
+use CodeIgniter\Shield\Filters\SessionAuth;
 
 class Filters extends BaseFilters
 {
@@ -28,6 +29,8 @@ class Filters extends BaseFilters
         'forcehttps'    => ForceHTTPS::class,
         'pagecache'     => PageCache::class,
         'performance'   => PerformanceMetrics::class,
+        'auth'          => SessionAuth::class,
+        'session'       => SessionAuth::class,
         'tenant'        => TenantBootstrapFilter::class,
         'permission'    => PermissionGuardFilter::class,
         'setupTenant'   => SetupMasterTenantGuardFilter::class,
