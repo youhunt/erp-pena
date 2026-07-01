@@ -1,7 +1,49 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
-<?php $previewRows ??= []; ?>
+<?php
+$previewRows ??= [];
+$db = \Config\Database::connect();
+$siteDisplay = static function (array $order) use ($db): string {
+    $raw = trim((string) ($order['site'] ?? ''));
+    $siteId = (int) ($order['site_id'] ?? 0);
+
+    if (! $db->tableExists('sites')) {
+        return $raw !== '' ? $raw : ($siteId > 0 ? (string) $siteId : '-');
+    }
+
+    $builder = $db->table('sites');
+    if ($siteId > 0) {
+        $builder->where('id', $siteId);
+    } elseif ($raw !== '') {
+        $builder->groupStart();
+        if ($db->fieldExists('code', 'sites')) {
+            $builder->where('code', $raw);
+        }
+        if ($db->fieldExists('site_code', 'sites')) {
+            $builder->orWhere('site_code', $raw);
+        }
+        $builder->groupEnd();
+    } else {
+        return '-';
+    }
+    if ($db->fieldExists('deleted_at', 'sites')) {
+        $builder->where('deleted_at', null);
+    }
+    $row = $builder->get(1)->getRowArray();
+    if ($row === null) {
+        return $raw !== '' ? $raw : ($siteId > 0 ? (string) $siteId : '-');
+    }
+
+    $code = trim((string) ($row['code'] ?? $row['site_code'] ?? ''));
+    $name = trim((string) ($row['name'] ?? $row['site_name'] ?? ''));
+    if ($code !== '' && $name !== '' && strcasecmp($code, $name) !== 0) {
+        return $code . ' - ' . $name;
+    }
+
+    return $code !== '' ? $code : ($name !== '' ? $name : (string) ($row['id'] ?? '-'));
+};
+?>
 <form method="post" action="<?= site_url('sales/orders/' . $order['id'] . '/allocate') ?>">
     <?= csrf_field() ?>
     <div class="row">
@@ -14,7 +56,7 @@
                         <tr><th>Status</th><td><?= esc($order['document_status'] ?? $order['status'] ?? '-') ?></td></tr>
                         <tr><th>Date</th><td><?= esc($order['so_date'] ?? $order['document_date'] ?? '-') ?></td></tr>
                         <tr><th>Customer</th><td><?= esc(($order['customer_code'] ?? $order['customer'] ?? '-') . ' ' . ($order['customer_name'] ?? '')) ?></td></tr>
-                        <tr><th>Site</th><td><?= esc($order['site'] ?? $order['site_id'] ?? '-') ?></td></tr>
+                        <tr><th>Site</th><td><?= esc($siteDisplay($order)) ?></td></tr>
                     </table>
                 </div>
             </div>
