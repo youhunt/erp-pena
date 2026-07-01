@@ -3,10 +3,13 @@
 namespace App\Controllers\Sales;
 
 use App\Controllers\BaseController;
+use App\Models\AllocationLineModel;
+use App\Models\AllocationOrderModel;
 use App\Models\SalesDeliveryLineModel;
 use App\Models\SalesDeliveryModel;
 use App\Models\SalesOrderLineModel;
 use App\Models\SalesOrderModel;
+use App\Services\Sales\AllocationDeliveryService;
 use App\Services\Sales\SalesDeliveryService;
 use App\Services\Support\DocumentNumberService;
 use App\Services\TenantContext;
@@ -58,6 +61,11 @@ class SalesDeliveryController extends BaseController
             throw PageNotFoundException::forPageNotFound();
         }
 
+        $allocationId = $this->nullableInt($this->request->getGet('allocation_id'));
+        if ($allocationId !== null) {
+            return $this->createFromAllocation($tenant, $so, $allocationId);
+        }
+
         $status = (string) ($so['document_status'] ?? $so['status'] ?? 'draft');
         if (! in_array($status, ['approved', 'reserved', 'partial_delivered'], true)) {
             return view('errors/html/error_404', ['message' => 'Only approved, reserved, or partially delivered SO can be delivered.']);
@@ -88,6 +96,11 @@ class SalesDeliveryController extends BaseController
         $so = $this->scopedSo($tenant, $soId);
         if ($so === null) {
             throw PageNotFoundException::forPageNotFound();
+        }
+
+        $allocationId = $this->nullableInt($this->request->getPost('allocation_id'));
+        if ($allocationId !== null) {
+            return $this->storeFromAllocation($tenant, $so, $allocationId);
         }
 
         $deliveryUrl = '/sales/orders/' . $soId . '/deliver';
@@ -181,6 +194,74 @@ class SalesDeliveryController extends BaseController
         return redirect()->to('/sales/deliveries/' . $id)->with('message', 'Delivery order reversed and SO quantities recalculated.');
     }
 
+    private function createFromAllocation(TenantContext $tenant, array $so, int $allocationId): string
+    {
+        $allocation = $this->scopedAllocation($tenant, (int) $so['id'], $allocationId);
+        if ($allocation === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+        $status = (string) ($allocation['status'] ?? 'posted');
+        if (! in_array($status, ['posted', 'partial_delivered'], true)) {
+            return view('errors/html/error_404', ['message' => 'Only posted or partially delivered allocation can be delivered. Current status: ' . $status]);
+        }
+
+        $lines = $this->allocationDeliverableLines($allocationId);
+
+        return view('sales/deliveries/from_allocation', [
+            'title' => 'Create Delivery from Allocation',
+            'so' => $so,
+            'allocation' => $allocation,
+            'lines' => $lines,
+            'suggestedDeliveryNo' => $this->previewDocumentNumber('DO'),
+        ]);
+    }
+
+    private function storeFromAllocation(TenantContext $tenant, array $so, int $allocationId)
+    {
+        $deliveryUrl = '/sales/orders/' . (int) $so['id'] . '/deliver?allocation_id=' . $allocationId;
+        if (! $this->validate(['delivery_no' => 'permit_empty|max_length[60]', 'delivery_date' => 'required|valid_date[Y-m-d]'])) {
+            return redirect()->to($deliveryUrl)->withInput()->with('error', implode(' ', $this->validator->getErrors()));
+        }
+
+        $allocation = $this->scopedAllocation($tenant, (int) $so['id'], $allocationId);
+        if ($allocation === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        $lines = $this->postedAllocationLines();
+        if ($lines === []) {
+            return redirect()->to($deliveryUrl)->withInput()->with('error', 'At least one allocation line delivery qty is required.');
+        }
+
+        $deliveryDate = (string) $this->request->getPost('delivery_date');
+        $deliveryNo = trim((string) $this->request->getPost('delivery_no'));
+
+        try {
+            if ($deliveryNo === '') {
+                $deliveryNo = $this->issueDocumentNumber('DO', $deliveryDate, (int) $so['company_id'], $so['site_id'] ?? null);
+            }
+
+            $deliveryId = (new AllocationDeliveryService())->postFromAllocation($allocationId, [
+                'company_id' => $so['company_id'],
+                'site_id' => $so['site_id'] ?? null,
+                'company' => $so['company'] ?? session('active_company_code'),
+                'site' => $so['site'] ?? session('active_site_code'),
+                'delivery_no' => $deliveryNo,
+                'delivery_date' => $deliveryDate,
+                'sales_order_id' => $so['id'],
+                'so_no' => $so['so_no'],
+                'customer_id' => $so['customer_id'] ?? null,
+                'customer_code' => $so['customer_code'] ?? $so['customer'] ?? null,
+                'customer_name' => $so['customer_name'] ?? null,
+                'notes' => trim((string) $this->request->getPost('notes')),
+            ], $lines, auth()->id());
+        } catch (RuntimeException $e) {
+            return redirect()->to($deliveryUrl)->withInput()->with('error', $e->getMessage());
+        }
+
+        return redirect()->to('/sales/deliveries/' . $deliveryId)->with('message', 'Delivery order posted from allocation.');
+    }
+
     private function scopedSo(TenantContext $tenant, int $soId): ?array
     {
         $model = new SalesOrderModel();
@@ -191,6 +272,18 @@ class SalesDeliveryController extends BaseController
             $model->where('site_id', $tenant->activeSiteId());
         }
         return $model->find($soId);
+    }
+
+    private function scopedAllocation(TenantContext $tenant, int $soId, int $allocationId): ?array
+    {
+        $model = new AllocationOrderModel();
+        if ($tenant->activeCompanyId() !== null) {
+            $model->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $model->where('site_id', $tenant->activeSiteId());
+        }
+        return $model->where('sales_order_id', $soId)->find($allocationId);
     }
 
     private function existingSalesInvoice(int $salesDeliveryId): ?array
@@ -227,6 +320,46 @@ class SalesDeliveryController extends BaseController
             }
         }
         return $lines;
+    }
+
+    private function postedAllocationLines(): array
+    {
+        $lineIds = (array) $this->request->getPost('allocationline_id');
+        $qtys = (array) $this->request->getPost('qty_delivered');
+        $lines = [];
+        foreach ($lineIds as $index => $lineId) {
+            $qty = $this->toNumber($qtys[$index] ?? 0);
+            if ((int) $lineId > 0 && $qty > 0) {
+                $lines[] = [
+                    'allocationline_id' => (int) $lineId,
+                    'qty_delivered' => $qty,
+                ];
+            }
+        }
+        return $lines;
+    }
+
+    private function allocationDeliverableLines(int $allocationId): array
+    {
+        $rows = (new AllocationLineModel())
+            ->where('allocationorder_id', $allocationId)
+            ->where('active', 1)
+            ->orderBy('line', 'ASC')
+            ->findAll();
+
+        $deliverable = [];
+        foreach ($rows as $row) {
+            $allocated = (float) ($row['allocateqty'] ?? 0);
+            $delivered = (float) ($row['delivered_qty'] ?? 0);
+            $remaining = max(0.0, $allocated - $delivered);
+            if ($remaining <= 0) {
+                continue;
+            }
+            $row['remaining_qty'] = $remaining;
+            $deliverable[] = $row;
+        }
+
+        return $deliverable;
     }
 
     private function masterRows(string $table): array
