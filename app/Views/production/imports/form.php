@@ -1,6 +1,13 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php
+$lineInfo = match ($resource ?? '') {
+    'work-orders' => 'Work Order boleh import header saja. Jika component/routing detail diisi manual, pakai component_line_no dan routing_line_no. Jika detail kosong, sistem mengambil BOM dan Routing dari master berdasarkan parent_item_code.',
+    'work-centers' => 'Work Center tidak memakai line_no.',
+    default => 'BOM dan Routing wajib memakai line_no untuk detail line.',
+};
+?>
 <div class="card">
     <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
@@ -33,7 +40,7 @@
             <div class="small text-break"><?= esc(implode(', ', $config['headers'] ?? [])) ?></div>
             <hr>
             <div class="small mb-0">
-                Semua import production wajib memakai <strong>site_code</strong>. BOM, Routing, dan Work Order wajib memakai <strong>line_no</strong>. Work Center tidak memakai line_no.
+                Semua import production wajib memakai <strong>site_code</strong>. <?= esc($lineInfo) ?>
             </div>
         </div>
     </div>
