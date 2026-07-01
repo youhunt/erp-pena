@@ -31,6 +31,15 @@ foreach ($sites as $site) {
 }
 
 $tenantLabel = trim(($activeCompanyCode ?: 'Company') . ($activeSiteCode !== '' ? ' / ' . $activeSiteCode : ''));
+$uiLocale = in_array((string) session('ui_locale'), ['en', 'id'], true) ? (string) session('ui_locale') : 'en';
+$uiMessagesFile = APPPATH . 'Language/' . $uiLocale . '/Ui.php';
+$uiMessages = is_file($uiMessagesFile) ? require $uiMessagesFile : [];
+$langQuery = service('request')->getGet() ?? [];
+$langUrl = static function (string $locale) use ($langQuery): string {
+    $query = is_array($langQuery) ? $langQuery : [];
+    $query['lang'] = $locale;
+    return current_url() . '?' . http_build_query($query);
+};
 ?>
 
 <header id="page-topbar">
@@ -126,6 +135,21 @@ $tenantLabel = trim(($activeCompanyCode ?: 'Company') . ($activeSiteCode !== '' 
                 </div>
             <?php endif ?>
 
+            <div class="dropdown d-inline-block me-1">
+                <button type="button" class="btn header-item waves-effect px-2" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" aria-label="Language">
+                    <i class="bx bx-globe font-size-20 align-middle"></i>
+                    <span class="d-none d-xl-inline-block ms-1 text-uppercase"><?= esc($uiLocale) ?></span>
+                </button>
+                <div class="dropdown-menu dropdown-menu-end">
+                    <a class="dropdown-item <?= $uiLocale === 'en' ? 'active' : '' ?>" href="<?= esc($langUrl('en')) ?>">
+                        <?= esc($uiMessages['english'] ?? 'English') ?>
+                    </a>
+                    <a class="dropdown-item <?= $uiLocale === 'id' ? 'active' : '' ?>" href="<?= esc($langUrl('id')) ?>">
+                        <?= esc($uiMessages['indonesian'] ?? 'Indonesian') ?>
+                    </a>
+                </div>
+            </div>
+
             <div class="dropdown d-inline-block">
                 <button type="button" class="btn header-item waves-effect px-2 px-xl-3" id="page-header-user-dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                     <i class="bx bx-user-circle font-size-22 align-middle d-inline-block d-xl-none"></i>
@@ -172,7 +196,7 @@ $tenantLabel = trim(($activeCompanyCode ?: 'Company') . ($activeSiteCode !== '' 
                         $select.select2({
                             width: '100%',
                             allowClear: !this.required,
-                            placeholder: $select.data('placeholder') || 'Pilih / cari data',
+                            placeholder: $select.data('placeholder') || (window.PenaMessages ? window.PenaMessages.selectSearchData : 'Select / search data'),
                             dropdownParent: jQuery(document.body)
                         });
                     }
