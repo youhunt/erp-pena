@@ -1,23 +1,56 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
-<?php $exportUrl = current_url() . '?' . http_build_query(['as_of' => $asOf, 'export' => 'xlsx']); ?>
+<?php
+$filters ??= ['partner_code' => '', 'partner_group' => '', 'aging_bucket' => ''];
+$bucketOptions ??= ['' => 'All Aging', 'current' => 'Current', 'days_1_30' => '1-30', 'days_31_60' => '31-60', 'days_over_90' => '> 90'];
+$query = array_filter([
+    'as_of' => $asOf,
+    'partner_code' => $filters['partner_code'] ?? '',
+    'partner_group' => $filters['partner_group'] ?? '',
+    'aging_bucket' => $filters['aging_bucket'] ?? '',
+], static fn ($value) => (string) $value !== '');
+$exportUrl = current_url() . '?' . http_build_query($query + ['export' => 'xlsx']);
+$partnerLabel = (string) ($config['partnerLabel'] ?? 'Partner');
+?>
 <div class="card">
     <div class="card-body">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
+        <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
             <div>
                 <h4 class="card-title mb-1"><?= esc($title) ?></h4>
                 <p class="text-muted mb-0">Outstanding invoice aging by active company/site.</p>
             </div>
-            <form method="get" action="<?= current_url() ?>" class="d-flex flex-wrap align-items-end gap-2">
-                <div>
-                    <label class="form-label">As Of</label>
-                    <input type="date" name="as_of" value="<?= esc($asOf) ?>" class="form-control">
-                </div>
-                <button type="submit" class="btn btn-primary"><i class="bx bx-refresh me-1"></i> Refresh</button>
+            <div class="d-flex flex-wrap gap-2">
+                <a href="<?= current_url() ?>" class="btn btn-light"><i class="bx bx-reset me-1"></i> Reset</a>
                 <a href="<?= esc($exportUrl) ?>" class="btn btn-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
-            </form>
+            </div>
         </div>
+
+        <form method="get" action="<?= current_url() ?>" class="row g-3 align-items-end mb-4">
+            <div class="col-xl-2 col-md-4">
+                <label class="form-label">As Of</label>
+                <input type="date" name="as_of" value="<?= esc($asOf) ?>" class="form-control">
+            </div>
+            <div class="col-xl-3 col-md-4">
+                <label class="form-label"><?= esc($partnerLabel) ?> Code / Name</label>
+                <input type="text" name="partner_code" value="<?= esc($filters['partner_code'] ?? '') ?>" class="form-control" placeholder="<?= esc($partnerLabel) ?> code/name">
+            </div>
+            <div class="col-xl-3 col-md-4">
+                <label class="form-label"><?= esc($partnerLabel) ?> Group</label>
+                <input type="text" name="partner_group" value="<?= esc($filters['partner_group'] ?? '') ?>" class="form-control" placeholder="Group / reference">
+            </div>
+            <div class="col-xl-2 col-md-4">
+                <label class="form-label">Aging</label>
+                <select name="aging_bucket" class="form-select">
+                    <?php foreach ($bucketOptions as $value => $label): ?>
+                        <option value="<?= esc((string) $value, 'attr') ?>" <?= (string) ($filters['aging_bucket'] ?? '') === (string) $value ? 'selected' : '' ?>><?= esc($label) ?></option>
+                    <?php endforeach ?>
+                </select>
+            </div>
+            <div class="col-xl-2 col-md-4">
+                <button type="submit" class="btn btn-primary w-100"><i class="bx bx-search me-1"></i> Search</button>
+            </div>
+        </form>
 
         <div class="row">
             <?php foreach ([
@@ -42,12 +75,13 @@
 
 <div class="card">
     <div class="card-body">
-        <h5 class="card-title mb-3"><?= esc($config['partnerLabel'] ?? 'Partner') ?> Summary</h5>
+        <h5 class="card-title mb-3"><?= esc($partnerLabel) ?> Summary</h5>
         <div class="table-responsive">
             <table class="table table-sm table-nowrap table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th><?= esc($config['partnerLabel'] ?? 'Partner') ?></th>
+                        <th><?= esc($partnerLabel) ?></th>
+                        <th>Group</th>
                         <th class="text-end">Current</th>
                         <th class="text-end">1-30</th>
                         <th class="text-end">31-60</th>
@@ -63,6 +97,7 @@
                             <div class="fw-semibold"><?= esc($row['partner_name'] ?? '-') ?></div>
                             <small class="text-muted"><?= esc($row['partner_code'] ?? '-') ?></small>
                         </td>
+                        <td><?= esc(($row['partner_group'] ?? '') !== '' ? $row['partner_group'] : '-') ?></td>
                         <td class="text-end"><?= esc(number_format((float) ($row['current'] ?? 0), 0, ',', '.')) ?></td>
                         <td class="text-end"><?= esc(number_format((float) ($row['days_1_30'] ?? 0), 0, ',', '.')) ?></td>
                         <td class="text-end"><?= esc(number_format((float) ($row['days_31_60'] ?? 0), 0, ',', '.')) ?></td>
@@ -72,13 +107,14 @@
                     </tr>
                 <?php endforeach ?>
                 <?php if ($summary === []): ?>
-                    <tr><td colspan="7" class="text-center text-muted py-4">No outstanding invoice found.</td></tr>
+                    <tr><td colspan="8" class="text-center text-muted py-4">No outstanding invoice found.</td></tr>
                 <?php endif ?>
                 </tbody>
                 <?php if ($summary !== []): ?>
                     <tfoot class="table-light">
                         <tr>
                             <th>Total</th>
+                            <th></th>
                             <th class="text-end"><?= esc(number_format((float) ($totals['current'] ?? 0), 0, ',', '.')) ?></th>
                             <th class="text-end"><?= esc(number_format((float) ($totals['days_1_30'] ?? 0), 0, ',', '.')) ?></th>
                             <th class="text-end"><?= esc(number_format((float) ($totals['days_31_60'] ?? 0), 0, ',', '.')) ?></th>
@@ -103,7 +139,8 @@
                         <th>Invoice No</th>
                         <th>Date</th>
                         <th>Due Date</th>
-                        <th><?= esc($config['partnerLabel'] ?? 'Partner') ?></th>
+                        <th><?= esc($partnerLabel) ?></th>
+                        <th>Group</th>
                         <th>Bucket</th>
                         <th class="text-end">Age Days</th>
                         <th class="text-end">Outstanding</th>
@@ -119,13 +156,14 @@
                             <div><?= esc($row[$config['partnerNameField']] ?? '-') ?></div>
                             <small class="text-muted"><?= esc($row[$config['partnerCodeField']] ?? '-') ?></small>
                         </td>
+                        <td><?= esc(($row['partner_group'] ?? '') !== '' ? $row['partner_group'] : '-') ?></td>
                         <td><span class="badge bg-secondary"><?= esc($row['bucket'] ?? '-') ?></span></td>
                         <td class="text-end"><?= esc(number_format((float) ($row['age_days'] ?? 0), 0, ',', '.')) ?></td>
                         <td class="text-end fw-semibold"><?= esc(number_format((float) ($row['outstanding_amount'] ?? 0), 0, ',', '.')) ?></td>
                     </tr>
                 <?php endforeach ?>
                 <?php if ($rows === []): ?>
-                    <tr><td colspan="7" class="text-center text-muted py-4">No outstanding invoice found.</td></tr>
+                    <tr><td colspan="8" class="text-center text-muted py-4">No outstanding invoice found.</td></tr>
                 <?php endif ?>
                 </tbody>
             </table>
