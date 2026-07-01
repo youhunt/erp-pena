@@ -40,7 +40,6 @@ $bucketLabels = ['current' => 'Current', 'days_1_30' => '1-30', 'days_31_60' => 
                     <option value="<?= esc((string) $code, 'attr') ?>" <?= $currentPartner === (string) $code ? 'selected' : '' ?>><?= esc($label) ?></option>
                 <?php endforeach ?>
             </select>
-            <small class="text-muted">Dropdown ini sudah Select2 dan bisa dicari.</small>
         </div>
         <div class="col-xl-3 col-md-4"><label class="form-label"><?= esc($partnerLabel) ?> Group</label><input type="text" name="partner_group" value="<?= esc($filters['partner_group'] ?? '') ?>" class="form-control" placeholder="Group / reference"></div>
         <div class="col-xl-2 col-md-4"><label class="form-label">Aging</label><select name="aging_bucket" class="form-select select2-basic"><?php foreach ($bucketOptions as $value => $label): ?><option value="<?= esc((string) $value, 'attr') ?>" <?= (string) ($filters['aging_bucket'] ?? '') === (string) $value ? 'selected' : '' ?>><?= esc($label) ?></option><?php endforeach ?></select></div>
