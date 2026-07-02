@@ -15,11 +15,13 @@ class StockBalanceController extends BaseController
         $keyword = trim((string) $this->request->getGet('q'));
         $balances = $this->balanceRows($tenant, $keyword, $this->request->getGet('export') === 'xlsx' ? 10000 : 200);
         $summary = $this->summary($balances);
+        $audit = $this->movementReconciliation($tenant, $balances);
 
         if ($this->request->getGet('export') === 'xlsx') {
             return $this->xlsxWorkbookResponse('stock-balance-' . date('Y-m-d') . '.xlsx', [
-                'Summary' => $this->summaryRows($summary, $keyword, count($balances)),
+                'Summary' => $this->summaryRows($summary, $keyword, count($balances), $audit),
                 'Stock Balance Detail' => $this->detailRows($balances),
+                'Movement Reconciliation' => $this->auditRows($balances, $audit),
             ]);
         }
 
@@ -28,6 +30,7 @@ class StockBalanceController extends BaseController
             'balances' => $balances,
             'keyword' => $keyword,
             'summary' => $summary,
+            'audit' => $audit,
         ]);
     }
 
@@ -90,7 +93,89 @@ class StockBalanceController extends BaseController
         ];
     }
 
-    private function summaryRows(array $summary, string $keyword, int $rowCount): array
+    private function movementReconciliation(TenantContext $tenant, array $balances): array
+    {
+        $db = Database::connect();
+        if ($balances === [] || ! $db->tableExists('inventory_stock_movements')) {
+            return ['rows' => [], 'mismatch_count' => 0, 'qty_diff' => 0.0, 'value_diff' => 0.0];
+        }
+
+        $keys = [];
+        foreach ($balances as $balance) {
+            $keys[$this->balanceKey($balance)] = $balance;
+        }
+
+        $builder = $db->table('inventory_stock_movements')
+            ->select('item_code, batch_no, warehouse_id, location_id')
+            ->select("COALESCE(SUM(CASE WHEN direction = 'in' THEN qty ELSE -qty END), 0) AS ledger_qty", false)
+            ->select("COALESCE(SUM(CASE WHEN direction = 'in' THEN stock_value ELSE -stock_value END), 0) AS ledger_value", false)
+            ->groupBy('item_code, batch_no, warehouse_id, location_id');
+
+        if ($tenant->activeCompanyId() !== null) {
+            $builder->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null) {
+            $builder->where('site_id', $tenant->activeSiteId());
+        }
+
+        $itemCodes = array_values(array_unique(array_map(static fn (array $row): string => (string) ($row['item_code'] ?? ''), $balances)));
+        $itemCodes = array_values(array_filter($itemCodes, static fn (string $code): bool => $code !== ''));
+        if ($itemCodes !== []) {
+            $builder->whereIn('item_code', $itemCodes);
+        }
+
+        $ledger = [];
+        foreach ($builder->get()->getResultArray() as $row) {
+            $ledger[$this->balanceKey($row)] = $row;
+        }
+
+        $auditRows = [];
+        $mismatchCount = 0;
+        $qtyDiffTotal = 0.0;
+        $valueDiffTotal = 0.0;
+
+        foreach ($keys as $key => $balance) {
+            $ledgerRow = $ledger[$key] ?? [];
+            $balanceQty = (float) ($balance['qty_on_hand'] ?? 0);
+            $balanceValue = (float) ($balance['stock_value'] ?? 0);
+            $ledgerQty = (float) ($ledgerRow['ledger_qty'] ?? 0);
+            $ledgerValue = (float) ($ledgerRow['ledger_value'] ?? 0);
+            $qtyDiff = round($balanceQty - $ledgerQty, 6);
+            $valueDiff = round($balanceValue - $ledgerValue, 2);
+            $isOk = abs($qtyDiff) < 0.0001 && abs($valueDiff) < 0.01;
+            if (! $isOk) {
+                $mismatchCount++;
+                $qtyDiffTotal += $qtyDiff;
+                $valueDiffTotal += $valueDiff;
+            }
+            $auditRows[$key] = [
+                'balance_qty' => $balanceQty,
+                'ledger_qty' => $ledgerQty,
+                'qty_diff' => $qtyDiff,
+                'balance_value' => $balanceValue,
+                'ledger_value' => $ledgerValue,
+                'value_diff' => $valueDiff,
+                'status' => $isOk ? 'OK' : 'Mismatch',
+            ];
+        }
+
+        return [
+            'rows' => $auditRows,
+            'mismatch_count' => $mismatchCount,
+            'qty_diff' => round($qtyDiffTotal, 6),
+            'value_diff' => round($valueDiffTotal, 2),
+        ];
+    }
+
+    private function balanceKey(array $row): string
+    {
+        return strtoupper(trim((string) ($row['item_code'] ?? ''))) . '|'
+            . trim((string) ($row['batch_no'] ?? '')) . '|'
+            . (int) ($row['warehouse_id'] ?? 0) . '|'
+            . (int) ($row['location_id'] ?? 0);
+    }
+
+    private function summaryRows(array $summary, string $keyword, int $rowCount, array $audit): array
     {
         return [
             ['Metric', 'Value'],
@@ -102,6 +187,9 @@ class StockBalanceController extends BaseController
             ['Qty Reserved', (float) ($summary['qty_reserved'] ?? 0)],
             ['Qty Available', (float) ($summary['qty_available'] ?? 0)],
             ['Stock Value', (float) ($summary['stock_value'] ?? 0)],
+            ['Movement Mismatch Count', (int) ($audit['mismatch_count'] ?? 0)],
+            ['Movement Qty Diff', (float) ($audit['qty_diff'] ?? 0)],
+            ['Movement Value Diff', (float) ($audit['value_diff'] ?? 0)],
             ['Generated At', date('Y-m-d H:i:s')],
         ];
     }
@@ -140,6 +228,31 @@ class StockBalanceController extends BaseController
             ];
         }
 
+        return $rows;
+    }
+
+    private function auditRows(array $balances, array $audit): array
+    {
+        $rows = [[
+            'Item Code', 'Batch No', 'Warehouse', 'Location', 'Balance Qty', 'Ledger Qty', 'Qty Diff', 'Balance Value', 'Ledger Value', 'Value Diff', 'Status'
+        ]];
+        foreach ($balances as $balance) {
+            $key = $this->balanceKey($balance);
+            $row = $audit['rows'][$key] ?? [];
+            $rows[] = [
+                $balance['item_code'] ?? '',
+                $balance['batch_no'] ?? '',
+                $balance['warehouse_code'] ?? '',
+                $balance['location_code'] ?? '',
+                (float) ($row['balance_qty'] ?? 0),
+                (float) ($row['ledger_qty'] ?? 0),
+                (float) ($row['qty_diff'] ?? 0),
+                (float) ($row['balance_value'] ?? 0),
+                (float) ($row['ledger_value'] ?? 0),
+                (float) ($row['value_diff'] ?? 0),
+                (string) ($row['status'] ?? 'OK'),
+            ];
+        }
         return $rows;
     }
 
