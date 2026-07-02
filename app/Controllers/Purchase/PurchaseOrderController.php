@@ -56,7 +56,8 @@ class PurchaseOrderController extends BaseController
         return view('purchase/orders/form', [
             'title' => $contextItemCodes !== [] ? 'Create Purchase Order for SO Items' : 'Create Purchase Order',
             'order' => [],
-            'lines' => $this->contextPoLines($items),
+            // Manual PO must not prefill every item master as a line. Prefill only when opened with item context.
+            'lines' => $contextItemCodes !== [] ? $this->contextPoLines($items) : [],
             'isEdit' => false,
             'action' => site_url('purchase/orders'),
             'suppliers' => $this->masterRows('suppliers'),
@@ -190,6 +191,7 @@ class PurchaseOrderController extends BaseController
         } catch (RuntimeException $exception) {
             return redirect()->back()->with('error', $exception->getMessage());
         }
+
         return redirect()->to('/purchase/orders/' . $id)->with('message', 'PO cancelled.');
     }
 
@@ -211,6 +213,7 @@ class PurchaseOrderController extends BaseController
         } catch (RuntimeException $exception) {
             return redirect()->back()->with('error', $exception->getMessage());
         }
+
         return redirect()->to('/purchase/orders/' . $id)->with('message', $message);
     }
 
@@ -223,6 +226,7 @@ class PurchaseOrderController extends BaseController
         if ($tenant->activeSiteId() !== null) {
             $orders->where('site_id', $tenant->activeSiteId());
         }
+
         return $orders->find($id);
     }
 
@@ -391,6 +395,7 @@ class PurchaseOrderController extends BaseController
                 'wht_amount' => (float) ($whtAmounts[$index] ?? 0),
             ];
         }
+
         return $lines;
     }
 
@@ -401,6 +406,7 @@ class PurchaseOrderController extends BaseController
                 return true;
             }
         }
+
         return false;
     }
 
@@ -429,6 +435,7 @@ class PurchaseOrderController extends BaseController
             $codeField = $db->fieldExists('item_code', 'items') ? 'item_code' : 'code';
             $builder->whereIn($codeField, $contextItemCodes);
         }
+
         return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get()->getResultArray();
     }
 
@@ -477,6 +484,7 @@ class PurchaseOrderController extends BaseController
     private function nullableDate(mixed $value): ?string
     {
         $value = trim((string) $value);
+
         return $value !== '' ? $value : null;
     }
 
