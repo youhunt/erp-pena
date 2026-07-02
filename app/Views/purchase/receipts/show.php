@@ -13,6 +13,29 @@ $statusClass = match ($status) {
 };
 $warehouseDisplay = ($warehouseLabel ?? '') !== '' && ($warehouseLabel ?? '-') !== '-' ? (string) $warehouseLabel : erp_warehouse_label($receipt);
 $locationDisplay = ($locationLabel ?? '') !== '' && ($locationLabel ?? '-') !== '-' ? (string) $locationLabel : erp_location_label($receipt);
+$db = \Config\Database::connect();
+$relatedInvoices = [];
+if ($db->tableExists('purchase_invoices')) {
+    $relatedInvoices = $db->table('purchase_invoices')
+        ->where('purchase_receipt_id', (int) ($receipt['id'] ?? 0))
+        ->orderBy('id', 'DESC')
+        ->get()
+        ->getResultArray();
+}
+$activeInvoices = array_values(array_filter($relatedInvoices, static fn (array $invoice): bool => strtolower((string) ($invoice['status'] ?? '')) !== 'cancelled'));
+$canReverse = $status === 'posted' && $activeInvoices === [];
+$hasInvoiceHistory = $relatedInvoices !== [];
+$receiptValueTotal = 0.0;
+$reversedQtyTotal = 0.0;
+foreach ($lines as $summaryLine) {
+    $qty = (float) ($summaryLine['qty_received'] ?? 0);
+    $reversedQty = (float) ($summaryLine['reversed_qty'] ?? 0);
+    $price = (float) ($summaryLine['unit_price'] ?? $summaryLine['unit_cost'] ?? 0);
+    $freight = (float) ($summaryLine['freight_amount'] ?? 0);
+    $special = (float) ($summaryLine['special_price'] ?? 0);
+    $receiptValueTotal += $qty * ($price + $freight + $special);
+    $reversedQtyTotal += $reversedQty;
+}
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -25,6 +48,21 @@ $locationDisplay = ($locationLabel ?? '') !== '' && ($locationLabel ?? '-') !== 
                     </div>
                     <span class="badge <?= esc($statusClass) ?>"><?= esc($status) ?></span>
                 </div>
+
+                <?php if ($status === 'invoiced' || $activeInvoices !== []): ?>
+                    <div class="alert alert-warning py-2 small">
+                        <strong>Reverse locked:</strong> this receipt still has active AP invoice. Cancel the AP invoice first, then return here to reverse the receipt and remove stock.
+                    </div>
+                <?php elseif ($canReverse): ?>
+                    <div class="alert alert-success py-2 small">
+                        <strong>Ready to reverse:</strong> no active AP invoice is linked to this receipt. Reversal will decrease stock and post reversal GL.
+                    </div>
+                <?php elseif ($status === 'reversed'): ?>
+                    <div class="alert alert-info py-2 small">
+                        <strong>Receipt reversed:</strong> stock and receipt GL have been reversed.
+                    </div>
+                <?php endif ?>
+
                 <table class="table table-sm mb-0">
                     <tbody>
                         <tr><th>Receipt No</th><td><?= esc($receipt['receipt_no']) ?></td></tr>
@@ -35,8 +73,9 @@ $locationDisplay = ($locationLabel ?? '') !== '' && ($locationLabel ?? '-') !== 
                         <tr><th>Site</th><td><?= esc(erp_site_label($receipt)) ?></td></tr>
                         <tr><th>Warehouse</th><td><?= esc($warehouseDisplay) ?></td></tr>
                         <tr><th>Location</th><td><?= esc($locationDisplay) ?></td></tr>
+                        <tr><th>Receipt Value</th><td class="text-end fw-semibold"><?= esc(number_format($receiptValueTotal, 2)) ?></td></tr>
                         <tr><th>Receipt GL Entry</th><td><?= ! empty($receipt['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $receipt['gl_entry_id']) . '">#' . esc($receipt['gl_entry_id']) . '</a>' : '-' ?></td></tr>
-                        <tr><th>AP Invoice</th><td><?= ! empty($existingInvoice) ? '<a href="' . site_url('ap/purchase-invoices/' . (int) $existingInvoice['id']) . '">' . esc($existingInvoice['invoice_no'] ?? ('#' . $existingInvoice['id'])) . '</a>' : '-' ?></td></tr>
+                        <tr><th>Active AP Invoice</th><td><?= ! empty($existingInvoice) ? '<a href="' . site_url('ap/purchase-invoices/' . (int) $existingInvoice['id']) . '">' . esc($existingInvoice['invoice_no'] ?? ('#' . $existingInvoice['id'])) . '</a>' : '-' ?></td></tr>
                         <tr><th>Reversal GL</th><td><?= ! empty($receipt['reversal_gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . $receipt['reversal_gl_entry_id']) . '">#' . esc($receipt['reversal_gl_entry_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Posted</th><td><?= esc($receipt['posted_at'] ?? '-') ?></td></tr>
                         <?php if ($status === 'reversed'): ?>
@@ -49,7 +88,7 @@ $locationDisplay = ($locationLabel ?? '') !== '' && ($locationLabel ?? '-') !== 
                     <a href="<?= site_url('purchase/orders/' . $receipt['purchase_order_id']) ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to PO</a>
                     <a href="<?= site_url('print/purchase-receipts/' . (int) $receipt['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
                     <?php if (! empty($existingInvoice)): ?>
-                        <a href="<?= site_url('ap/purchase-invoices/' . (int) $existingInvoice['id']) ?>" class="btn btn-info"><i class="bx bx-receipt me-1"></i> View AP Invoice</a>
+                        <a href="<?= site_url('ap/purchase-invoices/' . (int) $existingInvoice['id']) ?>" class="btn btn-info"><i class="bx bx-receipt me-1"></i> View Active AP Invoice</a>
                     <?php elseif ($status === 'posted'): ?>
                         <a href="<?= site_url('purchase/receipts/' . $receipt['id'] . '/invoice') ?>" class="btn btn-primary"><i class="bx bx-receipt me-1"></i> Create AP Invoice</a>
                         <form method="post" action="<?= site_url('purchase/receipts/' . (int) $receipt['id'] . '/reverse') ?>" class="d-flex gap-2">
@@ -61,11 +100,41 @@ $locationDisplay = ($locationLabel ?? '') !== '' && ($locationLabel ?? '-') !== 
                 </div>
             </div>
         </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h4 class="card-title mb-3">AP Invoice History</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light"><tr><th>Invoice</th><th>Status</th><th class="text-end">Total</th></tr></thead>
+                        <tbody>
+                        <?php foreach ($relatedInvoices as $invoice): ?>
+                            <?php $invoiceStatus = strtolower((string) ($invoice['status'] ?? '-')); ?>
+                            <tr>
+                                <td><a href="<?= site_url('ap/purchase-invoices/' . (int) $invoice['id']) ?>"><?= esc($invoice['invoice_no'] ?? ('#' . $invoice['id'])) ?></a><div><small class="text-muted"><?= esc($invoice['invoice_date'] ?? '-') ?></small></div></td>
+                                <td><span class="badge bg-<?= $invoiceStatus === 'cancelled' ? 'danger' : 'success' ?>"><?= esc($invoiceStatus) ?></span></td>
+                                <td class="text-end"><?= esc(number_format((float) ($invoice['total_amount'] ?? 0), 2)) ?></td>
+                            </tr>
+                        <?php endforeach ?>
+                        <?php if (! $hasInvoiceHistory): ?><tr><td colspan="3" class="text-center text-muted py-3">No AP invoice created from this receipt yet.</td></tr><?php endif ?>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="form-text mt-2">A receipt can only be reversed after all AP invoices from this receipt are cancelled.</div>
+            </div>
+        </div>
     </div>
+
     <div class="col-xl-8">
         <div class="card">
             <div class="card-body">
-                <h4 class="card-title mb-3">Received Lines</h4>
+                <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+                    <div>
+                        <h4 class="card-title mb-1">Received Lines</h4>
+                        <p class="text-muted mb-0">Stock movement audit per received item.</p>
+                    </div>
+                    <?php if ($reversedQtyTotal > 0): ?><span class="badge bg-warning text-dark">reversal posted</span><?php endif ?>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-nowrap align-middle mb-0">
                         <thead class="table-light">
@@ -73,7 +142,9 @@ $locationDisplay = ($locationLabel ?? '') !== '' && ($locationLabel ?? '-') !== 
                                 <th>#</th>
                                 <th>Item</th>
                                 <th>Batch</th>
-                                <th class="text-end">Qty</th>
+                                <th class="text-end">Received</th>
+                                <th class="text-end">Reversed</th>
+                                <th class="text-end">Remaining</th>
                                 <th>UoM</th>
                                 <th class="text-end">Price</th>
                                 <th class="text-end">Freight</th>
@@ -89,13 +160,18 @@ $locationDisplay = ($locationLabel ?? '') !== '' && ($locationLabel ?? '-') !== 
                                 $price = (float) ($line['unit_price'] ?? $line['unit_cost'] ?? 0);
                                 $freight = (float) ($line['freight_amount'] ?? 0);
                                 $special = (float) ($line['special_price'] ?? 0);
-                                $receiptValue = (float) ($line['qty_received'] ?? 0) * ($price + $freight + $special);
+                                $qtyReceived = (float) ($line['qty_received'] ?? 0);
+                                $qtyReversed = (float) ($line['reversed_qty'] ?? 0);
+                                $qtyRemaining = max(0.0, $qtyReceived - $qtyReversed);
+                                $receiptValue = $qtyReceived * ($price + $freight + $special);
                             ?>
                             <tr>
                                 <td><?= esc($line['line_no']) ?></td>
                                 <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
                                 <td><?= esc(($line['batch_no'] ?? '') !== '' ? $line['batch_no'] : '-') ?></td>
-                                <td class="text-end"><?= esc(number_format((float) $line['qty_received'], 4)) ?></td>
+                                <td class="text-end"><?= esc(number_format($qtyReceived, 4)) ?></td>
+                                <td class="text-end <?= $qtyReversed > 0 ? 'text-warning fw-semibold' : '' ?>"><?= esc(number_format($qtyReversed, 4)) ?></td>
+                                <td class="text-end fw-semibold"><?= esc(number_format($qtyRemaining, 4)) ?></td>
                                 <td><?= esc($line['uom_code'] ?? '-') ?></td>
                                 <td class="text-end"><?= esc(number_format($price, 6)) ?></td>
                                 <td class="text-end"><?= esc(number_format($freight, 6)) ?></td>
