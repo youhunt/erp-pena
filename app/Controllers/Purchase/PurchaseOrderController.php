@@ -49,15 +49,21 @@ class PurchaseOrderController extends BaseController
 
     public function create(): string
     {
+        $contextItemCodes = $this->contextItemCodes();
+        $items = $this->masterRows('items', $contextItemCodes);
+        $sourceSoNo = trim((string) $this->request->getGet('source_so_no'));
+
         return view('purchase/orders/form', [
-            'title' => 'Create Purchase Order',
+            'title' => $contextItemCodes !== [] ? 'Create Purchase Order for SO Items' : 'Create Purchase Order',
             'order' => [],
-            'lines' => [],
+            'lines' => $this->contextPoLines($items),
             'isEdit' => false,
             'action' => site_url('purchase/orders'),
             'suppliers' => $this->masterRows('suppliers'),
-            'items' => $this->masterRows('items'),
+            'items' => $items,
             'suggestedPoNo' => $this->previewDocumentNumber('PO'),
+            'contextItemCodes' => $contextItemCodes,
+            'sourceSoNo' => $sourceSoNo,
         ]);
     }
 
@@ -114,6 +120,8 @@ class PurchaseOrderController extends BaseController
             'action' => site_url('purchase/orders/' . $id),
             'suppliers' => $this->masterRows('suppliers'),
             'items' => $this->masterRows('items'),
+            'contextItemCodes' => [],
+            'sourceSoNo' => '',
         ]);
     }
 
@@ -396,7 +404,7 @@ class PurchaseOrderController extends BaseController
         return false;
     }
 
-    private function masterRows(string $table): array
+    private function masterRows(string $table, array $contextItemCodes = []): array
     {
         $tenant = new TenantContext(session());
         $db = Database::connect();
@@ -411,9 +419,59 @@ class PurchaseOrderController extends BaseController
             $builder->where('company_id', $tenant->activeCompanyId());
         }
         if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', $table)) {
-            $builder->where('site_id', $tenant->activeSiteId());
+            if ($table === 'items') {
+                $builder->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->groupEnd();
+            } else {
+                $builder->where('site_id', $tenant->activeSiteId());
+            }
+        }
+        if ($table === 'items' && $contextItemCodes !== []) {
+            $codeField = $db->fieldExists('item_code', 'items') ? 'item_code' : 'code';
+            $builder->whereIn($codeField, $contextItemCodes);
         }
         return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get()->getResultArray();
+    }
+
+    private function contextItemCodes(): array
+    {
+        $raw = $this->request->getGet('item_codes') ?? $this->request->getGet('item_code') ?? '';
+        $values = is_array($raw) ? $raw : explode(',', (string) $raw);
+        $codes = [];
+        foreach ($values as $value) {
+            $code = strtoupper(trim((string) $value));
+            if ($code !== '') {
+                $codes[] = $code;
+            }
+        }
+
+        return array_values(array_unique($codes));
+    }
+
+    private function contextPoLines(array $items): array
+    {
+        $lines = [];
+        foreach ($items as $index => $item) {
+            $code = (string) ($item['item_code'] ?? $item['code'] ?? '');
+            if ($code === '') {
+                continue;
+            }
+            $name = (string) ($item['item_name'] ?? $item['name'] ?? '');
+            $uom = (string) ($item['purchaseuom'] ?? $item['purchase_uom'] ?? $item['stockuom'] ?? $item['stock_uom'] ?? $item['uom_code'] ?? $item['uom'] ?? 'PCS');
+            $price = (float) ($item['purchasep'] ?? $item['purchase_price'] ?? $item['item_price'] ?? $item['price'] ?? $item['cost_price'] ?? 0);
+            $lines[] = [
+                'po_line' => $index + 1,
+                'line_no' => $index + 1,
+                'item_id' => $item['id'] ?? null,
+                'item_code' => $code,
+                'item_name' => $name,
+                'description' => 'Purchase for Sales Order item demand',
+                'qty' => 1,
+                'uom_code' => $uom,
+                'unit_price' => $price,
+            ];
+        }
+
+        return $lines;
     }
 
     private function nullableDate(mixed $value): ?string
