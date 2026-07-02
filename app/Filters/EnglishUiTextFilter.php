@@ -20,8 +20,7 @@ class EnglishUiTextFilter implements FilterInterface
             return null;
         }
 
-        $locale = $this->locale();
-        service('language')->setLocale($locale);
+        service('language')->setLocale($this->locale());
 
         return null;
     }
@@ -42,6 +41,7 @@ class EnglishUiTextFilter implements FilterInterface
         $messages = $this->messages($locale);
         $replacements = $messages['replacements'] ?? [];
         if (is_array($replacements) && $replacements !== []) {
+            uksort($replacements, static fn (string $a, string $b): int => strlen($b) <=> strlen($a));
             $body = strtr($body, $replacements);
         }
 
