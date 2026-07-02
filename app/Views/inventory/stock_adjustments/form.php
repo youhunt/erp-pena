@@ -34,7 +34,9 @@ foreach ($items as $contextItem) {
     $defaultContextItemCode = (string) ($contextItem['code'] ?? $contextItem['item_code'] ?? '');
     if ($defaultContextItemCode !== '') break;
 }
-$selectedItemCode = (string) old('item_code', count($items) === 1 ? $defaultContextItemCode : '');
+$oldItemCode = old('item_code');
+if (is_array($oldItemCode)) $oldItemCode = '';
+$selectedItemCode = (string) ($oldItemCode !== null && $oldItemCode !== '' ? $oldItemCode : (count($items) === 1 ? $defaultContextItemCode : ''));
 ?>
 
 <?php if ($isSoContext): ?>
