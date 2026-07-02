@@ -34,13 +34,18 @@ class WorkOrderController extends BaseController
 
     public function create(): string
     {
+        $contextItemCodes = $this->contextItemCodes();
+
         return view('production/work_orders/form', [
             'title' => 'Create Work Order',
             'sites' => $this->masterRows('sites'),
             'departments' => $this->masterRows('departments'),
             'warehouses' => $this->masterRows('warehouses'),
-            'items' => $this->masterRows('items'),
+            'items' => $this->masterRows('items', $contextItemCodes),
             'workCenters' => $this->workCenters(),
+            'contextItemCodes' => $contextItemCodes,
+            'sourceSoId' => $this->nullableInt($this->request->getGet('source_so_id')),
+            'sourceSoNo' => trim((string) $this->request->getGet('source_so_no')),
         ]);
     }
 
@@ -179,7 +184,7 @@ class WorkOrderController extends BaseController
         return redirect()->to('/production/work-orders/' . $id)->with('message', 'Work order material issued and finished good received.');
     }
 
-    private function masterRows(string $table): array
+    private function masterRows(string $table, array $contextItemCodes = []): array
     {
         $tenant = new TenantContext(session());
         $db = Database::connect();
@@ -194,7 +199,15 @@ class WorkOrderController extends BaseController
             $builder->where('company_id', $tenant->activeCompanyId());
         }
         if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', $table)) {
-            $builder->where('site_id', $tenant->activeSiteId());
+            if ($table === 'items') {
+                $builder->groupStart()->where('site_id', $tenant->activeSiteId())->orWhere('site_id', null)->groupEnd();
+            } else {
+                $builder->where('site_id', $tenant->activeSiteId());
+            }
+        }
+        if ($table === 'items' && $contextItemCodes !== []) {
+            $codeField = $db->fieldExists('item_code', 'items') ? 'item_code' : 'code';
+            $builder->whereIn($codeField, $contextItemCodes);
         }
 
         return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get()->getResultArray();
@@ -224,6 +237,27 @@ class WorkOrderController extends BaseController
         $db->fieldExists('item_code', 'items') ? $builder->where('item_code', $code) : $builder->where('code', $code);
 
         return $builder->get()->getRowArray();
+    }
+
+    private function contextItemCodes(): array
+    {
+        $raw = $this->request->getGet('item_codes') ?? $this->request->getGet('item_code') ?? '';
+        $values = is_array($raw) ? $raw : explode(',', (string) $raw);
+        $codes = [];
+        foreach ($values as $value) {
+            $code = strtoupper(trim((string) $value));
+            if ($code !== '') {
+                $codes[] = $code;
+            }
+        }
+
+        return array_values(array_unique($codes));
+    }
+
+    private function nullableInt(mixed $value): ?int
+    {
+        $int = (int) $value;
+        return $int > 0 ? $int : null;
     }
 
     private function tenantScope(): array
