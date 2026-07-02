@@ -12,7 +12,23 @@ class StockAdjustmentController extends BaseController
 {
     public function create(): string
     {
+        $sourceSoId = $this->nullableInt($this->request->getGet('source_so_id'));
         $contextItemCodes = $this->contextItemCodes();
+        $contextQtyByCode = $this->contextQtyByCode();
+        $sourceSoNo = trim((string) $this->request->getGet('source_so_no'));
+
+        if ($sourceSoId !== null) {
+            $soContext = $this->salesOrderContext($sourceSoId);
+            if ($contextItemCodes === []) {
+                $contextItemCodes = $soContext['item_codes'];
+            }
+            if ($contextQtyByCode === []) {
+                $contextQtyByCode = $soContext['qty_by_code'];
+            }
+            if ($sourceSoNo === '') {
+                $sourceSoNo = $soContext['so_no'];
+            }
+        }
 
         return view('inventory/stock_adjustments/form', [
             'title' => $contextItemCodes !== [] ? 'SO Stock Adjustment' : 'Stock Adjustment',
@@ -21,9 +37,9 @@ class StockAdjustmentController extends BaseController
             'locations' => $this->masterRows('locations'),
             'recentMovements' => $this->recentMovements($contextItemCodes),
             'contextItemCodes' => $contextItemCodes,
-            'contextQtyByCode' => $this->contextQtyByCode(),
-            'sourceSoId' => $this->nullableInt($this->request->getGet('source_so_id')),
-            'sourceSoNo' => trim((string) $this->request->getGet('source_so_no')),
+            'contextQtyByCode' => $contextQtyByCode,
+            'sourceSoId' => $sourceSoId,
+            'sourceSoNo' => $sourceSoNo,
         ]);
     }
 
@@ -187,6 +203,62 @@ class StockAdjustmentController extends BaseController
         }
 
         return redirect()->to('/inventory/stock-adjustment')->with('message', $message);
+    }
+
+    private function salesOrderContext(int $sourceSoId): array
+    {
+        $tenant = new TenantContext(session());
+        $db = Database::connect();
+        $result = ['so_no' => '', 'item_codes' => [], 'qty_by_code' => []];
+
+        if (! $db->tableExists('sales_orders') || ! $db->tableExists('sales_order_lines')) {
+            return $result;
+        }
+
+        $order = $db->table('sales_orders')->where('id', $sourceSoId);
+        if ($tenant->activeCompanyId() !== null && $db->fieldExists('company_id', 'sales_orders')) {
+            $order->where('company_id', $tenant->activeCompanyId());
+        }
+        if ($tenant->activeSiteId() !== null && $db->fieldExists('site_id', 'sales_orders')) {
+            $order->where('site_id', $tenant->activeSiteId());
+        }
+        if ($db->fieldExists('deleted_at', 'sales_orders')) {
+            $order->where('deleted_at', null);
+        }
+        $so = $order->get(1)->getRowArray();
+        if ($so === null) {
+            return $result;
+        }
+
+        $result['so_no'] = (string) ($so['so_no'] ?? $so['document_no'] ?? ('SO #' . $sourceSoId));
+
+        $lines = $db->table('sales_order_lines')
+            ->where('sales_order_id', $sourceSoId)
+            ->orderBy('line_no', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        foreach ($lines as $line) {
+            $code = strtoupper(trim((string) ($line['item_code'] ?? '')));
+            if ($code === '') {
+                continue;
+            }
+
+            $ordered = (float) ($line['qty_outstanding'] ?? 0);
+            if ($ordered <= 0) {
+                $ordered = (float) ($line['qty_ordered'] ?? $line['qty'] ?? 0) - (float) ($line['qty_delivered'] ?? 0);
+            }
+            if ($ordered <= 0) {
+                continue;
+            }
+
+            if (! in_array($code, $result['item_codes'], true)) {
+                $result['item_codes'][] = $code;
+            }
+            $result['qty_by_code'][$code] = ($result['qty_by_code'][$code] ?? 0) + $ordered;
+        }
+
+        return $result;
     }
 
     private function findItem(string $itemCode, TenantContext $tenant): ?array
