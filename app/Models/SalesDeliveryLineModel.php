@@ -14,6 +14,7 @@ class SalesDeliveryLineModel extends Model
         'sales_delivery_id',
         'sales_order_id',
         'sales_order_line_id',
+        'allocationline_id',
         'stock_movement_id',
         'reversal_movement_id',
         'line_no',
