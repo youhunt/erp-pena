@@ -12,6 +12,16 @@ if (! is_array($oldBatchNos)) {
 }
 $selectedWarehouseId = (int) old('warehouse_id', $selectedWarehouseId ?? 0);
 $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
+$totalAvailableStock = 0.0;
+$totalSuggestedDelivery = 0.0;
+foreach ($lines as $line) {
+    $itemCode = (string) ($line['item_code'] ?? '');
+    $available = (float) (($stockByItem[$itemCode]['available'] ?? 0));
+    $outstanding = (float) ($line['qty_outstanding'] ?? $line['qty'] ?? 0);
+    $totalAvailableStock += max(0.0, $available);
+    $totalSuggestedDelivery += min($outstanding, max(0.0, $available));
+}
+$hasDeliverableStock = $lines !== [] && $totalSuggestedDelivery > 0;
 ?>
 <form method="post" action="<?= site_url('sales/orders/' . $so['id'] . '/deliver') ?>">
     <?= csrf_field() ?>
@@ -37,7 +47,7 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Delivery No</label>
                     <input type="text" name="delivery_no" class="form-control" placeholder="<?= esc(($suggestedDeliveryNo ?? '') !== '' ? $suggestedDeliveryNo : 'Auto if blank', 'attr') ?>" value="<?= esc(old('delivery_no')) ?>">
-                    <small class="text-muted">Kosongkan untuk nomor otomatis.</small>
+                    <small class="text-muted">Leave blank for automatic numbering.</small>
                 </div>
                 <div class="col-md-3 mb-3">
                     <label class="form-label">Delivery Date</label>
@@ -76,15 +86,24 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                 <div>
                     <h4 class="card-title mb-1">Outstanding Lines</h4>
-                    <p class="text-muted mb-0">Available stock dihitung dari warehouse dan location yang sedang dipilih.</p>
+                    <p class="text-muted mb-0">Sales can be recorded as an order, but delivery can only be posted when stock is available in the selected warehouse and location.</p>
                 </div>
                 <button type="button" id="refreshStockButton" class="btn btn-outline-primary btn-sm">
                     <i class="bx bx-refresh me-1"></i> Refresh Stock
                 </button>
             </div>
-            <div class="alert alert-info py-2">
-                Isi <strong>Deliver Now</strong> sesuai qty barang yang benar-benar dikirim. Kalau baru tambah stok / ganti warehouse-location, klik <strong>Refresh Stock</strong> dulu.
-            </div>
+
+            <?php if (! $hasDeliverableStock): ?>
+                <div class="alert alert-danger py-2">
+                    <strong>No stock available for delivery.</strong>
+                    This Sales Order can stay open/backorder, but Delivery cannot be posted until stock is available. Add stock first through Purchase Receipt, Production Receive Finished Good, Stock Adjustment, or choose another warehouse/location and click <strong>Refresh Stock</strong>.
+                </div>
+            <?php else: ?>
+                <div class="alert alert-info py-2">
+                    Fill <strong>Deliver Now</strong> only for the quantity that is physically shipped. If stock was just added or warehouse/location was changed, click <strong>Refresh Stock</strong> first.
+                </div>
+            <?php endif ?>
+
             <div class="table-responsive">
                 <table class="table table-nowrap align-middle mb-0" id="deliveryLinesTable">
                     <thead class="table-light">
@@ -110,11 +129,12 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
                             $suggestedQty = min($outstanding, max(0, $available));
                             $qtyValue = array_key_exists($index, $oldQtys) ? $oldQtys[$index] : $suggestedQty;
                             $batchValue = array_key_exists($index, $oldBatchNos) ? $oldBatchNos[$index] : '';
+                            $canDeliverLine = $suggestedQty > 0;
                         ?>
-                        <tr>
+                        <tr class="<?= $canDeliverLine ? '' : 'table-warning' ?>">
                             <td><?= esc($line['so_line'] ?? $line['line_no']) ?><input type="hidden" name="sales_order_line_id[]" value="<?= (int) $line['id'] ?>"></td>
                             <td><div class="fw-semibold"><?= esc($line['item_code'] ?? '-') ?></div><small class="text-muted"><?= esc($line['item_name'] ?? '-') ?></small></td>
-                            <td><input type="text" name="batch_no[]" class="form-control" value="<?= esc((string) $batchValue) ?>" placeholder="Optional"></td>
+                            <td><input type="text" name="batch_no[]" class="form-control" value="<?= esc((string) $batchValue) ?>" placeholder="Optional" <?= $canDeliverLine ? '' : 'readonly' ?>></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_ordered'] ?? $line['qty'] ?? 0), 4)) ?></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_reserved'] ?? 0), 4)) ?></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['qty_delivered'] ?? 0), 4)) ?></td>
@@ -129,6 +149,7 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
                                     data-outstanding="<?= esc((string) $outstanding, 'attr') ?>"
                                     data-available="<?= esc((string) max(0, $available), 'attr') ?>"
                                     value="<?= esc((string) $qtyValue) ?>"
+                                    <?= $canDeliverLine ? '' : 'readonly' ?>
                                 >
                             </td>
                             <td><?= esc($line['uom_code'] ?? '-') ?></td>
@@ -152,12 +173,14 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
             </div>
 
             <div class="alert alert-warning mt-4 mb-0">
-                Stok dihitung berdasarkan warehouse dan location yang dipilih. Jika stok baru ditambah, klik <strong>Refresh Stock</strong> atau buka ulang form DO.
+                Stock is calculated from the selected warehouse and location. If stock was just added, click <strong>Refresh Stock</strong> or reopen this Delivery Order form.
             </div>
 
             <div class="d-flex gap-2 mt-4">
-                <button type="submit" class="btn btn-primary" <?= $lines === [] ? 'disabled' : '' ?> onclick="return confirm('Post delivery ini? SO qty akan terupdate dan stock inventory akan berkurang.')"><i class="bx bx-send me-1"></i> Post Delivery & Update Stock</button>
+                <button type="submit" id="postDeliveryButton" class="btn btn-primary" <?= (! $hasDeliverableStock) ? 'disabled' : '' ?> onclick="return confirm('Post this delivery? SO quantity will be updated and inventory stock will be reduced.')"><i class="bx bx-send me-1"></i> Post Delivery & Update Stock</button>
                 <a href="<?= site_url('inventory/stock-adjustment') ?>" class="btn btn-outline-primary">Stock Adjustment</a>
+                <a href="<?= site_url('purchase/receipts') ?>" class="btn btn-outline-success">Purchase Receipt</a>
+                <a href="<?= site_url('production/work-orders') ?>" class="btn btn-outline-info">Production</a>
                 <a href="<?= site_url('sales/orders/' . $so['id']) ?>" class="btn btn-light">Back to SO</a>
             </div>
         </div>
@@ -169,6 +192,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const location = document.getElementById('deliveryLocation');
     const refreshStockButton = document.getElementById('refreshStockButton');
     const totalDeliverNow = document.getElementById('totalDeliverNow');
+    const postDeliveryButton = document.getElementById('postDeliveryButton');
     const deliveryUrl = '<?= site_url('sales/orders/' . (int) $so['id'] . '/deliver') ?>';
 
     function number(value) {
@@ -181,21 +205,23 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function recalcDeliverTotal() {
         let total = 0;
+        let hasInvalid = false;
         document.querySelectorAll('.deliver-now').forEach(function (input) {
-            total += number(input.value);
-        });
-        if (totalDeliverNow) totalDeliverNow.textContent = total.toLocaleString(undefined, {minimumFractionDigits: 4, maximumFractionDigits: 4});
-    }
-
-    document.querySelectorAll('.deliver-now').forEach(function (input) {
-        input.addEventListener('input', function () {
             const outstanding = number(input.dataset.outstanding);
             const available = number(input.dataset.available);
             const limit = Math.min(outstanding, available);
             const value = number(input.value);
-            input.classList.toggle('is-invalid', value < 0 || value > limit);
-            recalcDeliverTotal();
+            const invalid = value < 0 || value > limit;
+            input.classList.toggle('is-invalid', invalid);
+            hasInvalid = hasInvalid || invalid;
+            total += value;
         });
+        if (totalDeliverNow) totalDeliverNow.textContent = total.toLocaleString(undefined, {minimumFractionDigits: 4, maximumFractionDigits: 4});
+        if (postDeliveryButton) postDeliveryButton.disabled = hasInvalid || total <= 0;
+    }
+
+    document.querySelectorAll('.deliver-now').forEach(function (input) {
+        input.addEventListener('input', recalcDeliverTotal);
     });
 
     function syncLocations() {
@@ -223,7 +249,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function refreshStock() {
         if (!warehouse || !location || !warehouse.value || !location.value) {
-            alert('Pilih warehouse dan location dulu.');
+            alert('Select warehouse and location first.');
             return;
         }
         const params = new URLSearchParams();
@@ -233,12 +259,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     if (warehouse && location) {
-        warehouse.addEventListener('change', function () {
-            syncLocations();
-        });
-        location.addEventListener('change', function () {
-            // Stock value akan dihitung ulang saat klik Refresh Stock.
-        });
+        warehouse.addEventListener('change', syncLocations);
     }
     if (refreshStockButton) {
         refreshStockButton.addEventListener('click', refreshStock);
