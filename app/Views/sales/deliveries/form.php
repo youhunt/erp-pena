@@ -15,7 +15,6 @@ $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
 $totalAvailableStock = 0.0;
 $totalSuggestedDelivery = 0.0;
 $contextItemCodes = [];
-$contextQtyByItem = [];
 foreach ($lines as $line) {
     $itemCode = strtoupper(trim((string) ($line['item_code'] ?? '')));
     if ($itemCode !== '') {
@@ -23,22 +22,12 @@ foreach ($lines as $line) {
     }
     $available = (float) (($stockByItem[$itemCode]['available'] ?? 0));
     $outstanding = (float) ($line['qty_outstanding'] ?? $line['qty'] ?? 0);
-    if ($itemCode !== '') {
-        $contextQtyByItem[$itemCode] = ($contextQtyByItem[$itemCode] ?? 0) + max(0.0, $outstanding);
-    }
     $totalAvailableStock += max(0.0, $available);
     $totalSuggestedDelivery += min($outstanding, max(0.0, $available));
 }
 $contextItemCodes = array_values(array_unique($contextItemCodes));
-$itemQtyPairs = [];
-foreach ($contextItemCodes as $contextCode) {
-    $itemQtyPairs[] = $contextCode . ':' . rtrim(rtrim(number_format((float) ($contextQtyByItem[$contextCode] ?? 1), 6, '.', ''), '0'), '.');
-}
 $contextQuery = array_filter([
     'source_so_id' => (int) ($so['id'] ?? 0),
-    'source_so_no' => (string) ($so['so_no'] ?? ''),
-    'item_codes' => implode(',', $contextItemCodes),
-    'item_qtys' => implode(',', $itemQtyPairs),
 ], static fn ($value): bool => (string) $value !== '' && (string) $value !== '0');
 $contextQueryString = http_build_query($contextQuery);
 $stockAdjustmentUrl = site_url('inventory/stock-adjustment') . ($contextQueryString !== '' ? '?' . $contextQueryString : '');
