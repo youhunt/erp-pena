@@ -1,7 +1,24 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
-<?php $exportUrl = site_url('inventory/stock-card/export') . '?' . http_build_query($filters ?? []); ?>
+<?php
+$exportUrl = site_url('inventory/stock-card/export') . '?' . http_build_query($filters ?? []);
+$sourceUrl = static function (array $movement): string {
+    $type = strtolower(trim((string) ($movement['reference_type'] ?? $movement['movement_type'] ?? '')));
+    $id = (int) ($movement['reference_id'] ?? 0);
+    if ($id < 1) {
+        return '';
+    }
+    return match ($type) {
+        'purchase_receipt', 'purchase_receipts' => site_url('purchase/receipts/' . $id),
+        'sales_delivery', 'sales_deliveries' => site_url('sales/deliveries/' . $id),
+        'stock_adjustment', 'so_stock_adjustment', 'manual_in', 'manual_out' => site_url('inventory/stock-adjustment'),
+        'production_work_order', 'work_order', 'production' => site_url('production/work-orders/' . $id),
+        default => '',
+    };
+};
+$directionClass = static fn (array $movement): string => ((string) ($movement['direction'] ?? '')) === 'in' ? 'success' : 'danger';
+?>
 <div class="row">
     <div class="col-md-3">
         <div class="card mini-stats-wid"><div class="card-body"><p class="text-muted mb-2">Opening Qty</p><h4 class="mb-0"><?= esc(number_format((float) $summary['opening_qty'], 4)) ?></h4><small class="text-muted">Value <?= esc(number_format((float) $summary['opening_value'], 2)) ?></small></div></div>
@@ -22,7 +39,7 @@
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
             <div>
                 <h4 class="card-title mb-1">Stock Card</h4>
-                <p class="text-muted mb-0">Audit trail chronological stock movement per item, batch, warehouse, and location.</p>
+                <p class="text-muted mb-0">Chronological audit trail from document source to inventory movement and GL.</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
                 <a href="<?= esc($exportUrl) ?>" class="btn btn-success"><i class="bx bx-download me-1"></i> Export XLSX</a>
@@ -94,7 +111,8 @@
                         <th>Warehouse</th>
                         <th>Location</th>
                         <th>Type</th>
-                        <th>Reference</th>
+                        <th>Source</th>
+                        <th>GL</th>
                         <th class="text-end">Qty In</th>
                         <th class="text-end">Qty Out</th>
                         <th class="text-end">Balance Qty</th>
@@ -106,7 +124,7 @@
                 <tbody>
                     <tr class="table-light">
                         <td><?= esc($filters['date_from']) ?></td>
-                        <td colspan="6" class="fw-semibold">Opening Balance</td>
+                        <td colspan="7" class="fw-semibold">Opening Balance</td>
                         <td class="text-end">-</td>
                         <td class="text-end">-</td>
                         <td class="text-end fw-semibold"><?= esc(number_format((float) $opening['qty'], 4)) ?></td>
@@ -116,20 +134,28 @@
                     </tr>
 
                     <?php foreach ($movements as $movement): ?>
+                        <?php $docUrl = $sourceUrl($movement); ?>
                         <tr>
                             <td><?= esc(substr((string) $movement['movement_date'], 0, 10)) ?></td>
-                            <td>
-                                <div class="fw-semibold"><?= esc($movement['item_code'] ?? '-') ?></div>
-                                <div class="text-muted small"><?= esc($movement['item_name'] ?? '') ?></div>
-                            </td>
+                            <td><div class="fw-semibold"><?= esc($movement['item_code'] ?? '-') ?></div><div class="text-muted small"><?= esc($movement['item_name'] ?? '') ?></div></td>
                             <td><?= esc(($movement['batch_no'] ?? '') !== '' ? $movement['batch_no'] : '-') ?></td>
                             <td><?= esc($movement['warehouse_code'] ?? '-') ?></td>
                             <td><?= esc($movement['location_code'] ?? '-') ?></td>
-                            <td><span class="badge bg-light text-dark"><?= esc($movement['movement_type'] ?? '-') ?></span></td>
                             <td>
-                                <div class="fw-semibold"><?= esc($movement['reference_no'] ?? '-') ?></div>
-                                <div class="text-muted small"><?= esc($movement['reference_type'] ?? '') ?></div>
+                                <span class="badge bg-<?= esc($directionClass($movement)) ?>"><?= esc(strtoupper((string) ($movement['direction'] ?? '-'))) ?></span>
+                                <div><small class="text-muted"><?= esc($movement['movement_type'] ?? '-') ?></small></div>
                             </td>
+                            <td>
+                                <div class="fw-semibold">
+                                    <?php if ($docUrl !== ''): ?>
+                                        <a href="<?= esc($docUrl) ?>"><?= esc($movement['reference_no'] ?? '-') ?></a>
+                                    <?php else: ?>
+                                        <?= esc($movement['reference_no'] ?? '-') ?>
+                                    <?php endif ?>
+                                </div>
+                                <div class="text-muted small"><?= esc($movement['reference_type'] ?? '') ?><?= ! empty($movement['id']) ? ' / MV#' . esc($movement['id']) : '' ?></div>
+                            </td>
+                            <td><?= ! empty($movement['gl_entry_id']) ? '<a href="' . site_url('gl/entries/' . (int) $movement['gl_entry_id']) . '">#' . esc($movement['gl_entry_id']) . '</a>' : '<span class="text-muted">-</span>' ?></td>
                             <td class="text-end text-success"><?= esc(number_format((float) $movement['qty_in'], 4)) ?></td>
                             <td class="text-end text-danger"><?= esc(number_format((float) $movement['qty_out'], 4)) ?></td>
                             <td class="text-end fw-semibold"><?= esc(number_format((float) $movement['running_qty'], 4)) ?></td>
@@ -140,7 +166,7 @@
                     <?php endforeach ?>
 
                     <?php if ($movements === []): ?>
-                        <tr><td colspan="13" class="text-center text-muted py-4">No stock movement found for selected filter.</td></tr>
+                        <tr><td colspan="14" class="text-center text-muted py-4">No stock movement found for selected filter.</td></tr>
                     <?php endif ?>
                 </tbody>
             </table>
