@@ -15,12 +15,13 @@ class StockAdjustmentController extends BaseController
         $contextItemCodes = $this->contextItemCodes();
 
         return view('inventory/stock_adjustments/form', [
-            'title' => 'Stock Adjustment',
+            'title' => $contextItemCodes !== [] ? 'SO Stock Adjustment' : 'Stock Adjustment',
             'items' => $this->masterRows('items', $contextItemCodes),
             'warehouses' => $this->masterRows('warehouses'),
             'locations' => $this->masterRows('locations'),
             'recentMovements' => $this->recentMovements($contextItemCodes),
             'contextItemCodes' => $contextItemCodes,
+            'contextQtyByCode' => $this->contextQtyByCode(),
             'sourceSoId' => $this->nullableInt($this->request->getGet('source_so_id')),
             'sourceSoNo' => trim((string) $this->request->getGet('source_so_no')),
         ]);
@@ -33,6 +34,10 @@ class StockAdjustmentController extends BaseController
 
         if ($companyId === null || $companyId < 1) {
             return redirect()->back()->withInput()->with('error', 'Active company is required.');
+        }
+
+        if (is_array($this->request->getPost('item_code'))) {
+            return $this->storeBulkSoAdjustment($tenant, $companyId);
         }
 
         if (! $this->validate([
@@ -65,7 +70,7 @@ class StockAdjustmentController extends BaseController
         }
 
         $item = $this->findItem($itemCode, $tenant);
-        $itemName = trim((string) ($item['name'] ?? $this->request->getPost('item_name')));
+        $itemName = trim((string) ($item['name'] ?? $item['item_name'] ?? $this->request->getPost('item_name')));
 
         if ($itemName === '') {
             $itemName = $itemCode;
@@ -98,6 +103,92 @@ class StockAdjustmentController extends BaseController
         return redirect()->to('/inventory/stock-adjustment')->with('message', 'Stock adjustment posted.');
     }
 
+    private function storeBulkSoAdjustment(TenantContext $tenant, int $companyId)
+    {
+        $warehouseId = $this->nullableInt($this->request->getPost('warehouse_id'));
+        if ($warehouseId === null) {
+            return redirect()->back()->withInput()->with('error', 'Warehouse is required for stock adjustment.');
+        }
+
+        $locationId = $this->resolveLocationId($warehouseId, $this->request->getPost('location_id'), $tenant);
+        $referenceNo = trim((string) ($this->request->getPost('reference_no') ?: 'ADJ-' . date('Ymd-His')));
+        $notes = trim((string) $this->request->getPost('notes'));
+        $sourceSoId = $this->nullableInt($this->request->getPost('source_so_id'));
+        $sourceSoNo = trim((string) $this->request->getPost('source_so_no'));
+
+        $itemCodes = (array) $this->request->getPost('item_code');
+        $itemNames = (array) $this->request->getPost('item_name');
+        $uoms = (array) $this->request->getPost('uom_code');
+        $qtys = (array) $this->request->getPost('qty');
+        $unitCosts = (array) $this->request->getPost('unit_cost');
+
+        $posted = 0;
+        $service = new InventoryStockService();
+
+        try {
+            $this->assertWarehouseLocation($warehouseId, $locationId, $tenant);
+
+            foreach ($itemCodes as $index => $rawCode) {
+                $itemCode = strtoupper(trim((string) $rawCode));
+                $qty = $this->toNumber($qtys[$index] ?? 0);
+
+                if ($itemCode === '' && $qty <= 0) {
+                    continue;
+                }
+                if ($itemCode === '') {
+                    throw new RuntimeException('Item code is required on every SO stock adjustment line.');
+                }
+                if ($qty <= 0) {
+                    continue;
+                }
+
+                $unitCost = $this->toNumber($unitCosts[$index] ?? 0);
+                if ($unitCost <= 0) {
+                    throw new RuntimeException('Unit cost must be greater than zero for item ' . $itemCode . '.');
+                }
+
+                $item = $this->findItem($itemCode, $tenant);
+                $itemName = trim((string) ($itemNames[$index] ?? $item['name'] ?? $item['item_name'] ?? ''));
+                if ($itemName === '') {
+                    $itemName = $itemCode;
+                }
+
+                $service->adjust([
+                    'company_id' => $companyId,
+                    'site_id' => $tenant->activeSiteId(),
+                    'warehouse_id' => $warehouseId,
+                    'location_id' => $locationId,
+                    'item_id' => isset($item['id']) ? (int) $item['id'] : null,
+                    'item_code' => $itemCode,
+                    'item_name' => $itemName,
+                    'uom_code' => trim((string) ($uoms[$index] ?? $item['uom_code'] ?? $item['base_uom_code'] ?? 'PCS')),
+                    'qty' => $qty,
+                    'unit_cost' => $unitCost,
+                    'movement_type' => 'stock_adjustment',
+                    'movement_date' => date('Y-m-d H:i:s'),
+                    'reference_type' => 'so_stock_adjustment',
+                    'reference_no' => $referenceNo,
+                    'notes' => $notes !== '' ? $notes : trim('SO stock adjustment ' . $sourceSoNo),
+                ], auth()->id());
+
+                $posted++;
+            }
+        } catch (RuntimeException $exception) {
+            return redirect()->back()->withInput()->with('error', $exception->getMessage());
+        }
+
+        if ($posted < 1) {
+            return redirect()->back()->withInput()->with('error', 'At least one SO item qty must be greater than zero.');
+        }
+
+        $message = 'SO stock adjustment posted for ' . $posted . ' item(s).';
+        if ($sourceSoId !== null) {
+            return redirect()->to('/sales/orders/' . $sourceSoId . '/deliver?warehouse_id=' . $warehouseId . '&location_id=' . $locationId)->with('message', $message . ' Stock is refreshed for delivery.');
+        }
+
+        return redirect()->to('/inventory/stock-adjustment')->with('message', $message);
+    }
+
     private function findItem(string $itemCode, TenantContext $tenant): ?array
     {
         $db = Database::connect();
@@ -105,10 +196,16 @@ class StockAdjustmentController extends BaseController
             return null;
         }
 
-        $builder = $db->table('items')->where('code', $itemCode);
+        $builder = $db->table('items');
+        $builder->groupStart();
+        if ($db->fieldExists('code', 'items')) {
+            $builder->where('code', $itemCode);
+        }
         if ($db->fieldExists('item_code', 'items')) {
             $builder->orWhere('item_code', $itemCode);
         }
+        $builder->groupEnd();
+
         if ($db->fieldExists('deleted_at', 'items')) {
             $builder->where('deleted_at', null);
         }
@@ -307,6 +404,26 @@ class StockAdjustmentController extends BaseController
         }
 
         return array_values(array_unique($codes));
+    }
+
+    private function contextQtyByCode(): array
+    {
+        $raw = $this->request->getGet('item_qtys') ?? '';
+        $values = is_array($raw) ? $raw : explode(',', (string) $raw);
+        $qtyByCode = [];
+        foreach ($values as $value) {
+            $parts = explode(':', (string) $value, 2);
+            if (count($parts) !== 2) {
+                continue;
+            }
+            $code = strtoupper(trim($parts[0]));
+            $qty = $this->toNumber($parts[1]);
+            if ($code !== '' && $qty > 0) {
+                $qtyByCode[$code] = $qty;
+            }
+        }
+
+        return $qtyByCode;
     }
 
     private function nullableInt(mixed $value): ?int
