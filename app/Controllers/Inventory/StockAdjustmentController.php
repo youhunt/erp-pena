@@ -12,12 +12,17 @@ class StockAdjustmentController extends BaseController
 {
     public function create(): string
     {
+        $contextItemCodes = $this->contextItemCodes();
+
         return view('inventory/stock_adjustments/form', [
             'title' => 'Stock Adjustment',
-            'items' => $this->masterRows('items'),
+            'items' => $this->masterRows('items', $contextItemCodes),
             'warehouses' => $this->masterRows('warehouses'),
             'locations' => $this->masterRows('locations'),
-            'recentMovements' => $this->recentMovements(),
+            'recentMovements' => $this->recentMovements($contextItemCodes),
+            'contextItemCodes' => $contextItemCodes,
+            'sourceSoId' => $this->nullableInt($this->request->getGet('source_so_id')),
+            'sourceSoNo' => trim((string) $this->request->getGet('source_so_no')),
         ]);
     }
 
@@ -101,6 +106,9 @@ class StockAdjustmentController extends BaseController
         }
 
         $builder = $db->table('items')->where('code', $itemCode);
+        if ($db->fieldExists('item_code', 'items')) {
+            $builder->orWhere('item_code', $itemCode);
+        }
         if ($db->fieldExists('deleted_at', 'items')) {
             $builder->where('deleted_at', null);
         }
@@ -225,7 +233,7 @@ class StockAdjustmentController extends BaseController
         }
     }
 
-    private function masterRows(string $table): array
+    private function masterRows(string $table, array $contextItemCodes = []): array
     {
         $tenant = new TenantContext(session());
         $db = Database::connect();
@@ -255,11 +263,15 @@ class StockAdjustmentController extends BaseController
                 $builder->where('site_id', $tenant->activeSiteId());
             }
         }
+        if ($table === 'items' && $contextItemCodes !== []) {
+            $codeField = $db->fieldExists('item_code', 'items') ? 'item_code' : 'code';
+            $builder->whereIn($codeField, $contextItemCodes);
+        }
 
         return $builder->orderBy($db->fieldExists('code', $table) ? 'code' : 'id', 'ASC')->get()->getResultArray();
     }
 
-    private function recentMovements(): array
+    private function recentMovements(array $contextItemCodes = []): array
     {
         $tenant = new TenantContext(session());
         $db = Database::connect();
@@ -275,8 +287,26 @@ class StockAdjustmentController extends BaseController
         if ($tenant->activeSiteId() !== null) {
             $builder->where('site_id', $tenant->activeSiteId());
         }
+        if ($contextItemCodes !== []) {
+            $builder->whereIn('item_code', $contextItemCodes);
+        }
 
         return $builder->orderBy('id', 'DESC')->get(20)->getResultArray();
+    }
+
+    private function contextItemCodes(): array
+    {
+        $raw = $this->request->getGet('item_codes') ?? $this->request->getGet('item_code') ?? '';
+        $values = is_array($raw) ? $raw : explode(',', (string) $raw);
+        $codes = [];
+        foreach ($values as $value) {
+            $code = strtoupper(trim((string) $value));
+            if ($code !== '') {
+                $codes[] = $code;
+            }
+        }
+
+        return array_values(array_unique($codes));
     }
 
     private function nullableInt(mixed $value): ?int
