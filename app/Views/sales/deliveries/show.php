@@ -13,6 +13,7 @@ $statusClass = match ($status) {
 };
 $hasCogsGl = ! empty($delivery['gl_entry_id']);
 $hasInvoice = ! empty($existingInvoice);
+$hasAllocation = ! empty($delivery['allocation_order_id']);
 $hasMovements = false;
 foreach ($lines as $auditLine) {
     if (! empty($auditLine['stock_movement_id'])) {
@@ -66,6 +67,7 @@ $marginLabel = $grossProfit === null ? 'not calculated' : ($grossProfit >= 0 ? '
                         <tr><th>Delivery No</th><td><?= esc($delivery['delivery_no']) ?></td></tr>
                         <tr><th>Date</th><td><?= esc($delivery['delivery_date']) ?></td></tr>
                         <tr><th>SO No</th><td><a href="<?= site_url('sales/orders/' . $delivery['sales_order_id']) ?>"><?= esc($delivery['so_no']) ?></a></td></tr>
+                        <tr><th>Allocation</th><td><?= $hasAllocation ? '<a href="' . site_url('sales/allocations/' . (int) $delivery['allocation_order_id']) . '">#' . esc($delivery['allocation_order_id']) . '</a>' : '-' ?></td></tr>
                         <tr><th>Customer</th><td><?= esc(($delivery['customer_code'] ?? '-') . ' ' . ($delivery['customer_name'] ?? '')) ?></td></tr>
                         <tr><th>Company</th><td><?= esc(erp_company_label($delivery)) ?></td></tr>
                         <tr><th>Site</th><td><?= esc(erp_site_label($delivery)) ?></td></tr>
@@ -84,6 +86,9 @@ $marginLabel = $grossProfit === null ? 'not calculated' : ($grossProfit >= 0 ? '
                 </table>
                 <div class="d-flex flex-wrap gap-2 mt-3">
                     <a href="<?= site_url('sales/orders/' . $delivery['sales_order_id']) ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back to SO</a>
+                    <?php if ($hasAllocation): ?>
+                        <a href="<?= site_url('sales/allocations/' . (int) $delivery['allocation_order_id']) ?>" class="btn btn-outline-success"><i class="bx bx-link me-1"></i> Open Allocation</a>
+                    <?php endif ?>
                     <a href="<?= site_url('inventory/stock-card?item_code=' . urlencode((string) ($lines[0]['item_code'] ?? ''))) ?>" class="btn btn-outline-info"><i class="bx bx-list-ul me-1"></i> Stock Card</a>
                     <a href="<?= site_url('print/sales-deliveries/' . (int) $delivery['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
                     <?php if ($hasCogsGl): ?>
