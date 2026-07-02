@@ -2,6 +2,7 @@
 
 <?= $this->section('content') ?>
 <?php
+helper('master_display');
 $oldQtys = old('qty_delivered', []);
 if (! is_array($oldQtys)) {
     $oldQtys = [];
@@ -32,14 +33,14 @@ if (! is_array($oldQtys)) {
             <?php if (session('message')): ?><div class="alert alert-success"><?= esc(session('message')) ?></div><?php endif ?>
 
             <div class="alert alert-info">
-                Delivery ini mengambil qty dari <strong>Allocation Line</strong>. Warehouse, Location, dan Batch mengikuti hasil allocation supaya reserved stock yang sama langsung dilepas dan dikeluarkan.
+                This delivery is created from <strong>Allocation Lines</strong>. Warehouse, location, and batch follow the allocation result so the same reserved stock is released and issued.
             </div>
 
             <div class="row g-3">
                 <div class="col-md-4">
                     <label class="form-label">Delivery No</label>
                     <input type="text" name="delivery_no" class="form-control" placeholder="<?= esc(($suggestedDeliveryNo ?? '') !== '' ? $suggestedDeliveryNo : 'Auto if blank', 'attr') ?>" value="<?= esc(old('delivery_no')) ?>">
-                    <small class="text-muted">Kosongkan untuk nomor otomatis.</small>
+                    <small class="text-muted">Leave blank for automatic numbering.</small>
                 </div>
                 <div class="col-md-4">
                     <label class="form-label">Delivery Date</label>
@@ -63,8 +64,8 @@ if (! is_array($oldQtys)) {
                             <th>Alloc Line</th>
                             <th>SO Line</th>
                             <th>Item</th>
-                            <th>Whs</th>
-                            <th>Loc</th>
+                            <th>Warehouse</th>
+                            <th>Location</th>
                             <th>Batch</th>
                             <th class="text-end">Allocated</th>
                             <th class="text-end">Delivered</th>
@@ -86,8 +87,8 @@ if (! is_array($oldQtys)) {
                             </td>
                             <td><?= esc($line['soline'] ?? '-') ?></td>
                             <td><div class="fw-semibold"><?= esc($line['itemcode'] ?? '-') ?></div><small class="text-muted"><?= esc($line['itemname'] ?? '-') ?></small></td>
-                            <td><?= esc($line['whs'] ?? '-') ?></td>
-                            <td><?= esc($line['loc'] ?? '-') ?></td>
+                            <td><?= esc(erp_warehouse_label($line, 'whs')) ?></td>
+                            <td><?= esc(erp_location_label($line, 'loc')) ?></td>
                             <td><?= esc($line['batchno'] ?? '-') ?></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['allocateqty'] ?? 0), 6)) ?></td>
                             <td class="text-end"><?= esc(number_format((float) ($line['delivered_qty'] ?? 0), 6)) ?></td>
@@ -112,7 +113,7 @@ if (! is_array($oldQtys)) {
                 </table>
             </div>
             <div class="d-flex gap-2 mt-4">
-                <button type="submit" class="btn btn-success" <?= $lines === [] ? 'disabled' : '' ?> onclick="return confirm('Post delivery dari allocation ini? Reserved stock akan dilepas dan stock inventory akan keluar.')"><i class="bx bx-send me-1"></i> Post Delivery from Allocation</button>
+                <button type="submit" class="btn btn-success" <?= $lines === [] ? 'disabled' : '' ?> onclick="return confirm('Post this delivery from allocation? Reserved stock will be released and inventory stock will be issued.')"><i class="bx bx-send me-1"></i> Post Delivery from Allocation</button>
                 <a href="<?= site_url('sales/allocations/' . (int) $allocation['id']) ?>" class="btn btn-light">Cancel</a>
             </div>
         </div>
