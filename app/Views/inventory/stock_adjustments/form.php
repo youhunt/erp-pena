@@ -1,15 +1,34 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
+<?php
+$contextItemCodes ??= [];
+$sourceSoNo ??= '';
+$defaultContextItemCode = '';
+foreach ($items as $contextItem) {
+    $defaultContextItemCode = (string) ($contextItem['code'] ?? $contextItem['item_code'] ?? '');
+    if ($defaultContextItemCode !== '') {
+        break;
+    }
+}
+$selectedItemCode = (string) old('item_code', count($items) === 1 ? $defaultContextItemCode : '');
+?>
 <div class="row">
     <div class="col-xl-5">
         <div class="card">
             <div class="card-body">
                 <h4 class="card-title mb-1">Stock Adjustment</h4>
-                <p class="text-muted mb-3">Koreksi stok manual. Pilih warehouse, lalu pilih location/item.</p>
+                <p class="text-muted mb-3">Manual stock correction. Select warehouse, location, item, qty, and unit cost.</p>
+
+                <?php if ($contextItemCodes !== []): ?>
+                    <div class="alert alert-primary py-2">
+                        <strong>SO item context<?= $sourceSoNo !== '' ? ' - ' . esc($sourceSoNo) : '' ?>:</strong>
+                        this page is filtered to the Sales Order items only: <?= esc(implode(', ', $contextItemCodes)) ?>.
+                    </div>
+                <?php endif ?>
 
                 <div class="alert alert-info py-2">
-                    <strong>Prosedur:</strong> pilih Warehouse → pilih Location → pilih Item → isi Qty dan Unit Cost → Post Adjustment.
+                    <strong>Procedure:</strong> select Warehouse → select Location → select Item → fill Qty and Unit Cost → Post Adjustment.
                 </div>
 
                 <?php if (session('error')): ?>
@@ -21,7 +40,9 @@
 
                 <?php if ($items === []): ?>
                     <div class="alert alert-warning">
-                        Master item belum ada / belum cocok dengan active company-site. Isi <strong>Manual Item Code</strong> di bawah untuk tetap testing stock engine.
+                        <?= $contextItemCodes !== []
+                            ? 'The Sales Order item was not found in item master for the active company/site. Fill Manual Item Code to continue testing stock engine.'
+                            : 'Item master is empty or does not match the active company-site. Fill Manual Item Code below to continue testing stock engine.' ?>
                     </div>
                 <?php endif ?>
 
@@ -37,7 +58,7 @@
                         <div class="col-md-6">
                             <label class="form-label">Warehouse <span class="text-danger">*</span></label>
                             <select name="warehouse_id" id="warehouseSelect" class="form-select" required>
-                                <option value="">Pilih / cari Warehouse</option>
+                                <option value="">Select / search Warehouse</option>
                                 <?php foreach ($warehouses as $warehouse): ?>
                                     <?php $warehouseId = (int) $warehouse['id']; ?>
                                     <option value="<?= $warehouseId ?>" <?= (string) old('warehouse_id') === (string) $warehouseId ? 'selected' : '' ?>>
@@ -45,7 +66,7 @@
                                     </option>
                                 <?php endforeach ?>
                             </select>
-                            <div class="form-text">Warehouse wajib dipilih agar stok masuk ke lokasi yang jelas.</div>
+                            <div class="form-text">Warehouse is required so stock is posted to a clear storage location.</div>
                         </div>
 
                         <div class="col-md-6">
@@ -59,7 +80,7 @@
                                     </option>
                                 <?php endforeach ?>
                             </select>
-                            <div class="form-text" id="locationHelp">Pilih Auto Location jika ragu; sistem mengambil location pertama sesuai warehouse.</div>
+                            <div class="form-text" id="locationHelp">Select Auto Location if unsure; the system will use the first location for the selected warehouse.</div>
                         </div>
                     </div>
 
@@ -69,34 +90,34 @@
                             <option value="">Manual Item / Select Item</option>
                             <?php foreach ($items as $item): ?>
                                 <?php
-                                    $itemCode = (string) ($item['code'] ?? '');
+                                    $itemCode = (string) ($item['code'] ?? $item['item_code'] ?? '');
                                     $itemUom = (string) ($item['uom_code'] ?? $item['base_uom_code'] ?? 'PCS');
                                     $itemCost = (string) ($item['purchase_price'] ?? $item['standard_cost'] ?? $item['unit_cost'] ?? $item['avg_cost'] ?? '0');
                                 ?>
-                                <option value="<?= esc($itemCode) ?>" data-name="<?= esc($item['name'] ?? '', 'attr') ?>" data-uom="<?= esc($itemUom, 'attr') ?>" data-cost="<?= esc($itemCost, 'attr') ?>" <?= old('item_code') === $itemCode ? 'selected' : '' ?>>
-                                    <?= esc(($item['code'] ?? '-') . ' - ' . ($item['name'] ?? '-')) ?>
+                                <option value="<?= esc($itemCode) ?>" data-name="<?= esc($item['name'] ?? $item['item_name'] ?? '', 'attr') ?>" data-uom="<?= esc($itemUom, 'attr') ?>" data-cost="<?= esc($itemCost, 'attr') ?>" <?= $selectedItemCode === $itemCode ? 'selected' : '' ?>>
+                                    <?= esc(($itemCode ?: '-') . ' - ' . ($item['name'] ?? $item['item_name'] ?? '-')) ?>
                                 </option>
                             <?php endforeach ?>
                         </select>
-                        <div class="form-text">Pilih dari master item agar nama, UoM, dan unit cost terisi otomatis.</div>
+                        <div class="form-text">When opened from SO Delivery, this list is limited to the SO items only.</div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Manual Item Code</label>
-                        <input type="text" name="manual_item_code" id="manualItemCode" class="form-control" value="<?= esc(old('manual_item_code')) ?>" placeholder="Contoh: ITEM-001">
-                        <div class="form-text">Isi manual hanya jika item belum ada di master.</div>
+                        <input type="text" name="manual_item_code" id="manualItemCode" class="form-control" value="<?= esc(old('manual_item_code', $items === [] && $contextItemCodes !== [] ? $contextItemCodes[0] : '')) ?>" placeholder="Example: ITEM-001">
+                        <div class="form-text">Fill manually only if the item does not exist in item master.</div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Item Name</label>
-                        <input type="text" name="item_name" id="itemName" class="form-control" value="<?= esc(old('item_name')) ?>" placeholder="Contoh: Barang Testing">
+                        <input type="text" name="item_name" id="itemName" class="form-control" value="<?= esc(old('item_name')) ?>" placeholder="Example: Testing Item">
                     </div>
 
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Qty +/- <span class="text-danger">*</span></label>
                             <input type="number" step="0.0001" name="qty" id="qtyInput" class="form-control text-end" required value="<?= esc(old('qty', '1')) ?>">
-                            <div class="form-text">Positif tambah stok, negatif kurangi stok.</div>
+                            <div class="form-text">Positive qty adds stock, negative qty reduces stock.</div>
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label">UoM</label>
@@ -105,13 +126,13 @@
                         <div class="col-md-4 mb-3">
                             <label class="form-label">Unit Cost</label>
                             <input type="number" step="0.000001" name="unit_cost" id="unitCost" class="form-control text-end" value="<?= esc(old('unit_cost', '0')) ?>">
-                            <div class="form-text">Wajib &gt; 0 untuk tambah stok.</div>
+                            <div class="form-text">Required &gt; 0 when adding stock.</div>
                         </div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">Notes</label>
-                        <textarea name="notes" class="form-control" rows="3"><?= esc(old('notes')) ?></textarea>
+                        <textarea name="notes" class="form-control" rows="3"><?= esc(old('notes', $sourceSoNo !== '' ? 'Stock adjustment for Sales Order ' . $sourceSoNo : '')) ?></textarea>
                     </div>
 
                     <div class="d-flex gap-2">
@@ -128,7 +149,7 @@
     <div class="col-xl-7">
         <div class="card">
             <div class="card-body">
-                <h4 class="card-title mb-3">Recent Stock Movements</h4>
+                <h4 class="card-title mb-3">Recent Stock Movements<?= $contextItemCodes !== [] ? ' for SO Items' : '' ?></h4>
                 <div class="table-responsive">
                     <table class="table table-sm table-nowrap align-middle mb-0">
                         <thead class="table-light">
@@ -190,14 +211,14 @@ document.addEventListener('DOMContentLoaded', function () {
         const warehouseId = String(warehouseSelect.value || '');
         if (!warehouseId) {
             locationSelect.value = '__auto__';
-            locationHelp.textContent = 'Pilih warehouse dulu agar location bisa dipastikan.';
+            locationHelp.textContent = 'Select warehouse first so the location can be resolved.';
             refreshSelect2(locationSelect);
             return;
         }
 
         const current = locationSelect.options[locationSelect.selectedIndex];
         if (current && current.value && current.value !== '__auto__' && String(current.dataset.warehouseId || '') === warehouseId) {
-            locationHelp.textContent = 'Location valid untuk warehouse yang dipilih.';
+            locationHelp.textContent = 'Location is valid for the selected warehouse.';
             return;
         }
 
@@ -210,10 +231,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (firstMatchValue) {
             locationSelect.value = firstMatchValue;
-            locationHelp.textContent = 'Location otomatis dipilih sesuai warehouse. Bisa diganti jika perlu.';
+            locationHelp.textContent = 'Location was selected automatically based on the warehouse. You can change it if needed.';
         } else {
             locationSelect.value = '__auto__';
-            locationHelp.textContent = 'Belum ada location untuk warehouse ini. Sistem akan mengambil/membuat MAIN Location saat posting.';
+            locationHelp.textContent = 'No location exists for this warehouse. The system will use/create MAIN Location when posting.';
         }
 
         refreshSelect2(locationSelect);
