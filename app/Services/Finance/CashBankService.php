@@ -92,14 +92,14 @@ class CashBankService
                 'posted_at' => date('Y-m-d H:i:s'),
                 'posted_by' => $userId,
                 'created_by' => $userId,
-                'updated_by' => $userId,
+                'updated_by' => $userId
             ]);
             $entryId = (int) $entryModel->getInsertID();
             if ($entryId < 1) {
                 throw new RuntimeException('Failed to create cash/bank entry.');
             }
 
-            $cashBankGlAccount = trim((string) ($account['gl_account_no'] ?? ''));
+            $cashBankGlAccount = $this->resolveCashBankGlAccount($companyId, (string) ($account['account_type'] ?? 'bank'), (string) ($account['gl_account_no'] ?? ''));
             $glEntryId = $this->postGl($data + [
                 'company_id' => $companyId,
                 'site_id' => $data['site_id'] ?? null,
@@ -108,7 +108,7 @@ class CashBankService
                 'entry_type' => $entryType,
                 'amount' => $amount,
                 'base_amount' => $baseAmount,
-                'cash_bank_gl_account_no' => $cashBankGlAccount !== '' ? $cashBankGlAccount : (new PostingProfileService())->account($companyId, 'cashbank', 'cash_bank', '1100'),
+                'cash_bank_gl_account_no' => $cashBankGlAccount,
                 'cash_bank_name' => $account['cash_bank_name'] ?? $account['cash_bank_code'],
                 'currency_code' => $currencyCode,
                 'base_currency' => $baseCurrency,
@@ -239,6 +239,84 @@ class CashBankService
         }
 
         return $rate;
+    }
+
+    private function resolveCashBankGlAccount(int $companyId, string $accountType, string $configuredAccountNo): string
+    {
+        $configuredAccountNo = trim($configuredAccountNo);
+        if ($configuredAccountNo !== '' && $this->isPostableAccount($companyId, $configuredAccountNo)) {
+            return $configuredAccountNo;
+        }
+
+        $profileAccount = (new PostingProfileService())->account($companyId, 'cashbank', 'cash_bank', '1120');
+        if ($profileAccount !== '' && $this->isPostableAccount($companyId, $profileAccount)) {
+            return $profileAccount;
+        }
+
+        $candidateAccounts = strtolower($accountType) === 'cash'
+            ? ['1110', '1101', '1120', '1121']
+            : ['1120', '1121', '1110', '1101'];
+
+        foreach ($candidateAccounts as $accountNo) {
+            if ($this->isPostableAccount($companyId, $accountNo)) {
+                return $accountNo;
+            }
+        }
+
+        $fallback = $this->firstPostableCashBankAccount($companyId, $accountType);
+        if ($fallback !== '') {
+            return $fallback;
+        }
+
+        throw new RuntimeException('Postable cash/bank GL account is not configured. Set Cash/Bank GL Account or GL Posting Profile cashbank.cash_bank to a postable account, for example 1120.');
+    }
+
+    private function isPostableAccount(int $companyId, string $accountNo): bool
+    {
+        $accountNo = trim($accountNo);
+        if ($accountNo === '') {
+            return false;
+        }
+
+        $db = Database::connect();
+        if (! $db->tableExists('chart_accounts')) {
+            return false;
+        }
+
+        $row = $db->table('chart_accounts')
+            ->select('id')
+            ->where('company_id', $companyId)
+            ->where('account_no', $accountNo)
+            ->where('is_active', 1)
+            ->where('is_postable', 1)
+            ->get(1)
+            ->getRowArray();
+
+        return $row !== null;
+    }
+
+    private function firstPostableCashBankAccount(int $companyId, string $accountType): string
+    {
+        $db = Database::connect();
+        if (! $db->tableExists('chart_accounts')) {
+            return '';
+        }
+
+        $keyword = strtolower($accountType) === 'cash' ? 'cash' : 'bank';
+        $row = $db->table('chart_accounts')
+            ->select('account_no')
+            ->where('company_id', $companyId)
+            ->where('is_active', 1)
+            ->where('is_postable', 1)
+            ->groupStart()
+                ->like('LOWER(account_no)', strtolower($accountType) === 'cash' ? '111' : '112')
+                ->orLike('LOWER(account_name)', $keyword)
+            ->groupEnd()
+            ->orderBy('account_no', 'ASC')
+            ->get(1)
+            ->getRowArray();
+
+        return trim((string) ($row['account_no'] ?? ''));
     }
 
     private function postGl(array $data, int $entryId, ?int $userId): ?int
