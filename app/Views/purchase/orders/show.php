@@ -4,6 +4,7 @@
 <?php
 $status = (string) ($order['document_status'] ?? $order['status'] ?? 'draft');
 $poNo = trim((string) ($order['po_no'] ?? '-'));
+$poId = (int) ($order['id'] ?? 0);
 $hasReceivedLine = false;
 foreach ($lines as $line) {
     if ((float) ($line['qty_received'] ?? 0) > 0) {
@@ -81,22 +82,50 @@ usort($relatedGlEntries, static function (array $a, array $b) use ($businessSequ
     }
     return strcmp((string) ($a['document_date'] ?? ''), (string) ($b['document_date'] ?? ''));
 });
-$flowRows = [
-    ['label' => '1. Purchase Receipt', 'module' => 'Purchase Receipt', 'role' => 'posting', 'description' => 'Stock in + Inventory / GRNI GL'],
-    ['label' => '2. A/P Invoice', 'module' => 'Purchase Invoice', 'role' => 'posting', 'description' => 'Open supplier payable + AP GL'],
-    ['label' => '3. A/P Payment', 'module' => 'A/P Payment', 'role' => 'posting', 'description' => 'Cash/bank out + AP payment GL'],
-    ['label' => '4. Cancel A/P Payment', 'module' => 'A/P Payment', 'role' => 'reversal', 'description' => 'Reverse cash/bank and reopen invoice balance'],
-    ['label' => '5. Cancel A/P Invoice', 'module' => 'Purchase Invoice', 'role' => 'reversal', 'description' => 'Reverse AP invoice GL and allow receipt reversal'],
-    ['label' => '6. Reverse Receipt', 'module' => 'Purchase Receipt', 'role' => 'reversal', 'description' => 'Stock out reversal + GRNI/Inventory reversal'],
-];
-$findFlowEntry = static function (array $row) use ($relatedGlEntries): ?array {
-    foreach ($relatedGlEntries as $entry) {
-        if (($entry['module'] ?? '') === $row['module'] && ($entry['role'] ?? '') === $row['role']) {
-            return $entry;
-        }
-    }
-    return null;
+
+$purchaseReceipts = [];
+$purchaseInvoices = [];
+$apPayments = [];
+if ($poId > 0 && $db->tableExists('purchase_receipts')) {
+    $purchaseReceipts = $db->table('purchase_receipts')->where('purchase_order_id', $poId)->orderBy('receipt_date', 'ASC')->orderBy('id', 'ASC')->get()->getResultArray();
+}
+if ($poId > 0 && $db->tableExists('purchase_invoices')) {
+    $purchaseInvoices = $db->table('purchase_invoices')->where('purchase_order_id', $poId)->orderBy('invoice_date', 'ASC')->orderBy('id', 'ASC')->get()->getResultArray();
+}
+$invoiceIds = array_values(array_filter(array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $purchaseInvoices)));
+if ($invoiceIds !== [] && $db->tableExists('ap_payments')) {
+    $apPayments = $db->table('ap_payments')->whereIn('purchase_invoice_id', $invoiceIds)->orderBy('payment_date', 'ASC')->orderBy('id', 'ASC')->get()->getResultArray();
+}
+$toDoc = static function (array $row, string $docNoField, string $dateField, string $route): array {
+    return [
+        'id' => (int) ($row['id'] ?? 0),
+        'document_no' => (string) ($row[$docNoField] ?? ('#' . ($row['id'] ?? ''))),
+        'document_date' => (string) ($row[$dateField] ?? '-'),
+        'status' => (string) ($row['status'] ?? $row['document_status'] ?? '-'),
+        'url' => site_url($route . '/' . (int) ($row['id'] ?? 0)),
+        'gl_entry_id' => (int) ($row['gl_entry_id'] ?? 0),
+        'reversal_gl_entry_id' => (int) ($row['reversal_gl_entry_id'] ?? 0),
+    ];
 };
+$receiptDocs = array_map(static fn (array $row): array => $toDoc($row, 'receipt_no', 'receipt_date', 'purchase/receipts'), $purchaseReceipts);
+$invoiceDocs = array_map(static fn (array $row): array => $toDoc($row, 'invoice_no', 'invoice_date', 'ap/purchase-invoices'), $purchaseInvoices);
+$paymentDocs = array_map(static fn (array $row): array => $toDoc($row, 'payment_no', 'payment_date', 'ap/payments'), $apPayments);
+$documentMap = [
+    'Purchase Receipt|posting' => $receiptDocs,
+    'Purchase Invoice|posting' => $invoiceDocs,
+    'A/P Payment|posting' => $paymentDocs,
+    'A/P Payment|reversal' => array_values(array_filter($paymentDocs, static fn (array $doc): bool => (int) ($doc['reversal_gl_entry_id'] ?? 0) > 0 || strtolower((string) ($doc['status'] ?? '')) === 'cancelled')),
+    'Purchase Invoice|reversal' => array_values(array_filter($invoiceDocs, static fn (array $doc): bool => (int) ($doc['reversal_gl_entry_id'] ?? 0) > 0 || strtolower((string) ($doc['status'] ?? '')) === 'cancelled')),
+    'Purchase Receipt|reversal' => array_values(array_filter($receiptDocs, static fn (array $doc): bool => (int) ($doc['reversal_gl_entry_id'] ?? 0) > 0 || in_array(strtolower((string) ($doc['status'] ?? '')), ['reversed', 'cancelled'], true))),
+];
+$flowRows = [
+    ['label' => '1. Purchase Receipt', 'key' => 'Purchase Receipt|posting', 'role' => 'posting', 'description' => 'Stock in + Inventory / GRNI GL'],
+    ['label' => '2. A/P Invoice', 'key' => 'Purchase Invoice|posting', 'role' => 'posting', 'description' => 'Open supplier payable + AP GL'],
+    ['label' => '3. A/P Payment', 'key' => 'A/P Payment|posting', 'role' => 'posting', 'description' => 'Cash/bank out + AP payment GL'],
+    ['label' => '4. Cancel A/P Payment', 'key' => 'A/P Payment|reversal', 'role' => 'reversal', 'description' => 'Reverse cash/bank and reopen invoice balance'],
+    ['label' => '5. Cancel A/P Invoice', 'key' => 'Purchase Invoice|reversal', 'role' => 'reversal', 'description' => 'Reverse AP invoice GL and allow receipt reversal'],
+    ['label' => '6. Reverse Receipt', 'key' => 'Purchase Receipt|reversal', 'role' => 'reversal', 'description' => 'Stock out reversal + GRNI/Inventory reversal'],
+];
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -131,40 +160,14 @@ $findFlowEntry = static function (array $row) use ($relatedGlEntries): ?array {
                 <div class="d-flex flex-wrap gap-2 mt-3">
                     <a href="<?= site_url('purchase/orders') ?>" class="btn btn-light"><i class="bx bx-arrow-back me-1"></i> Back</a>
                     <a href="<?= site_url('print/purchase-orders/' . (int) $order['id']) ?>" target="_blank" class="btn btn-outline-secondary"><i class="bx bx-printer me-1"></i> Print</a>
-                    <?php if ($canEditPo): ?>
-                        <a href="<?= site_url('purchase/orders/' . $order['id'] . '/edit') ?>" class="btn btn-outline-primary"><i class="bx bx-edit me-1"></i> Edit</a>
-                    <?php endif ?>
-                    <?php if (in_array($status, ['cancelled', 'closed'], true)): ?>
-                        <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/activate') ?>">
-                            <?= csrf_field() ?>
-                            <button class="btn btn-success" onclick="return confirm('Activate this PO? Closed PO will return to received/partial status based on receipt qty.')"><i class="bx bx-reset me-1"></i> Activate</button>
-                        </form>
-                    <?php endif ?>
-                    <?php if ($canReturnToDraft): ?>
-                        <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/activate') ?>">
-                            <?= csrf_field() ?>
-                            <button class="btn btn-warning" onclick="return confirm('Return this PO to draft so it can be edited?')"><i class="bx bx-undo me-1"></i> Return to Draft</button>
-                        </form>
-                    <?php endif ?>
-                    <?php if ($status === 'draft'): ?>
-                        <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/submit') ?>"><?= csrf_field() ?><button class="btn btn-info" onclick="return confirm('Submit this PO?')">Submit</button></form>
-                    <?php endif ?>
-                    <?php if ($status === 'submitted'): ?>
-                        <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/approve') ?>"><?= csrf_field() ?><button class="btn btn-success" onclick="return confirm('Approve this PO?')">Approve</button></form>
-                    <?php endif ?>
-                    <?php if (in_array($status, ['approved','partial_received'], true)): ?>
-                        <a href="<?= site_url('purchase/orders/' . $order['id'] . '/receive') ?>" class="btn btn-primary"><i class="bx bx-package me-1"></i> Receive</a>
-                    <?php endif ?>
-                    <?php if ($status === 'received'): ?>
-                        <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/close') ?>"><?= csrf_field() ?><button class="btn btn-dark" onclick="return confirm('Close this PO?')">Close</button></form>
-                    <?php endif ?>
-                    <?php if (in_array($status, ['draft','submitted'], true)): ?>
-                        <form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/cancel') ?>" class="d-flex gap-1">
-                            <?= csrf_field() ?>
-                            <input type="hidden" name="cancel_reason" value="Cancelled from PO detail">
-                            <button class="btn btn-outline-danger" onclick="return confirm('Cancel this PO?')">Cancel</button>
-                        </form>
-                    <?php endif ?>
+                    <?php if ($canEditPo): ?><a href="<?= site_url('purchase/orders/' . $order['id'] . '/edit') ?>" class="btn btn-outline-primary"><i class="bx bx-edit me-1"></i> Edit</a><?php endif ?>
+                    <?php if (in_array($status, ['cancelled', 'closed'], true)): ?><form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/activate') ?>"><?= csrf_field() ?><button class="btn btn-success" onclick="return confirm('Activate this PO? Closed PO will return to received/partial status based on receipt qty.')"><i class="bx bx-reset me-1"></i> Activate</button></form><?php endif ?>
+                    <?php if ($canReturnToDraft): ?><form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/activate') ?>"><?= csrf_field() ?><button class="btn btn-warning" onclick="return confirm('Return this PO to draft so it can be edited?')"><i class="bx bx-undo me-1"></i> Return to Draft</button></form><?php endif ?>
+                    <?php if ($status === 'draft'): ?><form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/submit') ?>"><?= csrf_field() ?><button class="btn btn-info" onclick="return confirm('Submit this PO?')">Submit</button></form><?php endif ?>
+                    <?php if ($status === 'submitted'): ?><form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/approve') ?>"><?= csrf_field() ?><button class="btn btn-success" onclick="return confirm('Approve this PO?')">Approve</button></form><?php endif ?>
+                    <?php if (in_array($status, ['approved','partial_received'], true)): ?><a href="<?= site_url('purchase/orders/' . $order['id'] . '/receive') ?>" class="btn btn-primary"><i class="bx bx-package me-1"></i> Receive</a><?php endif ?>
+                    <?php if ($status === 'received'): ?><form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/close') ?>"><?= csrf_field() ?><button class="btn btn-dark" onclick="return confirm('Close this PO?')">Close</button></form><?php endif ?>
+                    <?php if (in_array($status, ['draft','submitted'], true)): ?><form method="post" action="<?= site_url('purchase/orders/' . $order['id'] . '/cancel') ?>" class="d-flex gap-1"><?= csrf_field() ?><input type="hidden" name="cancel_reason" value="Cancelled from PO detail"><button class="btn btn-outline-danger" onclick="return confirm('Cancel this PO?')">Cancel</button></form><?php endif ?>
                 </div>
             </div>
         </div>
@@ -175,13 +178,7 @@ $findFlowEntry = static function (array $row) use ($relatedGlEntries): ?array {
                 <table class="table table-sm mb-0">
                     <tbody>
                         <tr><th>Subtotal</th><td class="text-end"><?= esc(number_format($subtotal, 2)) ?></td></tr>
-                        <tr class="table-light">
-                            <th>Discount</th>
-                            <td class="text-end">
-                                <div class="fw-semibold"><?= esc(number_format($totalDiscountAmount, 2)) ?></div>
-                                <small class="text-muted"><?= esc(number_format($discountPercent, 4)) ?>% = <?= esc(number_format($discountPercentAmount, 2)) ?> + amount <?= esc(number_format($manualDiscountAmount, 2)) ?></small>
-                            </td>
-                        </tr>
+                        <tr class="table-light"><th>Discount</th><td class="text-end"><div class="fw-semibold"><?= esc(number_format($totalDiscountAmount, 2)) ?></div><small class="text-muted"><?= esc(number_format($discountPercent, 4)) ?>% = <?= esc(number_format($discountPercentAmount, 2)) ?> + amount <?= esc(number_format($manualDiscountAmount, 2)) ?></small></td></tr>
                         <tr><th>Freight</th><td class="text-end"><?= esc(number_format((float) ($order['freight_amount'] ?? 0), 2)) ?></td></tr>
                         <tr><th>Other Amount</th><td class="text-end"><?= esc(number_format((float) ($order['other_amount'] ?? 0), 2)) ?></td></tr>
                         <tr><th>Special Charge</th><td class="text-end"><?= esc(number_format((float) ($order['special_charge_amount'] ?? 0), 2)) ?></td></tr>
@@ -198,11 +195,7 @@ $findFlowEntry = static function (array $row) use ($relatedGlEntries): ?array {
                 <h4 class="card-title mb-3">Line Items</h4>
                 <div class="table-responsive">
                     <table class="table table-nowrap align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>#</th><th>Item</th><th>Description</th><th class="text-end">Ordered</th><th class="text-end">Received</th><th class="text-end">Outstanding</th><th>UoM</th><th class="text-end">Price</th><th class="text-end">Line Total</th><th>Status</th>
-                            </tr>
-                        </thead>
+                        <thead class="table-light"><tr><th>#</th><th>Item</th><th>Description</th><th class="text-end">Ordered</th><th class="text-end">Received</th><th class="text-end">Outstanding</th><th>UoM</th><th class="text-end">Price</th><th class="text-end">Line Total</th><th>Status</th></tr></thead>
                         <tbody>
                         <?php foreach ($lines as $line): ?>
                             <?php [$displayCode, $displayName] = $itemDisplay($line); ?>
@@ -228,25 +221,42 @@ $findFlowEntry = static function (array $row) use ($relatedGlEntries): ?array {
         <div class="card">
             <div class="card-body">
                 <h4 class="card-title mb-1">Purchase Lifecycle</h4>
-                <p class="text-muted mb-3">Business sequence from this PO. Reversal rows appear after the original posting so the chain is easy to audit.</p>
+                <p class="text-muted mb-3">Business sequence from this PO. Multiple documents can appear in one step when the PO is received or paid in parts.</p>
                 <div class="table-responsive">
                     <table class="table table-sm table-nowrap align-middle mb-0">
-                        <thead class="table-light"><tr><th>Step</th><th>Document</th><th>Role</th><th>Journal</th><th>Meaning</th></tr></thead>
+                        <thead class="table-light"><tr><th>Step</th><th>Document(s)</th><th>Role</th><th>Journal(s)</th><th>Meaning</th></tr></thead>
                         <tbody>
                         <?php foreach ($flowRows as $flowRow): ?>
-                            <?php $flowEntry = $findFlowEntry($flowRow); ?>
+                            <?php $flowDocs = $documentMap[$flowRow['key']] ?? []; ?>
                             <tr>
                                 <td class="fw-semibold"><?= esc($flowRow['label']) ?></td>
-                                <td><?= $flowEntry !== null ? '<a href="' . esc($flowEntry['document_url']) . '">' . esc($flowEntry['document_no'] ?? '-') . '</a>' : '<span class="text-muted">Not posted yet</span>' ?></td>
+                                <td>
+                                    <?php if ($flowDocs === []): ?>
+                                        <span class="text-muted">Not posted yet</span>
+                                    <?php else: ?>
+                                        <?php foreach ($flowDocs as $doc): ?>
+                                            <div class="mb-1"><a href="<?= esc($doc['url']) ?>"><?= esc($doc['document_no']) ?></a> <small class="text-muted"><?= esc($doc['document_date']) ?></small> <span class="badge bg-secondary"><?= esc($doc['status']) ?></span></div>
+                                        <?php endforeach ?>
+                                    <?php endif ?>
+                                </td>
                                 <td><span class="badge bg-<?= $flowRow['role'] === 'reversal' ? 'warning text-dark' : 'success' ?>"><?= esc($flowRow['role']) ?></span></td>
-                                <td><?= $flowEntry !== null ? '<a href="' . esc($flowEntry['gl_url']) . '">' . esc($flowEntry['journal_no'] ?? ('#' . ($flowEntry['gl_entry_id'] ?? ''))) . '</a>' : '-' ?></td>
+                                <td>
+                                    <?php if ($flowDocs === []): ?>
+                                        -
+                                    <?php else: ?>
+                                        <?php foreach ($flowDocs as $doc): ?>
+                                            <?php $glId = $flowRow['role'] === 'reversal' ? (int) ($doc['reversal_gl_entry_id'] ?? 0) : (int) ($doc['gl_entry_id'] ?? 0); ?>
+                                            <div class="mb-1"><?= $glId > 0 ? '<a href="' . site_url('gl/entries/' . $glId) . '">#' . esc((string) $glId) . '</a>' : '<span class="text-muted">No GL</span>' ?></div>
+                                        <?php endforeach ?>
+                                    <?php endif ?>
+                                </td>
                                 <td><?= esc($flowRow['description']) ?></td>
                             </tr>
                         <?php endforeach ?>
                         </tbody>
                     </table>
                 </div>
-                <div class="alert alert-info py-2 mt-3 mb-0">PO status follows receipt quantity. A cancelled invoice/payment does not automatically unreceive the PO; stock is only removed again when the Purchase Receipt is reversed.</div>
+                <div class="alert alert-info py-2 mt-3 mb-0">PO can have multiple receipts. PO status follows received quantity. Cancelled invoice/payment does not unreceive stock; stock is removed again only when the Purchase Receipt is reversed.</div>
             </div>
         </div>
 
@@ -261,17 +271,7 @@ $findFlowEntry = static function (array $row) use ($relatedGlEntries): ?array {
                 </div>
                 <div class="table-responsive">
                     <table class="table table-nowrap align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Source</th>
-                                <th>Document</th>
-                                <th>Date</th>
-                                <th>Role</th>
-                                <th>Journal</th>
-                                <th>Journal Date</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
+                        <thead class="table-light"><tr><th>Source</th><th>Document</th><th>Date</th><th>Role</th><th>Journal</th><th>Journal Date</th><th>Status</th></tr></thead>
                         <tbody>
                         <?php foreach (($relatedGlEntries ?? []) as $entry): ?>
                             <tr>
@@ -284,9 +284,7 @@ $findFlowEntry = static function (array $row) use ($relatedGlEntries): ?array {
                                 <td><?= esc($entry['status'] ?? '-') ?></td>
                             </tr>
                         <?php endforeach ?>
-                        <?php if (($relatedGlEntries ?? []) === []): ?>
-                            <tr><td colspan="7" class="text-center text-muted py-4">No related GL entry yet. GL will appear after receipt, invoice, payment, or reversal posting.</td></tr>
-                        <?php endif ?>
+                        <?php if (($relatedGlEntries ?? []) === []): ?><tr><td colspan="7" class="text-center text-muted py-4">No related GL entry yet. GL will appear after receipt, invoice, payment, or reversal posting.</td></tr><?php endif ?>
                         </tbody>
                     </table>
                 </div>
@@ -294,12 +292,7 @@ $findFlowEntry = static function (array $row) use ($relatedGlEntries): ?array {
         </div>
 
         <?php if (! empty($order['notes']) || ! empty($order['remarks'])): ?>
-            <div class="card">
-                <div class="card-body">
-                    <?php if (! empty($order['notes'])): ?><h4 class="card-title mb-2">Notes</h4><p class="text-muted"><?= esc($order['notes']) ?></p><?php endif ?>
-                    <?php if (! empty($order['remarks'])): ?><h4 class="card-title mb-2">Remarks</h4><p class="text-muted mb-0"><?= esc($order['remarks']) ?></p><?php endif ?>
-                </div>
-            </div>
+            <div class="card"><div class="card-body"><?php if (! empty($order['notes'])): ?><h4 class="card-title mb-2">Notes</h4><p class="text-muted"><?= esc($order['notes']) ?></p><?php endif ?><?php if (! empty($order['remarks'])): ?><h4 class="card-title mb-2">Remarks</h4><p class="text-muted mb-0"><?= esc($order['remarks']) ?></p><?php endif ?></div></div>
         <?php endif ?>
     </div>
 </div>
