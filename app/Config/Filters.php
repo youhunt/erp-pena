@@ -51,7 +51,9 @@ class Filters extends BaseFilters
     ];
 
     public array $globals = [
-        'before' => [],
+        'before' => [
+            'englishUi',
+        ],
         'after' => [
             'englishUi',
         ],
