@@ -63,6 +63,40 @@ $itemDisplay = static function (array $line): array {
     }
     return [$code !== '' ? $code : '-', $name !== '' ? $name : '-'];
 };
+$relatedGlEntries = $relatedGlEntries ?? [];
+$businessSequence = [
+    'Purchase Receipt|posting' => 10,
+    'Purchase Invoice|posting' => 20,
+    'A/P Payment|posting' => 30,
+    'A/P Payment|reversal' => 40,
+    'Purchase Invoice|reversal' => 50,
+    'Purchase Receipt|reversal' => 60,
+];
+usort($relatedGlEntries, static function (array $a, array $b) use ($businessSequence): int {
+    $keyA = (string) ($a['module'] ?? '') . '|' . (string) ($a['role'] ?? '');
+    $keyB = (string) ($b['module'] ?? '') . '|' . (string) ($b['role'] ?? '');
+    $sequenceCompare = ($businessSequence[$keyA] ?? 999) <=> ($businessSequence[$keyB] ?? 999);
+    if ($sequenceCompare !== 0) {
+        return $sequenceCompare;
+    }
+    return strcmp((string) ($a['document_date'] ?? ''), (string) ($b['document_date'] ?? ''));
+});
+$flowRows = [
+    ['label' => '1. Purchase Receipt', 'module' => 'Purchase Receipt', 'role' => 'posting', 'description' => 'Stock in + Inventory / GRNI GL'],
+    ['label' => '2. A/P Invoice', 'module' => 'Purchase Invoice', 'role' => 'posting', 'description' => 'Open supplier payable + AP GL'],
+    ['label' => '3. A/P Payment', 'module' => 'A/P Payment', 'role' => 'posting', 'description' => 'Cash/bank out + AP payment GL'],
+    ['label' => '4. Cancel A/P Payment', 'module' => 'A/P Payment', 'role' => 'reversal', 'description' => 'Reverse cash/bank and reopen invoice balance'],
+    ['label' => '5. Cancel A/P Invoice', 'module' => 'Purchase Invoice', 'role' => 'reversal', 'description' => 'Reverse AP invoice GL and allow receipt reversal'],
+    ['label' => '6. Reverse Receipt', 'module' => 'Purchase Receipt', 'role' => 'reversal', 'description' => 'Stock out reversal + GRNI/Inventory reversal'],
+];
+$findFlowEntry = static function (array $row) use ($relatedGlEntries): ?array {
+    foreach ($relatedGlEntries as $entry) {
+        if (($entry['module'] ?? '') === $row['module'] && ($entry['role'] ?? '') === $row['role']) {
+            return $entry;
+        }
+    }
+    return null;
+};
 ?>
 <div class="row">
     <div class="col-xl-4">
@@ -193,10 +227,35 @@ $itemDisplay = static function (array $line): array {
 
         <div class="card">
             <div class="card-body">
+                <h4 class="card-title mb-1">Purchase Lifecycle</h4>
+                <p class="text-muted mb-3">Business sequence from this PO. Reversal rows appear after the original posting so the chain is easy to audit.</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-nowrap align-middle mb-0">
+                        <thead class="table-light"><tr><th>Step</th><th>Document</th><th>Role</th><th>Journal</th><th>Meaning</th></tr></thead>
+                        <tbody>
+                        <?php foreach ($flowRows as $flowRow): ?>
+                            <?php $flowEntry = $findFlowEntry($flowRow); ?>
+                            <tr>
+                                <td class="fw-semibold"><?= esc($flowRow['label']) ?></td>
+                                <td><?= $flowEntry !== null ? '<a href="' . esc($flowEntry['document_url']) . '">' . esc($flowEntry['document_no'] ?? '-') . '</a>' : '<span class="text-muted">Not posted yet</span>' ?></td>
+                                <td><span class="badge bg-<?= $flowRow['role'] === 'reversal' ? 'warning text-dark' : 'success' ?>"><?= esc($flowRow['role']) ?></span></td>
+                                <td><?= $flowEntry !== null ? '<a href="' . esc($flowEntry['gl_url']) . '">' . esc($flowEntry['journal_no'] ?? ('#' . ($flowEntry['gl_entry_id'] ?? ''))) . '</a>' : '-' ?></td>
+                                <td><?= esc($flowRow['description']) ?></td>
+                            </tr>
+                        <?php endforeach ?>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="alert alert-info py-2 mt-3 mb-0">PO status follows receipt quantity. A cancelled invoice/payment does not automatically unreceive the PO; stock is only removed again when the Purchase Receipt is reversed.</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
                 <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
                     <div>
                         <h4 class="card-title mb-1">Related GL Entries</h4>
-                        <p class="text-muted mb-0">PO does not post GL directly. Journals below come from receipt, invoice, payment, or reversal documents linked to this PO.</p>
+                        <p class="text-muted mb-0">Sorted by purchase business sequence, not by journal date, so posting and reversal are easier to follow.</p>
                     </div>
                     <a href="<?= site_url('gl/entries') ?>" class="btn btn-sm btn-outline-secondary">Open GL</a>
                 </div>
@@ -219,7 +278,7 @@ $itemDisplay = static function (array $line): array {
                                 <td><?= esc($entry['module'] ?? '-') ?></td>
                                 <td><a href="<?= esc($entry['document_url']) ?>"><?= esc($entry['document_no'] ?? '-') ?></a></td>
                                 <td><?= esc($entry['document_date'] ?? '-') ?></td>
-                                <td><span class="badge bg-<?= ($entry['role'] ?? '') === 'reversal' ? 'warning' : 'success' ?>"><?= esc($entry['role'] ?? '-') ?></span></td>
+                                <td><span class="badge bg-<?= ($entry['role'] ?? '') === 'reversal' ? 'warning text-dark' : 'success' ?>"><?= esc($entry['role'] ?? '-') ?></span></td>
                                 <td><a href="<?= esc($entry['gl_url']) ?>"><?= esc($entry['journal_no'] ?? ('#' . ($entry['gl_entry_id'] ?? ''))) ?></a></td>
                                 <td><?= esc($entry['journal_date'] ?? '-') ?></td>
                                 <td><?= esc($entry['status'] ?? '-') ?></td>
