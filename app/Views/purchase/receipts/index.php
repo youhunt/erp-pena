@@ -1,7 +1,25 @@
 <?= $this->extend('layouts/main') ?>
 
 <?= $this->section('content') ?>
-<?php $exportUrl = site_url('purchase/receipts/export') . '?' . http_build_query($filters ?? []); ?>
+<?php
+$exportUrl = site_url('purchase/receipts/export') . '?' . http_build_query($filters ?? []);
+$db = \Config\Database::connect();
+$receiptCountByPo = [];
+if ($db->tableExists('purchase_receipts')) {
+    $poIds = array_values(array_unique(array_filter(array_map(static fn (array $row): int => (int) ($row['purchase_order_id'] ?? 0), $receipts ?? []))));
+    if ($poIds !== []) {
+        $countRows = $db->table('purchase_receipts')
+            ->select('purchase_order_id, COUNT(*) AS receipt_count')
+            ->whereIn('purchase_order_id', $poIds)
+            ->groupBy('purchase_order_id')
+            ->get()
+            ->getResultArray();
+        foreach ($countRows as $countRow) {
+            $receiptCountByPo[(int) $countRow['purchase_order_id']] = (int) $countRow['receipt_count'];
+        }
+    }
+}
+?>
 <div class="card">
     <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
@@ -17,6 +35,10 @@
             </div>
         </div>
 
+        <div class="alert alert-info py-2">
+            One Purchase Order can have multiple Purchase Receipts when goods are received partially or in separate shipments. Open the PO to see the full purchase lifecycle.
+        </div>
+
         <form method="get" action="<?= site_url('purchase/receipts') ?>" class="row g-2 align-items-end mb-4">
             <div class="col-md-5"><label class="form-label">Search</label><input type="text" name="q" value="<?= esc($filters['q'] ?? '') ?>" class="form-control" placeholder="Receipt no, PO no, supplier"></div>
             <div class="col-md-3"><label class="form-label">Status</label><select name="status" class="form-select"><option value="">All Status</option><?php foreach ($statusOptions as $option): ?><option value="<?= esc($option) ?>" <?= ($filters['status'] ?? '') === $option ? 'selected' : '' ?>><?= esc(ucwords(str_replace('_', ' ', $option))) ?></option><?php endforeach ?></select></div>
@@ -28,9 +50,21 @@
                 <thead class="table-light"><tr><th>Receipt No</th><th>Date</th><th>PO No</th><th>Supplier</th><th>Status</th><th>Posted At</th><th class="text-end">Action</th></tr></thead>
                 <tbody>
                 <?php foreach ($receipts as $receipt): ?>
+                    <?php $poId = (int) ($receipt['purchase_order_id'] ?? 0); $receiptCount = $receiptCountByPo[$poId] ?? 1; ?>
                     <tr>
-                        <td class="fw-semibold"><?= esc($receipt['receipt_no'] ?? '-') ?></td><td><?= esc($receipt['receipt_date'] ?? '-') ?></td><td><a href="<?= site_url('purchase/orders/' . $receipt['purchase_order_id']) ?>"><?= esc($receipt['po_no'] ?? '-') ?></a></td>
-                        <td><div><?= esc($receipt['supplier_name'] ?? '-') ?></div><small class="text-muted"><?= esc($receipt['supplier_code'] ?? '-') ?></small></td><td><span class="badge bg-success"><?= esc($receipt['status'] ?? '-') ?></span></td><td><?= esc($receipt['posted_at'] ?? '-') ?></td>
+                        <td class="fw-semibold"><?= esc($receipt['receipt_no'] ?? '-') ?></td>
+                        <td><?= esc($receipt['receipt_date'] ?? '-') ?></td>
+                        <td>
+                            <a href="<?= site_url('purchase/orders/' . $poId) ?>"><?= esc($receipt['po_no'] ?? '-') ?></a>
+                            <?php if ($receiptCount > 1): ?>
+                                <div><span class="badge bg-info-subtle text-info"><?= esc((string) $receiptCount) ?> receipt(s) for this PO</span></div>
+                            <?php else: ?>
+                                <div><small class="text-muted">single receipt</small></div>
+                            <?php endif ?>
+                        </td>
+                        <td><div><?= esc($receipt['supplier_name'] ?? '-') ?></div><small class="text-muted"><?= esc($receipt['supplier_code'] ?? '-') ?></small></td>
+                        <td><span class="badge bg-success"><?= esc($receipt['status'] ?? '-') ?></span></td>
+                        <td><?= esc($receipt['posted_at'] ?? '-') ?></td>
                         <td class="text-end"><a href="<?= site_url('purchase/receipts/' . $receipt['id']) ?>" class="btn btn-sm btn-outline-primary">View</a> <a href="<?= site_url('purchase/receipts/' . $receipt['id'] . '/export') ?>" class="btn btn-sm btn-outline-success">XLSX</a><?php if (($receipt['status'] ?? '') === 'posted'): ?> <a href="<?= site_url('purchase/receipts/' . $receipt['id'] . '/invoice') ?>" class="btn btn-sm btn-outline-success">Invoice</a><?php endif ?></td>
                     </tr>
                 <?php endforeach ?>
