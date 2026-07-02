@@ -14,13 +14,27 @@ $selectedWarehouseId = (int) old('warehouse_id', $selectedWarehouseId ?? 0);
 $selectedLocationId = (int) old('location_id', $selectedLocationId ?? 0);
 $totalAvailableStock = 0.0;
 $totalSuggestedDelivery = 0.0;
+$contextItemCodes = [];
 foreach ($lines as $line) {
-    $itemCode = (string) ($line['item_code'] ?? '');
+    $itemCode = strtoupper(trim((string) ($line['item_code'] ?? '')));
+    if ($itemCode !== '') {
+        $contextItemCodes[] = $itemCode;
+    }
     $available = (float) (($stockByItem[$itemCode]['available'] ?? 0));
     $outstanding = (float) ($line['qty_outstanding'] ?? $line['qty'] ?? 0);
     $totalAvailableStock += max(0.0, $available);
     $totalSuggestedDelivery += min($outstanding, max(0.0, $available));
 }
+$contextItemCodes = array_values(array_unique($contextItemCodes));
+$contextQuery = array_filter([
+    'source_so_id' => (int) ($so['id'] ?? 0),
+    'source_so_no' => (string) ($so['so_no'] ?? ''),
+    'item_codes' => implode(',', $contextItemCodes),
+], static fn ($value): bool => (string) $value !== '' && (string) $value !== '0');
+$contextQueryString = http_build_query($contextQuery);
+$stockAdjustmentUrl = site_url('inventory/stock-adjustment') . ($contextQueryString !== '' ? '?' . $contextQueryString : '');
+$purchaseOrderUrl = site_url('purchase/orders/create') . ($contextQueryString !== '' ? '?' . $contextQueryString : '');
+$productionUrl = site_url('production/work-orders/create') . ($contextQueryString !== '' ? '?' . $contextQueryString : '');
 $hasDeliverableStock = $lines !== [] && $totalSuggestedDelivery > 0;
 ?>
 <form method="post" action="<?= site_url('sales/orders/' . $so['id'] . '/deliver') ?>">
@@ -96,7 +110,7 @@ $hasDeliverableStock = $lines !== [] && $totalSuggestedDelivery > 0;
             <?php if (! $hasDeliverableStock): ?>
                 <div class="alert alert-danger py-2">
                     <strong>No stock available for delivery.</strong>
-                    This Sales Order can stay open/backorder, but Delivery cannot be posted until stock is available. Add stock first through Purchase Receipt, Production Receive Finished Good, Stock Adjustment, or choose another warehouse/location and click <strong>Refresh Stock</strong>.
+                    This Sales Order can stay open/backorder, but Delivery cannot be posted until stock is available. The shortcuts below are already filtered to these SO items: <strong><?= esc(implode(', ', $contextItemCodes)) ?></strong>.
                 </div>
             <?php else: ?>
                 <div class="alert alert-info py-2">
@@ -123,7 +137,7 @@ $hasDeliverableStock = $lines !== [] && $totalSuggestedDelivery > 0;
                     <tbody>
                     <?php foreach ($lines as $index => $line): ?>
                         <?php
-                            $itemCode = (string) ($line['item_code'] ?? '');
+                            $itemCode = strtoupper(trim((string) ($line['item_code'] ?? '')));
                             $available = (float) (($stockByItem[$itemCode]['available'] ?? 0));
                             $outstanding = (float) ($line['qty_outstanding'] ?? $line['qty'] ?? 0);
                             $suggestedQty = min($outstanding, max(0, $available));
@@ -176,11 +190,11 @@ $hasDeliverableStock = $lines !== [] && $totalSuggestedDelivery > 0;
                 Stock is calculated from the selected warehouse and location. If stock was just added, click <strong>Refresh Stock</strong> or reopen this Delivery Order form.
             </div>
 
-            <div class="d-flex gap-2 mt-4">
+            <div class="d-flex flex-wrap gap-2 mt-4">
                 <button type="submit" id="postDeliveryButton" class="btn btn-primary" <?= (! $hasDeliverableStock) ? 'disabled' : '' ?> onclick="return confirm('Post this delivery? SO quantity will be updated and inventory stock will be reduced.')"><i class="bx bx-send me-1"></i> Post Delivery & Update Stock</button>
-                <a href="<?= site_url('inventory/stock-adjustment') ?>" class="btn btn-outline-primary">Stock Adjustment</a>
-                <a href="<?= site_url('purchase/receipts') ?>" class="btn btn-outline-success">Purchase Receipt</a>
-                <a href="<?= site_url('production/work-orders') ?>" class="btn btn-outline-info">Production</a>
+                <a href="<?= esc($stockAdjustmentUrl) ?>" class="btn btn-outline-primary">Stock Adjustment for SO Items</a>
+                <a href="<?= esc($purchaseOrderUrl) ?>" class="btn btn-outline-success">Create PO for SO Items</a>
+                <a href="<?= esc($productionUrl) ?>" class="btn btn-outline-info">Create WO for SO Items</a>
                 <a href="<?= site_url('sales/orders/' . $so['id']) ?>" class="btn btn-light">Back to SO</a>
             </div>
         </div>
